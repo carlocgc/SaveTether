@@ -2,10 +2,30 @@
 
 Redirects app and game save folders into one synced folder, so saves follow you between devices (for example a Windows PC and a Steam Deck). SaveTether makes the links and keeps verified backups; a sync tool of your choice, such as Syncthing, moves the folder between devices.
 
-**Status: early development. Nothing usable yet.** Do not point it at saves you care about.
+**Status: early development.** The command line works and is tested, but it has not yet been tried on real devices. Do not point it at saves you care about.
 
 - Design: [docs/design/save-redirection-design.md](docs/design/save-redirection-design.md)
 - Implementation and test plan: [docs/plans/implementation-plan.md](docs/plans/implementation-plan.md)
+
+## Using it
+
+On the first device, whose saves become the shared copy:
+
+```bash
+savetether init --sync-root ~/Sync --device desktop --create-root
+savetether map add ppsspp.savedata --target ppsspp/SAVEDATA --source /path/to/PSP/SAVEDATA --process PPSSPPSDL
+savetether apply ppsspp.savedata --copy
+```
+
+On each other device, after the sync tool has delivered the `savetether` folder:
+
+```bash
+savetether init --sync-root ~/Sync --device deck
+savetether map add ppsspp.savedata --source /path/to/PSP/SAVEDATA
+savetether apply ppsspp.savedata
+```
+
+If that device has saves of its own, `apply` stops, shows how they differ from the shared copy, and lists the choices. A verified backup is taken before anything is changed; see `savetether backup list`. `savetether status` shows each mapping's state, `savetether revert <id>` undoes a link, and `savetether --help` lists everything. Add `--dry-run` to see what a command would do, and `--json` for machine-readable output.
 
 ## Building
 

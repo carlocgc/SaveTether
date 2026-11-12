@@ -68,6 +68,8 @@ public static class PlanRenderer
             StepKind.CopyToStaging => $"Copy '{step.Path}' to '{step.OtherPath}' and verify the copy",
             StepKind.RemoveLink => $"Remove the link '{step.Path}' (the shared folder is not touched)",
             StepKind.RenameIntoPlace => $"Rename '{step.Path}' to '{step.OtherPath}'",
+            StepKind.RecreateLinks =>
+                $"Recreate the link(s) recorded in the backup: {string.Join(", ", step.Entries ?? [])}",
             _ => step.Kind.ToString(),
         };
     }

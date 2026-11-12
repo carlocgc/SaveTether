@@ -206,6 +206,14 @@ Tests (end to end, in-process):
 
 Done when: tests pass on three targets and the AOT binary runs scenario 1 from a shell script in CI.
 
+As built (differences from the list above, and decisions made while building):
+- The commands' logic is in the core (`Core/Operations/Workspace.cs`, `Core/Health/HealthCheck.cs`); the CLI project holds the parser, the dispatch, the prompts and the output. The JSON object's shape per command is stored in `tests/SaveTether.Tests/Cli/json-shapes.txt`; an intended change is accepted by running the tests once with `SAVETETHER_UPDATE_SHAPES=1`.
+- Usage errors exit 64. The other rules settled here (when the tool asks, what refuses while an operation is unfinished, where local files live) are in design 5.12.
+- Found by scenario 4: `apply --replace-shared` did nothing on a device that was already linked, so it could not clear a double seed. It now does, without touching saves; design 5.3 describes it and the longer route for when the other device's files won. Both are tested.
+- A first `--copy` is confirmed only at a terminal. There is no flag for it in non-interactive use; it goes ahead with the warning.
+- The shell scenario is `tests/e2e/scenario1.sh`, run by CI against the published binary on all three targets.
+- Rollback and recovery exit codes are tested through a fault hook passed in the CLI's test environment, not by provoking real disk errors.
+
 ### M7. Real-device trial (S, manual)
 
 1. Windows PC, non-admin terminal: full test suite, then a throwaway folder mapping: apply, status, revert.

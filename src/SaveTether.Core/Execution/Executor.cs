@@ -199,6 +199,10 @@ public sealed partial class Executor
                 CopyToStaging(tx, step);
                 return null;
 
+            case StepKind.RecreateLinks:
+                RecreateLinks(tx, step);
+                return null;
+
             case StepKind.RenameAside:
                 // When finishing an interrupted run, an aside folder means the rename already happened.
                 if (!(resuming && SafeFs.Probe(Other(step)) != EntryKind.Missing))
@@ -347,6 +351,38 @@ public sealed partial class Executor
         var copy = SafeFs.CopyTree(step.Path, staging, LinkCopyPolicy.RecordOnly);
         VerifyCopy(step.Path, staging, null);
         NoteSkippedLinks(tx, copy, step.Path);
+    }
+
+    /// <summary>
+    /// Puts back the links a backup recorded, inside the staging folder, before it is swapped in.
+    /// A link that cannot be made (Windows refuses symbolic links without a privilege) is reported
+    /// and the restore goes on: the files are what matter.
+    /// </summary>
+    private void RecreateLinks(Transaction tx, PlanStep step)
+    {
+        var staging = step.Path;
+        if (!staging.EndsWith(Planner.StagingSuffix, StringComparison.Ordinal) || SafeFs.Probe(staging) != EntryKind.Directory)
+        {
+            throw new ExecutionException($"Refusing to recreate links in '{staging}': it is not a SaveTether staging folder.");
+        }
+
+        foreach (var link in Backups.LinksOf(Other(step)))
+        {
+            var path = Path.GetFullPath(Path.Combine([staging, .. link.Path.Split('/')]));
+            if (!PathRules.IsSameOrInside(path, staging) || PathRules.AreSame(path, staging))
+            {
+                throw new ExecutionException($"The backup records a link at '{link.Path}', which is not inside the folder being restored.");
+            }
+
+            try
+            {
+                _fs.RecreateRecordedLink(path, link.Kind == "junction" ? EntryKind.Junction : EntryKind.Symlink, link.Target);
+            }
+            catch (Exception e) when (IsFailure(e))
+            {
+                tx.Messages.Add($"The link '{link.Path}' -> '{link.Target}' recorded in the backup could not be recreated: {e.Message}");
+            }
+        }
     }
 
     private static void NoteSkippedLinks(Transaction tx, CopyResult copy, string from)

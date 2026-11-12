@@ -71,6 +71,7 @@ public static class RestorePlanner
 
         var steps = new List<PlanStep>();
         var notes = new List<string>();
+        var links = verification.IsValid ? backups.LinksOf(backupId) : [];
         if (isShared)
         {
             var dataRoot = PathRules.ResolveAll(shared.DataRoot);
@@ -132,6 +133,11 @@ public static class RestorePlanner
             }
 
             steps.Add(new PlanStep(StepKind.CopyToStaging, data, staging));
+            if (links.Count > 0)
+            {
+                steps.Add(new PlanStep(StepKind.RecreateLinks, staging, backupId, links.Select(l => l.Path).ToList()));
+            }
+
             if (kind == EntryKind.Directory)
             {
                 steps.Add(new PlanStep(StepKind.RenameAside, destination, aside));
@@ -167,11 +173,11 @@ public static class RestorePlanner
                 failures, [], AssumeSyncedWouldHelp: false, Comparison: null, PlanOperation.Restore));
         }
 
-        var links = backups.LinksOf(backupId);
-        if (links.Count > 0)
+        if (isShared && links.Count > 0)
         {
+            // SaveTether never creates links inside the sync root.
             notes.Add(
-                $"{links.Count} link(s) recorded in this backup will not be recreated: " +
+                $"{links.Count} link(s) recorded in this backup will not be recreated in the shared folder: " +
                 string.Join(", ", links.Select(l => $"{l.Path} -> {l.Target}")) + ".");
         }
 
