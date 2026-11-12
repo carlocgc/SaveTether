@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Command-line front end: parses arguments, calls Core, formats output. Ships as a Native AOT binary. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>savetether</AssemblyName>
+    <RootNamespace>SaveTether.Cli</RootNamespace>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SaveTether.Core\SaveTether.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SaveTether.Tests" />
+  </ItemGroup>
+
+</Project>

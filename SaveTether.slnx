@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SaveTether.Cli/SaveTether.Cli.csproj" />
+    <Project Path="src/SaveTether.Core/SaveTether.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SaveTether.Tests/SaveTether.Tests.csproj" />
+  </Folder>
+</Solution>
