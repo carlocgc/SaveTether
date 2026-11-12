@@ -19,8 +19,8 @@ Settled on 2026-11-12, in addition to the design's section 7.
 
 Still open, and not blocking:
 
-- Which real mapping is the first trial in M7. Pick something small whose loss would not hurt.
-- The two Deck checks from the design: whether the PPSSPP Flatpak can reach `~/Sync/savetether`, and the real process names. Needed before M7, not before.
+- ~~Which real mapping is the first trial in M7.~~ Settled 2026-11-12: Cemu's save folder (`mlc01/usr/save`), mapping `cemu.save`.
+- The two Deck checks from the design. Flatpak reach: checked 2026-11-12 for Xemu, Dolphin, PPSSPP, melonDS and Citra; each has `home` or `host` in its permissions, so each can see `~/Sync/savetether`. A link inside a Flatpak app's folder has still not been tried. Process names: only Cemu's is confirmed in use; the others are still to be read from the Deck when each is mapped.
 - The config-mechanism questions in design 5.3. Section 3.1 below proposes answers; they are confirmed when phase 2 starts.
 
 ## 2. Conventions for every phase
@@ -217,13 +217,21 @@ As built (differences from the list above, and decisions made while building):
 ### M7. Real-device trial (S, manual)
 
 1. Windows PC, non-admin terminal: full test suite, then a throwaway folder mapping: apply, status, revert. *Done 2026-11-12; see the Windows entries in section 7.*
-2. Run the two Deck checks. Copy the Linux binary from the CI artifact to `~/.local/bin`.
-3. One real, low-stakes mapping: `init --create-root` and `apply --copy` on Windows; after the sync tool delivers, `init` and `apply` on the Deck.
-4. Play on each device once and confirm the save crosses over.
-5. `revert` and re-apply on one device.
-6. Simulated wipe on the Deck (scenario 5).
+2. Run the two Deck checks. Copy the Linux binary from the CI artifact to `~/.local/bin`. *Done 2026-11-12, binary from the CI run of `a3cbf74`.*
+3. One real, low-stakes mapping: `init --create-root` and `apply --copy` on Windows; after the sync tool delivers, `init` and `apply` on the Deck. *Done 2026-11-12 with `cemu.save`: `E:\LaunchBox\Emulators\CEMU\Cemu\mlc01\usr\save` with sync root `E:\CloudSaveEmulation` on Windows, `~/.local/share/Cemu/mlc01/usr/save` with sync root `~/Sync` on the Deck.*
+4. Play on each device once and confirm the save crosses over. *Done 2026-11-12, both directions.*
+5. `revert` and re-apply on one device. *Done 2026-11-12, on the Deck.*
+6. Simulated wipe on the Deck (scenario 5). *Done 2026-11-12: local folder moved aside, link removed, empty save folder created; `init --take-over` and `apply --all` restored it with no questions.*
+
+Steps 2 to 6 were run by the owner on the two devices and reported as working; no output was captured.
+
+Found during the trial, for phase 2:
+- **`--add-missing` does not merge per game for Cemu.** It works on the top-level entries of the save folder (design 5.3), and Cemu's are `00050000`, `00050010` and `system`, with the games one level down. Both devices have all three, so nothing would be added. Mapping `usr/save/00050000` would give one entry per game. App definitions need a way to say at which depth an app's per-game entries sit.
+- The design's Windows inventory (appendix B) lists Cemu's `settings.xml` as holding the sync folder path. On 2026-11-12 its `mlc_path` was empty and Cemu was using its own `mlc01`.
 
 **Phase 1 exit:** all of the above done, `status` clean on both devices, and the hardware checklist (section 7) ticked.
+
+Status 2026-11-12: M0 to M7 are done and `status` was clean on both devices. Four Deck checklist items in section 7 are not ticked (Desktop Mode and SSH, a link inside a Flatpak app's folder, a source on the SD card, and the sync root unmounted), so the exit condition as written is not fully met.
 
 ## 4. Phase 2: config redirects, definitions, resolver
 
@@ -291,20 +299,20 @@ Run before each phase exit. Record the date and tool version in the PR that clos
 
 **Windows PC**
 - [x] Test suite passes in a non-admin terminal (junctions without privilege). *2026-11-12, 0.1.0 at `a3cbf74`: 328 passed, not elevated, Developer Mode off.*
-- [ ] Apply and revert on a folder on `E:` with the sync root on `E:`, and on a folder on `C:` (cross-volume junction). *2026-11-12, native binary, throwaway folders: passed with both on `C:`, and with the folder on `C:` and the sync root on `G:` (cross-volume). `E:` itself has not been used; left unticked until the real mapping in M7 step 3.*
+- [x] Apply and revert on a folder on `E:` with the sync root on `E:`, and on a folder on `C:` (cross-volume junction). *2026-11-12. Same volume: the real `cemu.save` mapping, folder and sync root both on `E:`, applied here; its revert and re-apply were done on the Deck, not on this PC. Throwaway folders with the native binary: applied and reverted with both on `C:`, and with the folder on `C:` and the sync root on `G:` (cross-volume).*
 - [x] Apply is refused while the app is running. *2026-11-12: refused against a running process name (`explorer`), and went ahead with `--assume-closed`. Not yet tried with a real emulator's process name.*
 
 **Steam Deck**
-- [ ] Native binary runs from `~/.local/bin` in Desktop Mode and over SSH.
-- [ ] Flatpak app: link inside `~/.var/app/<id>/` resolves inside the sandbox.
+- [ ] Native binary runs from `~/.local/bin` in Desktop Mode and over SSH. *2026-11-12: the binary ran on the Deck for the whole trial. Which of the two was used, and whether both were, was not recorded.*
+- [ ] Flatpak app: link inside `~/.var/app/<id>/` resolves inside the sandbox. *Not tried: Cemu on the Deck is not a Flatpak app. Permissions of five Flatpak emulators were read and all can reach the sync folder (section 1).*
 - [ ] Source on the SD card, sync root on internal storage.
 - [ ] Sync root unmounted or renamed: every command refuses.
 - [ ] From phase 2: a Proton prefix mapping; a Lutris mapping.
 - [ ] From phase 3: everything above from Game Mode.
 
 **Both**
-- [ ] A save made on one device loads on the other.
-- [ ] Simulated wipe restores with `init` and `apply --all`.
+- [x] A save made on one device loads on the other. *2026-11-12, Cemu, both directions.*
+- [x] Simulated wipe restores with `init` and `apply --all`. *2026-11-12, on the Deck.*
 
 ## 8. Risks to watch
 
