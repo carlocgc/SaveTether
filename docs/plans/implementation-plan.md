@@ -216,7 +216,7 @@ As built (differences from the list above, and decisions made while building):
 
 ### M7. Real-device trial (S, manual)
 
-1. Windows PC, non-admin terminal: full test suite, then a throwaway folder mapping: apply, status, revert.
+1. Windows PC, non-admin terminal: full test suite, then a throwaway folder mapping: apply, status, revert. *Done 2026-11-12; see the Windows entries in section 7.*
 2. Run the two Deck checks. Copy the Linux binary from the CI artifact to `~/.local/bin`.
 3. One real, low-stakes mapping: `init --create-root` and `apply --copy` on Windows; after the sync tool delivers, `init` and `apply` on the Deck.
 4. Play on each device once and confirm the save crosses over.
@@ -290,9 +290,9 @@ Exit test: first outside definition merged.
 Run before each phase exit. Record the date and tool version in the PR that closes the phase.
 
 **Windows PC**
-- [ ] Test suite passes in a non-admin terminal (junctions without privilege).
-- [ ] Apply and revert on a folder on `E:` with the sync root on `E:`, and on a folder on `C:` (cross-volume junction).
-- [ ] Apply is refused while the app is running.
+- [x] Test suite passes in a non-admin terminal (junctions without privilege). *2026-11-12, 0.1.0 at `a3cbf74`: 328 passed, not elevated, Developer Mode off.*
+- [ ] Apply and revert on a folder on `E:` with the sync root on `E:`, and on a folder on `C:` (cross-volume junction). *2026-11-12, native binary, throwaway folders: passed with both on `C:`, and with the folder on `C:` and the sync root on `G:` (cross-volume). `E:` itself has not been used; left unticked until the real mapping in M7 step 3.*
+- [x] Apply is refused while the app is running. *2026-11-12: refused against a running process name (`explorer`), and went ahead with `--assume-closed`. Not yet tried with a real emulator's process name.*
 
 **Steam Deck**
 - [ ] Native binary runs from `~/.local/bin` in Desktop Mode and over SSH.
