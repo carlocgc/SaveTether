@@ -65,16 +65,37 @@ public static class PlanRenderer
             StepKind.SupersedeMarkers => "Mark other devices' earlier records for this mapping as superseded",
             StepKind.WriteState => "Record the result on this device",
             StepKind.DeleteAside => $"Delete '{step.Path}' (its content is in the backup)",
+            StepKind.CopyToStaging => $"Copy '{step.Path}' to '{step.OtherPath}' and verify the copy",
+            StepKind.RemoveLink => $"Remove the link '{step.Path}' (the shared folder is not touched)",
+            StepKind.RenameIntoPlace => $"Rename '{step.Path}' to '{step.OtherPath}'",
             _ => step.Kind.ToString(),
         };
     }
 
     private static void WritePlan(StringBuilder text, Plan plan)
     {
-        var choice = plan.Choice is { } c ? $", {FlagFor(c).Split(' ')[0]}" : string.Empty;
-        text.AppendLine(CultureInfo.InvariantCulture, $"Plan for {plan.MappingId} ({Describe(plan.Classification)}{choice}):");
-        text.AppendLine(CultureInfo.InvariantCulture, $"  save folder:   {plan.Source}");
-        text.AppendLine(CultureInfo.InvariantCulture, $"  shared folder: {plan.Target}");
+        switch (plan.Operation)
+        {
+            case PlanOperation.Revert:
+                text.AppendLine(CultureInfo.InvariantCulture, $"Plan to revert {plan.MappingId}:");
+                text.AppendLine(CultureInfo.InvariantCulture, $"  save folder:   {plan.Source}");
+                text.AppendLine(CultureInfo.InvariantCulture, $"  shared folder: {plan.Target}");
+                break;
+
+            case PlanOperation.Restore:
+                text.AppendLine(CultureInfo.InvariantCulture, $"Plan to restore a backup of {plan.MappingId}:");
+                text.AppendLine(CultureInfo.InvariantCulture, $"  backup:     {plan.Source}");
+                text.AppendLine(CultureInfo.InvariantCulture, $"  restore to: {plan.Target}");
+                break;
+
+            default:
+                var choice = plan.Choice is { } c ? $", {FlagFor(c).Split(' ')[0]}" : string.Empty;
+                text.AppendLine(CultureInfo.InvariantCulture, $"Plan for {plan.MappingId} ({Describe(plan.Classification)}{choice}):");
+                text.AppendLine(CultureInfo.InvariantCulture, $"  save folder:   {plan.Source}");
+                text.AppendLine(CultureInfo.InvariantCulture, $"  shared folder: {plan.Target}");
+                break;
+        }
+
         for (var i = 0; i < plan.Steps.Count; i++)
         {
             text.AppendLine(CultureInfo.InvariantCulture, $"  {i + 1}. {Describe(plan.Steps[i])}");
@@ -95,7 +116,13 @@ public static class PlanRenderer
 
     private static void WriteRefusal(StringBuilder text, Refusal refusal)
     {
-        text.AppendLine(CultureInfo.InvariantCulture, $"Not applied: {refusal.MappingId}. Nothing was changed.");
+        var what = refusal.Operation switch
+        {
+            PlanOperation.Revert => "Not reverted",
+            PlanOperation.Restore => "Not restored",
+            _ => "Not applied",
+        };
+        text.AppendLine(CultureInfo.InvariantCulture, $"{what}: {refusal.MappingId}. Nothing was changed.");
         text.AppendLine(refusal.Message);
 
         if (refusal.Failures.Count > 1)

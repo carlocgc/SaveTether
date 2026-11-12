@@ -111,6 +111,9 @@ public sealed record Snapshot
     /// <summary>Free space where T lives, or null when it could not be read.</summary>
     public long? FreeBytesAtTarget { get; init; }
 
+    /// <summary>Free space where S lives, or null when it could not be read. Revert copies T there.</summary>
+    public long? FreeBytesAtSource { get; init; }
+
     /// <summary>False on Windows when T is on a network drive, where a junction cannot point.</summary>
     public bool TargetOnLocalVolume { get; init; } = true;
 }

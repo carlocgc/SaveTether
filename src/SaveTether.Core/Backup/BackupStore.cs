@@ -59,6 +59,9 @@ public sealed class BackupStore
         _time = time ?? TimeProvider.System;
     }
 
+    /// <summary>The backup location, with links resolved.</summary>
+    public string Root => _root;
+
     /// <summary>Test seam: runs on the unfinished backup folder just before it is verified.</summary>
     internal Action<string>? BeforeVerify { get; set; }
 
@@ -198,6 +201,11 @@ public sealed class BackupStore
 
     /// <summary>The folder holding the plain copy of the files for <paramref name="backupId"/>.</summary>
     public string DataPathOf(string backupId) => Path.Combine(FolderOf(backupId), DataName);
+
+    /// <summary>The links that were inside the backed-up folder. They are recorded, not copied.</summary>
+    public IReadOnlyList<BackupLink> LinksOf(string backupId) =>
+        TryReadManifest(FolderOf(backupId))?.Links
+        ?? throw new BackupException($"The manifest of backup '{backupId}' is missing or unreadable.");
 
     private static BackupManifest BuildManifest(
         string id, string mappingId, DateTimeOffset created, BackupReason reason, string sourcePath,

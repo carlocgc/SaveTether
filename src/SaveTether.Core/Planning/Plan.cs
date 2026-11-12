@@ -39,6 +39,22 @@ public enum Classification
     Guard,
 }
 
+/// <summary>What a plan is for.</summary>
+public enum PlanOperation
+{
+    /// <summary>Link S to T (design 5.3).</summary>
+    [JsonStringEnumMemberName("apply")]
+    Apply,
+
+    /// <summary>Make S a real folder again, holding a copy of T.</summary>
+    [JsonStringEnumMemberName("revert")]
+    Revert,
+
+    /// <summary>Put a backup's content back where it was taken from.</summary>
+    [JsonStringEnumMemberName("restore")]
+    Restore,
+}
+
 /// <summary>What the executor does for one step.</summary>
 public enum StepKind
 {
@@ -89,6 +105,18 @@ public enum StepKind
     /// <summary>Delete the folder that was renamed aside. Its content is in the backup.</summary>
     [JsonStringEnumMemberName("delete-aside")]
     DeleteAside,
+
+    /// <summary>Copy a folder to a new folder beside its destination and verify the copy. Revert and restore.</summary>
+    [JsonStringEnumMemberName("copy-to-staging")]
+    CopyToStaging,
+
+    /// <summary>Remove the link S -> T. The shared folder is not touched. Revert only.</summary>
+    [JsonStringEnumMemberName("remove-link")]
+    RemoveLink,
+
+    /// <summary>Rename the verified staging folder to its final name. Revert and restore.</summary>
+    [JsonStringEnumMemberName("rename-into-place")]
+    RenameIntoPlace,
 }
 
 /// <summary>One step of a plan.</summary>
@@ -167,6 +195,18 @@ public enum PrecheckKind
 
     [JsonStringEnumMemberName("not-enough-space")]
     NotEnoughSpace,
+
+    /// <summary>Revert: S is not a link to this mapping's shared folder.</summary>
+    [JsonStringEnumMemberName("not-applied")]
+    NotApplied,
+
+    /// <summary>Restore: the backup is missing or does not match its manifest.</summary>
+    [JsonStringEnumMemberName("backup-unusable")]
+    BackupUnusable,
+
+    /// <summary>Restore: the folder the backup was taken from cannot be written back to as it stands.</summary>
+    [JsonStringEnumMemberName("restore-destination-unusable")]
+    RestoreDestinationUnusable,
 }
 
 public sealed record PrecheckFailure(PrecheckKind Kind, string Message);
@@ -179,7 +219,14 @@ public sealed record PrecheckFailure(PrecheckKind Kind, string Message);
 public sealed record ApplyRequest(
     SetupChoice? Choice = null, bool ConfirmReplace = false, bool AssumeSynced = false, bool AssumeClosed = false);
 
+/// <summary>What the owner asked for when restoring a backup.</summary>
+/// <param name="ConfirmReplace">Needed when the backup is of a shared folder: restoring it replaces shared data.</param>
+/// <param name="AssumeClosed">The owner states the app is closed, overriding the process check.</param>
+public sealed record RestoreRequest(bool ConfirmReplace = false, bool AssumeClosed = false);
+
 /// <summary>The steps to run, in order. A dry run prints exactly this; a real run executes it.</summary>
+/// <param name="Source">Apply and revert: S. Restore: the backup's data folder.</param>
+/// <param name="Target">Apply and revert: T. Restore: the folder being restored.</param>
 public sealed record Plan(
     string MappingId,
     Classification Classification,
@@ -188,7 +235,8 @@ public sealed record Plan(
     string Target,
     IReadOnlyList<PlanStep> Steps,
     IReadOnlyList<string> Notes,
-    bool NeedsFirstSeedConfirmation);
+    bool NeedsFirstSeedConfirmation,
+    PlanOperation Operation = PlanOperation.Apply);
 
 /// <summary>Why nothing will be done, and what the owner can do about it. Nothing has been changed.</summary>
 public sealed record Refusal(
@@ -199,7 +247,8 @@ public sealed record Refusal(
     IReadOnlyList<PrecheckFailure> Failures,
     IReadOnlyList<SetupChoice> AllowedChoices,
     bool AssumeSyncedWouldHelp,
-    Comparison? Comparison);
+    Comparison? Comparison,
+    PlanOperation Operation = PlanOperation.Apply);
 
 /// <summary>Either a plan or a refusal, never both.</summary>
 public sealed record PlanOutcome(Plan? Plan, Refusal? Refusal)

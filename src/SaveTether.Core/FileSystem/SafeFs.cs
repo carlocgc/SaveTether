@@ -186,6 +186,45 @@ public sealed class SafeFs
     }
 
     /// <summary>
+    /// Copies the content of the real directory <paramref name="source"/> into the existing real
+    /// directory <paramref name="destination"/>. Folders are merged; an existing file is never
+    /// overwritten (the copy fails instead). Links inside the source are never followed.
+    /// </summary>
+    /// <param name="topLevelEntries">The names directly inside the source to copy, or null for all of them.</param>
+    public static CopyResult CopyInto(
+        string source, string destination, IReadOnlyCollection<string>? topLevelEntries = null,
+        LinkCopyPolicy links = LinkCopyPolicy.RecordOnly)
+    {
+        var from = RequireAbsolute(source, nameof(source));
+        var to = RequireAbsolute(destination, nameof(destination));
+
+        var kind = Probe(from);
+        if (kind != EntryKind.Directory)
+        {
+            throw new SafeFsException($"Cannot copy '{from}': it is {Describe(kind)}, not a folder.");
+        }
+
+        var destinationKind = Probe(PathRules.ResolveAll(to));
+        if (destinationKind != EntryKind.Directory)
+        {
+            throw new SafeFsException($"Cannot copy into '{to}': it is {Describe(destinationKind)}, not a folder.");
+        }
+
+        var resolvedFrom = PathRules.ResolveParents(from);
+        var resolvedTo = PathRules.ResolveAll(to);
+        if (PathRules.IsSameOrInside(resolvedTo, resolvedFrom) || PathRules.IsSameOrInside(resolvedFrom, resolvedTo))
+        {
+            throw new SafeFsException($"Cannot copy '{from}' into '{to}': one contains the other.");
+        }
+
+        var found = new List<LinkRecord>();
+        var fileCount = 0;
+        long byteCount = 0;
+        CopyDirectory(from, to, string.Empty, links, found, ref fileCount, ref byteCount, topLevelEntries);
+        return new CopyResult(fileCount, byteCount, found);
+    }
+
+    /// <summary>
     /// Lists everything below <paramref name="root"/> in a stable order. Links are listed, never entered.
     /// </summary>
     public static IEnumerable<TreeEntry> EnumerateTree(string root)
@@ -208,7 +247,11 @@ public sealed class SafeFs
     /// old content or the new, never half of it. The content goes to a hidden temporary file in
     /// the same folder, which is then renamed over <paramref name="path"/>.
     /// </summary>
-    public static void WriteFileAtomically(string path, string content)
+    /// <param name="flushToDisk">
+    /// Also ask the operating system to put the content on the disk before the rename. For the
+    /// journal, which must survive a crash or power cut.
+    /// </param>
+    public static void WriteFileAtomically(string path, string content, bool flushToDisk = false)
     {
         var destination = RequireAbsolute(path, nameof(path));
         ArgumentNullException.ThrowIfNull(content);
@@ -226,7 +269,12 @@ public sealed class SafeFs
 
         try
         {
-            File.WriteAllText(temporary, content);
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(content));
+                stream.Flush(flushToDisk);
+            }
+
             File.Move(temporary, destination, overwrite: true);
         }
         catch
@@ -266,12 +314,17 @@ public sealed class SafeFs
 
     private static void CopyDirectory(
         string from, string to, string relative, LinkCopyPolicy policy,
-        List<LinkRecord> found, ref int fileCount, ref long byteCount)
+        List<LinkRecord> found, ref int fileCount, ref long byteCount, IReadOnlyCollection<string>? only = null)
     {
         Directory.CreateDirectory(to);
         foreach (var path in SortedEntries(from))
         {
             var name = Path.GetFileName(path);
+            if (only is not null && !only.Contains(name, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
             var entryRelative = relative.Length == 0 ? name : relative + "/" + name;
             var destination = Path.Combine(to, name);
             var (kind, attributes) = ProbeWithAttributes(path);
