@@ -231,7 +231,7 @@ Found during the trial, for phase 2:
 
 **Phase 1 exit:** all of the above done, `status` clean on both devices, and the hardware checklist (section 7) ticked.
 
-Status 2026-11-12: M0 to M7 are done and `status` was clean on both devices. Four Deck checklist items in section 7 are not ticked (Desktop Mode and SSH, a link inside a Flatpak app's folder, a source on the SD card, and the sync root unmounted), so the exit condition as written is not fully met.
+Status 2026-11-12: M0 to M7 are done and `status` was clean on both devices. Four Deck checklist items in section 7 are not ticked (running over SSH, a link inside a Flatpak app's folder, a source on the SD card, and the sync root unmounted), so the exit condition as written is not fully met.
 
 ## 4. Phase 2: config redirects, definitions, resolver
 
@@ -303,7 +303,7 @@ Run before each phase exit. Record the date and tool version in the PR that clos
 - [x] Apply is refused while the app is running. *2026-11-12: refused against a running process name (`explorer`), and went ahead with `--assume-closed`. Not yet tried with a real emulator's process name.*
 
 **Steam Deck**
-- [ ] Native binary runs from `~/.local/bin` in Desktop Mode and over SSH. *2026-11-12: the binary ran on the Deck for the whole trial. Which of the two was used, and whether both were, was not recorded.*
+- [ ] Native binary runs from `~/.local/bin` in Desktop Mode and over SSH. *2026-11-12: ran in Desktop Mode from Konsole for the whole trial. Not yet run over SSH.*
 - [ ] Flatpak app: link inside `~/.var/app/<id>/` resolves inside the sandbox. *Not tried: Cemu on the Deck is not a Flatpak app. Permissions of five Flatpak emulators were read and all can reach the sync folder (section 1).*
 - [ ] Source on the SD card, sync root on internal storage.
 - [ ] Sync root unmounted or renamed: every command refuses.
