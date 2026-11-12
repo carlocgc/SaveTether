@@ -174,6 +174,13 @@ Tests (filesystem and fault injection):
 
 Done when: the whole matrix passes on three targets.
 
+As built (differences from the list above, and decisions made while building):
+- Revert and restore are planned like apply: `Planner.PlanRevert` and `RestorePlanner` produce the same kind of step list, so their dry runs and their journal entries use one code path. Three step kinds were added for them (copy-to-staging, remove-link, rename-into-place).
+- The fault hook has two points per step: after the intent is journalled, and after the step ran but before "done" is journalled. The matrix crashes at both, for eight scenarios (the four choices, a link-only apply, revert, and restore of a local and of a shared folder).
+- When recovery undoes and when it finishes an operation is recorded in design 5.3, with the restore rules in 5.12.
+- Not done here: recreating links recorded in a backup when it is restored. A restore lists them instead. Moved to M6.
+- Not covered by a test: a crash in the middle of a single step's copy or delete. The matrix interrupts between steps. The partial states that matter (a half-made junction, an aside folder whose original reappeared) have their own tests.
+
 ### M6. CLI (M)
 
 Deliver, in `Cli/`:
@@ -182,6 +189,7 @@ Deliver, in `Cli/`:
 - Output: text by default, one JSON object with `--json`. Every JSON object carries a `schema` number.
 - Confirmation: interactive prompt in text mode; in `--json` mode or without a terminal the tool never prompts and requires the explicit flag (`--confirm-replace`, `--assume-synced`, `--assume-closed`, `--take-over`).
 - Exit codes 0 to 3 as in design 5.12.
+- Carried over from M5: `backup restore` recreates the links recorded in a backup's manifest (local folders only), instead of only listing them.
 
 Tests (end to end, in-process):
 - Parser table: every command and flag, plus malformed input.

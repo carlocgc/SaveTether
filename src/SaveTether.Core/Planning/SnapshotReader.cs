@@ -73,6 +73,7 @@ public static class SnapshotReader
             BackupRootProblem = BackupRootProblem(backupRoot, shared.SyncRoot),
             FreeBytesAtBackupRoot = FreeBytesAt(backupRoot),
             FreeBytesAtTarget = FreeBytesAt(shared.SyncRoot),
+            FreeBytesAtSource = FreeBytesAt(source),
             TargetOnLocalVolume = IsOnLocalVolume(target),
         };
     }
@@ -139,7 +140,7 @@ public static class SnapshotReader
         }
     }
 
-    private static long? FreeBytesAt(string path)
+    internal static long? FreeBytesAt(string path)
     {
         try
         {

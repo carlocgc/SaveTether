@@ -11,6 +11,7 @@ namespace SaveTether.Core.Planning;
 public static class Planner
 {
     public const string AsideSuffix = ".savetether-old";
+    public const string StagingSuffix = ".savetether-new";
 
     private static readonly SetupChoice[] FirstDeviceChoices = [SetupChoice.Copy, SetupChoice.NoCopy];
     private static readonly SetupChoice[] GuardChoices = [SetupChoice.NoCopy, SetupChoice.AddMissing, SetupChoice.ReplaceShared];
@@ -56,6 +57,93 @@ public static class Planner
             : outcome;
     }
 
+    /// <summary>
+    /// Plans the revert flow of design 5.3: back up T (it is the live save), copy it to a new
+    /// folder beside S, remove the link, and rename the copy to S. T is left for the other devices.
+    /// </summary>
+    public static PlanOutcome PlanRevert(Snapshot snapshot, bool assumeClosed = false)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var s = snapshot;
+        var failures = new List<PrecheckFailure>();
+        void Fail(PrecheckKind kind, string message) => failures.Add(new PrecheckFailure(kind, message));
+
+        if (!s.SyncRootInitialized)
+        {
+            Fail(PrecheckKind.SyncRootNotInitialized, SyncRootMessage(s));
+        }
+        else
+        {
+            if (s.JournalOpen)
+            {
+                Fail(PrecheckKind.UnfinishedOperation, UnfinishedMessage);
+            }
+
+            var isLink = s.SourceKind is EntryKind.Symlink or EntryKind.Junction;
+            if (!isLink)
+            {
+                Fail(PrecheckKind.NotApplied, $"'{s.Source}' is not linked to the shared folder, so there is nothing to revert.");
+            }
+            else if (s.SourceLinkTarget is not { } linkTarget || !PathRules.AreSame(linkTarget, s.ResolvedTarget))
+            {
+                Fail(
+                    PrecheckKind.NotApplied,
+                    $"'{s.Source}' is a link to '{s.SourceLinkTarget}', not to this mapping's shared folder. SaveTether will not touch it.");
+            }
+            else if (s.TargetKind != EntryKind.Directory)
+            {
+                Fail(
+                    PrecheckKind.TargetUnusable,
+                    $"'{s.Source}' is linked to '{s.Target}', but that folder is missing, so the saves cannot be copied back. " +
+                    "Check that the sync root is present and has finished syncing.");
+            }
+
+            if (s.RunningProcesses.Count > 0 && !assumeClosed)
+            {
+                Fail(PrecheckKind.AppRunning, AppRunningMessage(s));
+            }
+
+            if (s.BackupRootProblem is { } problem)
+            {
+                Fail(PrecheckKind.BackupLocationUnusable, problem);
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            return Refuse(
+                s, RefusalKind.Precondition, Classification.NotClassified,
+                failures.Count == 1 ? failures[0].Message : $"{failures.Count} checks failed. Nothing was changed.",
+                failures: failures, operation: PlanOperation.Revert);
+        }
+
+        var staging = s.Source + StagingSuffix;
+        var steps = new List<PlanStep>();
+        var notes = new List<string> { "The shared folder is left as it is, for the other devices." };
+        if (s.TargetTree.HasData)
+        {
+            steps.Add(new PlanStep(StepKind.BackUpTarget, s.Target));
+        }
+        else
+        {
+            notes.Add($"The shared folder holds no saves, so '{s.Source}' will be an empty folder.");
+        }
+
+        steps.Add(new PlanStep(StepKind.CopyToStaging, s.Target, staging));
+        steps.Add(new PlanStep(StepKind.RemoveLink, s.Source, s.Target));
+        steps.Add(new PlanStep(StepKind.RenameIntoPlace, staging, s.Source));
+        steps.Add(new PlanStep(StepKind.WriteState, s.Source, s.Target));
+
+        var plan = new Plan(
+            s.MappingId, Classification.AlreadyApplied, null, s.Source, s.Target, steps, notes,
+            NeedsFirstSeedConfirmation: false, PlanOperation.Revert);
+        return SpaceFailures(s, plan) is { Count: > 0 } spaceFailures
+            ? Refuse(
+                s, RefusalKind.Precondition, Classification.NotClassified, spaceFailures[0].Message,
+                failures: spaceFailures, operation: PlanOperation.Revert)
+            : new PlanOutcome(plan, null);
+    }
+
     /// <summary>The classification table of design 5.3. Rows are checked top to bottom; the first match wins.</summary>
     public static Classification Classify(Snapshot snapshot, bool assumeSynced = false)
     {
@@ -99,16 +187,13 @@ public static class Planner
         if (!s.SyncRootInitialized)
         {
             // Nothing else can be judged without the sync root.
-            Fail(
-                PrecheckKind.SyncRootNotInitialized,
-                $"'{s.SyncRoot}' is not set up for SaveTether, or is not available. " +
-                "If the sync root is on a removable drive, check that it is connected; otherwise wait for the first sync to finish.");
+            Fail(PrecheckKind.SyncRootNotInitialized, SyncRootMessage(s));
             return failures;
         }
 
         if (s.JournalOpen)
         {
-            Fail(PrecheckKind.UnfinishedOperation, "An earlier operation did not finish. Run 'savetether recover' first.");
+            Fail(PrecheckKind.UnfinishedOperation, UnfinishedMessage);
         }
 
         var metaRoot = Path.Combine(s.DataRoot, Storage.SharedStore.MetaFolderName);
@@ -160,10 +245,7 @@ public static class Planner
         {
             if (s.RunningProcesses.Count > 0 && !request.AssumeClosed)
             {
-                Fail(
-                    PrecheckKind.AppRunning,
-                    $"The app appears to be running ({string.Join(", ", s.RunningProcesses)}). Close it and try again. " +
-                    $"Looked for: {string.Join(", ", s.ProcessNamesChecked)}.");
+                Fail(PrecheckKind.AppRunning, AppRunningMessage(s));
             }
 
             if (s.BackupRootProblem is { } problem)
@@ -175,10 +257,25 @@ public static class Planner
         return failures;
     }
 
+    internal const string UnfinishedMessage = "An earlier operation did not finish. Run 'savetether recover' first.";
+
+    internal static string AppRunningMessage(IReadOnlyList<string> running, IReadOnlyList<string> lookedFor) =>
+        $"The app appears to be running ({string.Join(", ", running)}). Close it and try again. " +
+        $"Looked for: {string.Join(", ", lookedFor)}.";
+
+    internal static string SyncRootMessage(string syncRoot) =>
+        $"'{syncRoot}' is not set up for SaveTether, or is not available. " +
+        "If the sync root is on a removable drive, check that it is connected; otherwise wait for the first sync to finish.";
+
+    private static string AppRunningMessage(Snapshot s) => AppRunningMessage(s.RunningProcesses, s.ProcessNamesChecked);
+
+    private static string SyncRootMessage(Snapshot s) => SyncRootMessage(s.SyncRoot);
+
     private static List<PrecheckFailure> SpaceFailures(Snapshot s, Plan plan)
     {
         long backupBytes = 0;
         long targetBytes = 0;
+        long stagingBytes = 0;
         foreach (var step in plan.Steps)
         {
             switch (step.Kind)
@@ -196,10 +293,20 @@ public static class Planner
                             .Where(e => step.Entries.Contains(TreeFacts.TopLevelOf(e.RelativePath), StringComparer.Ordinal))
                             .Sum(e => e.Length);
                     break;
+                case StepKind.CopyToStaging:
+                    stagingBytes += s.TargetTree.TotalBytes;
+                    break;
             }
         }
 
         var failures = new List<PrecheckFailure>();
+        if (s.FreeBytesAtSource is { } sourceFree && stagingBytes > sourceFree)
+        {
+            failures.Add(new PrecheckFailure(
+                PrecheckKind.NotEnoughSpace,
+                $"Copying the saves back needs {stagingBytes:N0} bytes, but only {sourceFree:N0} are free at '{s.Source}'."));
+        }
+
         if (s.FreeBytesAtBackupRoot is { } backupFree && backupBytes > backupFree)
         {
             failures.Add(new PrecheckFailure(
@@ -441,7 +548,7 @@ public static class Planner
     private static PlanOutcome Refuse(
         Snapshot s, RefusalKind kind, Classification classification, string message,
         IReadOnlyList<PrecheckFailure>? failures = null, IReadOnlyList<SetupChoice>? allowed = null,
-        bool assumeSyncedWouldHelp = false, Comparison? comparison = null) =>
+        bool assumeSyncedWouldHelp = false, Comparison? comparison = null, PlanOperation operation = PlanOperation.Apply) =>
         new(null, new Refusal(
-            s.MappingId, kind, classification, message, failures ?? [], allowed ?? [], assumeSyncedWouldHelp, comparison));
+            s.MappingId, kind, classification, message, failures ?? [], allowed ?? [], assumeSyncedWouldHelp, comparison, operation));
 }

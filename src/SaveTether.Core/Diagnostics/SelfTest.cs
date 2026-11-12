@@ -1,4 +1,5 @@
 using SaveTether.Core.Backup;
+using SaveTether.Core.Execution;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Planning;
@@ -145,6 +146,31 @@ public static class SelfTest
             Require(PlanRenderer.ToText(outcome).Contains("1. Back up", StringComparison.Ordinal), "the plan did not render as text");
         });
 
+        yield return ("apply, recover and revert", () =>
+        {
+            var device = shared.ReadDevice("selftest-device");
+            Snapshot Read() => SnapshotReader.Read(
+                shared, shared.ReadMapping(mappingId), device.DeviceName, device.Paths[mappingId], backups,
+                new SystemProcessLister(), Journal.For(local).IsOpen);
+
+            // Fail once after the link is verified, so the journal is read back from disk by recovery.
+            var plan = Planner.Plan(Read(), new ApplyRequest(SetupChoice.Copy, AssumeSynced: true)).Plan
+                ?? throw new InvalidOperationException("there was no plan to apply");
+            var store = new BackupStore(backups, syncRoot);
+            var interrupted = new Executor(shared, local, store, device.DeviceName, faults: new FailBeforeWriteState()).Run(plan);
+            Require(interrupted.Status == ExecutionStatus.RecoveryNeeded, "the interrupted apply did not ask for recovery");
+
+            var executor = new Executor(shared, local, store, device.DeviceName);
+            Require(executor.Recover().Status == ExecutionStatus.Completed, "recovery did not finish the apply");
+            Require(SafeFs.Probe(saves) is EntryKind.Junction or EntryKind.Symlink, "the save folder is not a link");
+            Require(local.ReadState().Mappings[mappingId].SetupChoice == SetupChoice.Copy, "the apply was not recorded");
+
+            var revert = Planner.PlanRevert(Read()).Plan ?? throw new InvalidOperationException("there was no plan to revert");
+            Require(executor.Run(revert).Status == ExecutionStatus.Completed, "revert did not complete");
+            Require(File.ReadAllText(Path.Combine(saves, "slot1.sav")) == "save data", "revert did not bring the save back");
+            Require(executor.Recover().Status == ExecutionStatus.NothingToRecover, "a journal was left open");
+        });
+
         yield return ("directory link", () =>
         {
             var link = Path.Combine(root, "link");
@@ -155,6 +181,17 @@ public static class SelfTest
             Require(SafeFs.Probe(link) == EntryKind.Missing, "the link was not removed");
             Require(SafeFs.Probe(Path.Combine(saves, "slot1.sav")) == EntryKind.File, "removing the link touched its target");
         });
+    }
+
+    private sealed class FailBeforeWriteState : IFaultHook
+    {
+        public void At(FaultPoint point, int stepIndex, PlanStep planStep)
+        {
+            if (point == FaultPoint.BeforeStep && planStep.Kind == StepKind.WriteState)
+            {
+                throw new IOException("self-test: injected failure");
+            }
+        }
     }
 
     private static void Require(bool condition, string failure)
