@@ -1,6 +1,6 @@
 # SaveTether: cross-device save-folder redirection manager — design
 
-Status: design proposal, nothing implemented. Written 2026-11-12 from the owner's design brief and revised the same day with the owner's answers (section 1).
+Status: design proposal, nothing implemented. Written 2026-11-12 from the owner's design brief and revised the same day with the owner's answers (section 1). Open decisions resolved the same day (section 7), after an inventory of the Windows device (appendix B).
 
 This document is self-contained. The facts from the brief that the design depends on (devices, current script mappings, known weaknesses) are reproduced in appendix A, so nothing else needs to travel with it to a new repository. Section 7 lists what is decided, what is still open, and where to start. "You" means the owner; "I" means the author of the design.
 
@@ -34,10 +34,13 @@ Labels used throughout: **[V]** verified by a source I checked today, **[K]** fr
 ### Assumptions
 
 - One person, one device in use at a time. Simultaneous play on two devices is out of scope beyond surfacing the conflict files.
-- Something else moves the shared folder between devices. Today that is Syncthing; the tool must not require it. Syncthing-specific features (ignore file, conflict files, idle probe) are optional extras.
+- **The tool is not coupled to any sync product.** Something else moves `<sync root>/savetether/` between devices: Syncthing today, but it could be any tool that copies ordinary files and folders. SaveTether contains no Syncthing code and reads no Syncthing files or APIs. Everything it needs to know about sync state comes from files it writes itself in `savetether/.savetether/`. Integrations with a specific sync tool (idle check, its conflict files, its ignore patterns) are a possible later addition (5.10), never a requirement.
+- What the tool needs from the sync tool: it syncs the contents of `savetether/` as ordinary files, it eventually delivers every file, and it does not need links inside `savetether/` (there are none; the links are in the apps' folders, pointing in).
 - The device you stop on finishes syncing before you start on the next one. Playing offline is fine; the save reaches the others when the connection returns.
 - The sync root is on internal, always-mounted storage on both current devices. The tool still checks, because that may not hold on a future device.
 - All current mappings are directories. File-level mappings are deferred (see 2.1).
+- **The tool owns one folder in the sync root: `<sync root>/savetether/`.** Every target has the shape `<sync root>/savetether/<app>/<save folder>`, and the tool's shared metadata lives in `<sync root>/savetether/.savetether/`. Everything else in the sync root (the old script-era app folders, `Scripts/`, `Backup/`) is ignored: never scanned, read, backed up or touched.
+- **No migration.** The tool creates redirections from scratch. It does not adopt or convert links made by the old scripts. The owner moves old save data into the new structure by hand when ready (section 5.7).
 
 ### Owner's answers (2026-11-12) and what they change
 
@@ -55,9 +58,9 @@ Labels used throughout: **[V]** verified by a source I checked today, **[K]** fr
 
 ### 2.1 Mechanisms (applies to all designs)
 
-Direction matters more than link type. **[V]** Syncthing never follows symlinks, and on Windows does not sync them at all. So a link placed *inside* the sync folder pointing out is useless. Your layout is the right way round: real data lives in the sync folder, and the app's folder is the link. Syncthing sees ordinary files and its temp-file-then-rename writes are invisible to the app.
+Direction matters more than link type. **[V]** Syncthing never follows symlinks, and on Windows does not sync them at all; other sync tools treat links inconsistently **[K]**. So a link placed *inside* the sync folder pointing out is useless. The right way round, and the only one the tool uses: real data lives in the sync folder, and the app's folder is the link. Any sync tool then sees ordinary files, and its writes are invisible to the app.
 
-| Mechanism | Privilege | Works for | Syncthing | App behaviour | Verdict |
+| Mechanism | Privilege | Works for | Sync tool | App behaviour | Verdict |
 |---|---|---|---|---|---|
 | Symlink (Linux) | none | dirs and files, any filesystem | fine (data is real in the sync folder) | transparent. Wine and Proton resolve host symlinks below the prefix normally **[K]** | default on Linux |
 | Directory symlink (Windows) | admin, or Developer Mode | dirs and files | fine | transparent | avoid; junctions do the same job for directories |
@@ -76,7 +79,7 @@ Behaviours that need handling whatever the choice:
 - **Proton prefix lifecycle.** Deleting `compatdata/<appid>` removes the link, not the target. A recreated prefix has a real folder again: drift, caught by the health check.
 - **File-level links on Windows.** File symlinks need privilege and hard links break on the first atomic rename. If a game keeps one save file among junk, link the directory and filter the junk with ignore patterns instead.
 - **Case sensitivity.** Windows filesystems ignore case; the Deck's do not. A game under Wine may write `SaveData` where the Windows build wrote `savedata`, giving two folders on Linux and one on Windows. Targets in the shared mapping list are therefore fixed, exact-case names chosen by the tool, and the health check flags names in a target that differ only by case **[I]**.
-- **Footprint.** Link the narrowest directory that holds saves. Where junk shares that directory, generate Syncthing ignore patterns. `.stignore` is per-device and not synced, but **[V]** it supports `#include`, so each device's `.stignore` can hold one line including a synced, generated pattern file. Ignored data still occupies local disk in the sync root; it just is not transferred.
+- **Footprint.** Link the narrowest directory that holds saves, and leave cache and media roles off. That is the whole footprint control the core has, because filtering files out of a linked folder is the sync tool's job and the core does not talk to one. A later Syncthing integration could generate ignore patterns: **[V]** `.stignore` is per-device and not synced, but it supports `#include`, so each device's `.stignore` could include one synced, generated pattern file.
 
 ### 2.2 Design A: link manager (recommended)
 
@@ -87,7 +90,7 @@ Behaviours that need handling whatever the choice:
 **Data model.**
 
 - *App definition* (shared, read-only data): how to find an app and which folders ("roles") it has, each classed as save, system, state, cache, mod or media.
-- *Mapping list* (shared, in the sync root): which roles of which apps are enabled, and their path relative to the sync root. No machine paths.
+- *Mapping list* (shared, in `<sync root>/savetether/.savetether/`): which roles of which apps are enabled, and their path relative to `<sync root>/savetether/`. No machine paths.
 - *Device config* (local): sync root, token overrides such as an install directory or the SD card.
 - *Device state* (local): resolved paths, mechanism used, backups taken, journal.
 
@@ -144,7 +147,7 @@ Behaviours that need handling whatever the choice:
 | Deck usability | CLI now, Decky plugin later | Same | Launch options per game; Ludusavi GUI in Desktop Mode |
 | Maintainability | One engine, data-driven | Depends on Syncthing's API and config on three hosts | Low code, high manual upkeep |
 | Works with another sync tool later | Yes | No | Yes |
-| Migration from today | Adopt existing links in place | Undo links first | Undo links first |
+| Migration from today | None by the tool: fresh `savetether/` tree, owner copies old data in by hand | Undo links first | Undo links first |
 | Effort to replace the scripts | M | M to L | S to M, incomplete |
 | Steam Frame readiness | Needs an ARM64 build; mechanism unchanged for native Linux apps | Same, plus Syncthing must run there | Depends on Ludusavi ARM64 builds |
 
@@ -194,11 +197,11 @@ Controller use without Decky: a desktop GUI added as a non-Steam shortcut runs i
 
 ## 4. Recommendation
 
-Build **design A** in **C#/.NET**, phase 1 as a CLI with a hand-written mapping file, and adopt your existing links in place.
+Build **design A** in **C#/.NET**, phase 1 as a CLI with a hand-written mapping file, creating redirections into a fresh `<sync root>/savetether/` tree.
 
 Main trade-offs:
 
-- A keeps one inherently risky step (replacing a folder with a link). B does not. I still prefer A because it adopts your current layout without a migration, keeps one tidy tree on Unraid, and does not marry you to Syncthing's API. The risk is contained by the invariants in 5.3.
+- A keeps one inherently risky step (replacing a folder with a link). B does not. I still prefer A because it keeps one tidy tree on Unraid and does not marry you to Syncthing's API. The risk is contained by the invariants in 5.3.
 - Live links mean Syncthing can write into a folder while an emulator has it open. This is true today and has evidently been tolerable. If one app proves fragile, the remedies are a config redirect or leaving that app unmanaged.
 
 What would change my mind:
@@ -231,7 +234,6 @@ flowchart TB
     MECH["Mechanisms: junction, symlink, config edit"]
     BK["Backup store: copy tree plus SHA-256 manifest"]
     JR["Journal and recovery"]
-    ST["Syncthing probe (optional): folder idle, conflicts"]
   end
   CLI --> PLAN
   CLI --> HEALTH
@@ -244,13 +246,11 @@ flowchart TB
   MECH --> SAFEFS
   BK --> SAFEFS
   HEALTH --> RES
-  HEALTH --> ST
 
-  subgraph SHARED["Sync root (shared, no machine paths, no secrets)"]
-    MAP[".savetether/mappings.yaml"]
-    SEED[".savetether/seed/<mapping>.json"]
-    IGN[".savetether/ignore.generated"]
-    DATA["<app>/<role>/ save data"]
+  subgraph SHARED["<sync root>/savetether/ (shared, no machine paths, no secrets)"]
+    MAP[".savetether/mappings.json"]
+    SEED[".savetether/seed/<mapping>/<device>.json"]
+    DATA["<app>/<save folder>/ save data"]
   end
   subgraph LOCAL["Per device (never synced)"]
     DEV["device.yaml: sync root, token overrides"]
@@ -305,8 +305,8 @@ roles:
     default: bool        # enabled when the app is added
     mechanism: link | config
     path: string | { <install-id>: string }   # relative to base
-    target: string       # relative to <sync_root>/<app-id>/
-    ignore: [pattern]    # added to the generated Syncthing ignore file
+    target: string       # relative to <sync_root>/savetether/<app-id>/
+    ignore: [pattern]    # files a sync-tool integration may exclude (later; unused by the core)
     config:              # only for mechanism: config
       file: path
       format: retroarch-cfg | ini
@@ -464,21 +464,35 @@ What it gives you: save locations for PC games as Windows paths with placeholder
 2. **Never delete inside the sync root.** A deletion there propagates to every device. The single exception is an explicit, confirmed "replace shared data with this device's data", and it backs up the shared copy locally first. Revert *copies* out of the sync root; it never moves.
 3. **No change without a verified backup outside the sync root.**
 4. **Originals are renamed aside, not deleted,** until the link is verified.
-5. **No sync root marker, no operation.** The sync root must contain the tool's own `.savetether/` folder, created by `init` on the first device and delivered to the others by the sync tool. An unmounted drive leaves an empty mount point, which fails this check. Using the tool's own marker instead of Syncthing's `.stfolder` keeps the tool independent of the sync product.
-6. **No silent winner.** If the local folder and the shared target both hold data, the tool stops and shows the difference.
+5. **No sync root marker, no operation.** The sync root must contain `savetether/.savetether/`, created by `init` on the first device and delivered to the others by the sync tool. An unmounted drive leaves an empty mount point, which fails this check. Using the tool's own marker instead of Syncthing's `.stfolder` keeps the tool independent of the sync product.
+6. **No silent winner, no clobbering.** Copying this device's saves into the shared location is always an explicit choice, never a default. If the shared target already holds data, a plain copy is refused; only "add missing" (never overwrites) or a doubly confirmed "replace shared" can write into it.
 
-**Classification.** The planner classifies the local path S and shared target T, then picks a flow:
+**Setup choices.** Setup is run on every device. On each one, for each mapping, the owner says what happens to this device's existing saves. A backup is taken first in every case.
 
-| S (local) | T (shared) | Flow |
+| Choice (`apply` flag) | Effect | Allowed when |
+|---|---|---|
+| `--copy` | This device's saves become the shared copy: copied into T, then S is linked to T. Writes the seed marker | T is empty and has no seed marker |
+| `--no-copy` | This device's saves stay in the backup only. S is linked to T as T stands (empty, or holding another device's saves) | always |
+| `--add-missing` | Copies into T only the top-level entries of S that T does not have (for example one PPSSPP game folder), then links. Never overwrites, never deletes. Entries present on both sides are left as T has them and listed, with a note when they differ | T has data |
+| `--replace-shared --confirm-replace` | Backs up T locally, replaces T with this device's saves, links. The deletion propagates to every device, and the output says so. The only exception to invariant 2 | T has data |
+| none | If S is empty or missing, links straight away. If S holds data, stops and lists the allowed choices with the comparison below | always |
+
+Whole top-level entries are the unit for `--add-missing` because most emulators keep one folder or file per game at that level. A game's save is then taken entirely from one device or the other, never mixed file by file.
+
+**Classification.** The planner classifies the local path S and shared target T before any choice is applied:
+
+| S (local) | T (shared) | Result |
 |---|---|---|
 | link to T | exists | already applied: verify, record, done |
-| link elsewhere | any | stop: foreign link, offer adopt or manual fix |
-| real folder with data | missing or empty, no seed marker | **seed**: this device's data becomes the shared copy |
-| real folder, empty or missing | has data and a seed marker | **join**: take the shared copy |
-| real folder with data | has data | **diverged**: show comparison, user chooses seed, join or cancel |
-| anything | empty, with a seed marker present, or Syncthing reports the folder still syncing | stop: shared copy has not arrived yet |
+| link elsewhere | any | stop: foreign link, owner removes it by hand (5.7) |
+| empty or missing | any | link, no choice needed (T is created if missing) |
+| has data | empty, no seed marker | first device: `--copy` or `--no-copy` |
+| has data | has data | **guard**: "the shared location already holds saves". Shows the comparison (5.4). `--copy` is refused; `--no-copy`, `--add-missing` or `--replace-shared` |
+| any | seed marker present but T is missing files the marker lists | stop: the shared copy has not fully arrived. `--assume-synced` overrides after confirmation |
 
-The seed marker (`.savetether/seed/<mapping>.json`: which device seeded, and when) is how a new device tells "nobody has seeded this" from "seeded, but Syncthing has not delivered it". Where the local Syncthing API is reachable, the tool also requires the folder to be idle with nothing outstanding. The API key is read from Syncthing's own local config at run time and never stored.
+**Seed marker.** `savetether/.savetether/seed/<mapping>/<device>.json` records which device seeded, when, and the seed's file list (relative path and size). A later device uses it to tell "nobody has seeded this" from "seeded, but not delivered yet", and "partly delivered" from "complete". Saves are small, so the list is cheap. Each device writes its own file, named after itself, so two devices never write the same marker file whatever sync tool is in use.
+
+**The one race the tool cannot fully prevent.** If both devices run `--copy` before either has received the other's data, each sees an empty target and no marker. The tool does not talk to the sync tool, so nothing on one device can see the other. Mitigation: when no marker exists, `--copy` prints "if this mapping was already set up on another device, wait until it has synced" and asks for confirmation. If it still happens, nothing is lost: both devices hold backups, and both seed markers arrive, because they are separate files. `status` reports a mapping with more than one seed marker as **Double seed**, and the owner resolves it with `apply --replace-shared` from the device that should win (or restores from a backup). What the sync tool did with same-named files meanwhile (kept one, or made a conflict copy) depends on the sync tool.
 
 **State machine (link mechanism).**
 
@@ -490,8 +504,8 @@ stateDiagram-v2
   Prechecked --> BackedUp: copy S to backup store
   BackedUp --> BackupVerified: re-read backup, SHA-256 matches source
   BackedUp --> Aborted: mismatch (delete partial backup only)
-  BackupVerified --> Staged: seed only: copy S into T, verify against manifest
-  BackupVerified --> Staged: join: nothing to copy
+  BackupVerified --> Staged: copy, add-missing or replace-shared: write into T, verify against manifest
+  BackupVerified --> Staged: no-copy: nothing to write
   Staged --> Aside: rename S to S.savetether-old (same parent, atomic)
   Aside --> Linked: create junction or symlink S -> T
   Linked --> Verified: lstat says link, target equals T, listing via S equals T
@@ -504,9 +518,9 @@ stateDiagram-v2
   RolledBack --> [*]
 ```
 
-Preconditions: sync root exists and has the tool's marker; T resolves inside the sync root and S does not; neither path contains the other; the app is not running; free space for the backup, and for the copy if S and T are on different volumes; no unfinished journal entry; on Windows, T is on a local volume; on Flatpak apps, the sandbox can reach T.
+Preconditions: sync root exists and has the tool's marker; T resolves inside `<sync root>/savetether/` and S does not resolve inside the sync root at all; neither path contains the other; the app is not running; free space for the backup, and for the copy if S and T are on different volumes; no unfinished journal entry; on Windows, T is on a local volume; on Flatpak apps, the sandbox can reach T.
 
-**Journal.** Each step is written as intent before it runs and as done after. On start, an unfinished transaction is rolled back using the table above: before "Aside" there is nothing to undo on S; after it, the rename is reversed. Files already copied into T during a failed seed are left in place and reported, because of invariant 2.
+**Journal.** Each step is written as intent before it runs and as done after. On start, an unfinished transaction is rolled back using the table above: before "Aside" there is nothing to undo on S; after it, the rename is reversed. Files already copied into T during a failed copy or add-missing are left in place and reported, because of invariant 2. For replace-shared, the local backup of T taken first is what recovery offers to restore.
 
 **Revert.** Check the app is closed and S is our link. Back up T's current content locally (it is the live save). Copy T to `S.savetether-new` beside S and verify. Remove the link non-recursively. Rename `S.savetether-new` to S. T is left untouched for the other devices.
 
@@ -516,9 +530,9 @@ Preconditions: sync root exists and has the tool's marker; T resolves inside the
 
 ### 5.4 Onboarding, divergence and conflicts
 
-- **Seed and join** are the two flows above. The first device to enable a mapping seeds; later devices join.
-- **Diverged.** The tool compares by relative path, size and hash, and reports: files only local, only shared, and different, with the newest modification time on each side ("local newest: 10 Nov 21:14; shared newest: 3 Nov 18:02"). You choose. Both sides are backed up locally first whichever you pick. There is no file-level merge in version 1; for multi-file saves it produces incoherent states.
-- **Ongoing conflicts.** If two devices change the same file while apart, Syncthing keeps one and renames the other to `*.sync-conflict-<date>-<time>-<device>`. The health check lists these per mapping and offers "keep current" or "use the conflict copy" (a swap, with a local backup). For anything beyond that, the recovery path is the tool's local backup store. Because versioning at the sync host is the user's choice, the tool offers its own optional snapshots: a scheduled or on-demand copy of each shared target into the local backup store, with a retention count. It is off by default and costs disk space on the device, which the UI shows.
+- **Typical setup.** Windows first: `apply ppsspp.savedata --copy`, so Windows' saves become the shared copy. After Syncthing has delivered them, on the Deck: `apply ppsspp.savedata`. The Deck has saves of its own, so the guard stops and shows the comparison; choose `--no-copy` (Windows wins, Deck's saves kept in the local backup) or `--add-missing` (Deck-only games are added too). Trying `--copy` on the Deck is refused.
+- **Comparison.** Shown whenever the guard stops. Grouped by top-level entry, then by file (relative path, size, hash): entries only local, only shared, and present on both with differences, with the newest modification time on each side ("local newest: 10 Nov 21:14; shared newest: 3 Nov 18:02"). Both sides are backed up locally first whichever you pick. There is no file-level merge inside an entry; for multi-file saves it produces incoherent states.
+- **Ongoing conflicts.** If two devices change the same file while apart, how that is resolved is the sync tool's business; Syncthing, for example, keeps one and renames the other to `*.sync-conflict-<date>-<time>-<device>`. The core does not recognise any tool's conflict naming. Listing and resolving those files is part of a later sync-tool integration (5.10). The core's recovery path is its local backup store. Because versioning at the sync host is the user's choice, the tool offers its own optional snapshots: a scheduled or on-demand copy of each shared target into the local backup store, with a retention count. It is off by default and costs disk space on the device, which the UI shows.
 
 ### 5.5 Health
 
@@ -526,34 +540,35 @@ Preconditions: sync root exists and has the tool's marker; T resolves inside the
 |---|---|
 | OK | link or config value is as recorded, target exists |
 | Not applied | mapping enabled in the shared list, not yet applied here |
-| Replaced | S is a real folder again. If it holds files, saves are stranded locally; offer to re-run the diverged flow |
+| Replaced | S is a real folder again. If it holds files, saves are stranded locally; offer to re-run `apply`, which stops at the guard |
 | Broken | link is intact, target is missing (sync root not mounted, or target deleted) |
 | Retargeted | link or config points somewhere unexpected |
-| Conflicts | sync-conflict files present in the target |
-| Unmanaged link | a link into the sync root that the tool did not create; offer adopt |
+| Double seed | more than one device's seed marker exists for the mapping (5.3) |
+| Foreign link | S is a link the tool did not create, for example one left by the old scripts. Apply refuses; the owner removes it by hand |
 
 Cost is one `lstat` and one read-link per mapping, plus a directory walk of small save folders for conflicts: milliseconds. So no daemon. Run it on tool start, on demand, and optionally at login (Task Scheduler on Windows; a systemd *user* timer on SteamOS, which needs no root and lives in `/home`). A later option is a launch guard, `savetether guard <app> -- %command%`, that checks one mapping before the game starts.
 
 ### 5.6 Shared versus local
 
-| In the sync root (shared) | Local only |
+| In `<sync root>/savetether/` (shared) | Local only |
 |---|---|
 | enabled mappings and their relative targets | sync root path, token overrides |
 | seed markers | resolved absolute paths |
-| generated Syncthing ignore patterns | backups, journal, operation history |
-| personal custom app definitions | Syncthing API key (read at run time, not stored) |
+| personal custom app definitions | backups, journal, operation history |
 
 Nothing shared contains an absolute path, a device hostname or a credential. The CIFS mount script does not belong in this tool at all. Keep it outside the sync folder, with the credential in a root-only credentials file referenced from `fstab`.
 
-### 5.7 Migration from the scripts
+### 5.7 Moving from the scripts (done by hand, not by the tool)
 
-1. Take a one-off full copy of the sync folder somewhere outside it.
-2. Rotate the share credential and move that script out of the sync folder.
-3. Run a scan that walks the known roots for links pointing into the sync root. This finds everything the scripts created, including the ones nobody remembers.
-4. For each, **adopt**: verify it resolves, record it in local state, snapshot the target to the local backup store as a baseline. Nothing on disk changes. Existing Windows `mklink /D` symlinks are kept as they are; converting one to a junction is a separate, optional, non-destructive step.
-5. Review the mapping list against the footprint rule. Disabling a role (for example Eden's `load`, or PPSSPP textures) is a revert of that role.
-6. Leftover `*_backup` folders from the old scripts are listed, never touched.
-7. Retire the scripts only when status is clean on both devices.
+The tool does not migrate. It builds a new `savetether/` tree, and the old script-era folders in the sync root stay as they are until the owner deletes them. For each app, when ready:
+
+1. Close the app on every device.
+2. On each device where the app's save folder S is an old script link, remove the link by hand (on Windows `rmdir S`, which removes a symlink or junction without touching its target; on Linux `rm S`, no trailing slash). Put the data back in S by copying it out of the old sync folder. S is now a plain folder again.
+3. On the device whose saves should win, `apply <id> --copy`. S's data is backed up and becomes `savetether/<app>/<save folder>`.
+4. On the other devices, `apply` after that has synced. If S there still holds data, the guard stops and offers `--no-copy`, `--add-missing` or `--replace-shared` (5.3, 5.4).
+5. Retire that app's old script and, once satisfied, delete its old folder from the sync root.
+
+If step 2 is skipped, `apply` finds a foreign link at S and refuses, so a leftover old link cannot be followed or deleted through.
 
 ### 5.8 Testing
 
@@ -561,7 +576,7 @@ Nothing shared contains an absolute path, a device hostname or a credential. The
 - **Canary test for invariant 1.** Every delete path is run against a tree containing a link to a canary directory outside it. The canary must survive. This runs on every OS in CI.
 - **Round trip.** Apply then revert leaves a byte-identical tree.
 - **Fault injection.** Abort after each journal step, run recovery, and assert that every original file's content still exists in at least one of S, T or the backup store.
-- **Classification table.** One test per row of the table in 5.3, including "empty target with seed marker".
+- **Classification and setup choices.** One test per row of both tables in 5.3, including "seed marker present, T partly delivered". Every refused combination (for example `--copy` into a non-empty T) is tested to change nothing on disk. `--add-missing` is tested never to overwrite or delete an entry in T.
 - **CI matrix.** Windows x64, Linux x64, Linux ARM64. GitHub's Windows runners are elevated, so add a test that proves junction creation works without the symlink privilege.
 - **Manual checklist on real hardware** before each release: Flatpak app, Proton prefix, SD card path, Game Mode launch.
 
@@ -580,21 +595,21 @@ Nothing shared contains an absolute path, a device hostname or a credential. The
 | Phase | Contents | Exit test |
 |---|---|---|
 | 0 | Full copy of the sync folder. Rotate the credential. Settle the open decisions in section 7 | credential no longer in any synced location |
-| 1 | CLI: `init`, `scan`, `adopt`, `status`, `apply`, `revert`, `backup list/restore`. Link and config mechanisms. Journal, backups, all six invariants, the test suite in 5.8. Mappings hand-written, with absolute paths in *local* device config. No definitions, no detection. Specified in 5.12 | all current scripts retired on both devices; status clean |
-| 2 | Definition format and tokens, path resolver including Lutris and non-Steam prefixes, seed/join/diverged flows with comparison, conflict listing, optional snapshots, generated ignore file, Syncthing probe, login-time check | a wiped Deck can be re-joined from the mapping list alone |
+| 1 | CLI: `init`, `status`, `apply`, `revert`, `backup list/restore`, `recover`. Link mechanism, and the config mechanism for `retroarch.cfg`. Journal, backups, the setup choices and guard with the comparison (5.3, 5.4), all six invariants, the test suite in 5.8. Mappings hand-written, with absolute paths in *local* device config. No definitions, no detection, no adoption of old links. Specified in 5.12 | one real mapping seeded on Windows, joined on the Deck, reverted and re-applied; status clean on both |
+| 2 | Definition format and tokens, path resolver including Lutris and non-Steam prefixes, optional snapshots, login-time check | a wiped Deck can be re-joined from the mapping list alone |
 | 3 | Decky plugin (5.11). Detection, with the Ludusavi manifest as an optional hint source | apply and revert from Game Mode |
 | 4 | Public release: CI matrix, signing, package manifests, definitions repo split, contributor docs | first outside definition merged |
-| Later | Desktop GUI for Windows; Steam Frame support | |
+| Later | Desktop GUI for Windows; Steam Frame support; optional sync-tool integrations, each a separate opt-in module the core never depends on (for Syncthing: folder-idle check before apply, listing and resolving conflict files, generated ignore patterns) | |
 
 ### 5.11 Decky plugin shape
 
 The Quick Access panel is a narrow column, so it shows only what fits a list:
 
-- One row per mapping: app name, role, a status word (OK, Replaced, Broken, Conflicts, Not applied). Rows needing attention sort to the top.
+- One row per mapping: app name, role, a status word (OK, Replaced, Broken, Double seed, Not applied). Rows needing attention sort to the top.
 - Selecting a row opens its actions: apply, revert, check now, list backups.
 - A header line with the overall state and a "check all" button.
 
-Anything that needs reading goes to a full-screen page, which Decky plugins can register **[K]**: the diverged comparison, conflict resolution, backup restore, and adding an app. Adding an app needs path entry at worst, so the plugin offers only detected choices and leaves hand-typed paths to the CLI or Desktop Mode.
+Anything that needs reading goes to a full-screen page, which Decky plugins can register **[K]**: the guard's comparison, conflict resolution, backup restore, and adding an app. Adding an app needs path entry at worst, so the plugin offers only detected choices and leaves hand-typed paths to the CLI or Desktop Mode.
 
 The plugin's Python backend does nothing but run the CLI with JSON output and pass the result through. All logic and all safety checks stay in the core, so the plugin cannot bypass them and a Decky breakage after a SteamOS update costs you the UI, never the links.
 
@@ -604,20 +619,20 @@ Phase 1 has no app definitions and no tokens. Every path is written by hand. Thi
 
 **Files.** All JSON in phase 1, using the platform's built-in parser, so phase 1 needs no third-party dependency. The YAML decision is deferred to phase 2, where contributor-edited definitions arrive.
 
-Shared, at `<sync root>/.savetether/mappings.json`. No machine paths:
+Shared, at `<sync root>/savetether/.savetether/mappings.json`. No machine paths:
 
 ```json
 {
   "schema": 1,
   "mappings": [
-    { "id": "ppsspp.savedata", "target": "PPSSPP/PSP/SAVEDATA", "mechanism": "link" },
-    { "id": "retroarch.saves", "target": "Retroarch/saves", "mechanism": "config",
+    { "id": "ppsspp.savedata", "target": "ppsspp/SAVEDATA", "mechanism": "link" },
+    { "id": "retroarch.saves", "target": "retroarch/saves", "mechanism": "config",
       "config": { "format": "retroarch-cfg", "keys": ["savefile_directory"] } }
   ]
 }
 ```
 
-`target` is relative to the sync root and matches the folder that exists today, so adoption moves nothing.
+`target` is relative to `<sync root>/savetether/` and has the form `<app>/<save folder>`. The app segment is the part of `id` before the dot. Validation rejects absolute paths, `..`, a leading `.` (reserved for `.savetether/`), and names that differ from an existing target only by case.
 
 Local, `device.json`. Never synced:
 
@@ -638,17 +653,15 @@ Local, `device.json`. Never synced:
 
 The process names above are placeholders to be checked on the device. A mapping with no entry under `paths` on a device is simply "not applied" there.
 
-Local, `state.json`: per mapping, the resolved source and target, the mechanism and link type actually used, whether it was created or adopted, timestamps, and the backup IDs taken. Written only by the executor at commit.
+Local, `state.json`: per mapping, the resolved source and target, the mechanism and link type actually used, the setup choice used (copy, no-copy, add-missing or replace-shared), timestamps, and the backup IDs taken. Written only by the executor at commit.
 
 **Commands.** Every command accepts `--json` (machine output on stdout, one object) and `--dry-run` where it changes anything. Exit codes: 0 success, 1 a precondition refused the operation, 2 an operation failed and was rolled back, 3 recovery is needed.
 
 | Command | Does |
 |---|---|
-| `init --sync-root <path>` | Creates local config. On the first device, creates `.savetether/` in the sync root. On later devices, requires it to exist already |
-| `scan [roots...]` | Walks the given roots for links whose target is inside the sync root. Read-only. Lists them as managed, adoptable or foreign |
-| `adopt <id> --source <path>` | Records an existing correct link without changing it, and snapshots the target as a baseline backup |
+| `init --sync-root <path>` | Creates local config. On the first device, creates `savetether/.savetether/` in the sync root. On later devices, requires it to exist already |
 | `status [id]` | Health states from 5.5 |
-| `apply <id> [--seed or --join]` | The transaction in 5.3. Without a flag it runs only when the classification is unambiguous, and otherwise stops with the comparison |
+| `apply <id> [--copy \| --no-copy \| --add-missing \| --replace-shared --confirm-replace] [--assume-synced]` | The transaction in 5.3, with the setup choices there. Without a choice it links only when the local folder is empty, and otherwise stops, listing the allowed choices and the comparison |
 | `revert <id>` | The revert flow in 5.3 |
 | `backup list [id]`, `backup restore <backup-id>` | Restore is itself a transaction and backs up what it overwrites |
 | `recover` | Completes or rolls back an unfinished journal entry. Other commands refuse to run until it has |
@@ -657,9 +670,9 @@ Local, `state.json`: per mapping, the resolved source and target, the mechanism 
 
 **App-running check.** Compare running process names against the mapping's `process_names`. On Linux this reads `/proc`; a Flatpak app's processes are visible there from an unsandboxed tool. It is a heuristic, so a miss is possible: the precheck output says which names it looked for, and `--assume-closed` overrides a false positive after an explicit confirmation.
 
-**Replacing shared data.** `apply --seed` when the target already holds data is the one case covered by the exception in invariant 2. It requires a second explicit flag, backs up the shared target locally first, and reports that the deletion will propagate to every device.
+**Replacing shared data.** `apply --replace-shared` is the one case covered by the exception in invariant 2. It requires `--confirm-replace` as well, backs up the shared target locally first, and reports that the deletion will propagate to every device.
 
-**Link type.** Linux: symlink. Windows: junction. An adopted Windows symlink is left as it is. `apply` never needs elevation; if a junction cannot be created (target on a network volume), the precheck refuses and says why.
+**Link type.** Linux: symlink. Windows: junction. `apply` never needs elevation; if a junction cannot be created (target on a network volume), the precheck refuses and says why.
 
 **Suggested code layout.** A core library with no console or UI code; a CLI project that only parses arguments, calls the core and formats output; a test project that runs against real temporary directories. The safe filesystem layer is the only place allowed to delete, rename or create links, which makes invariant 1 checkable by a code search.
 
@@ -710,27 +723,37 @@ Local, `state.json`: per mapping, the resolved source and target, the mechanism 
 | Design | A: link manager, CLI core, thin UIs |
 | Mechanisms | `link` (junction on Windows, symlink on Linux) and `config`. No copy-around-launch, no bind mounts |
 | Scope | Apps and games without platform cloud saves: emulators, visual novels, Flash games, including Lutris on the Deck |
-| Sync tool | Syncthing today, but not required by the tool |
+| Sync tool | The user's choice. The core has no sync-tool code; Syncthing integration is a possible later opt-in module. Decided 2026-11-12 |
 | Backups | Tool's own local store is the safety net. Host versioning is the user's business. Optional local snapshots |
 | Defaults | Saves and save states on. Screenshots and other media off |
 | Deck UI | Decky plugin over the CLI. Windows desktop GUI deferred |
-| Order of work | Phase 1 CLI first, adopting the existing links, before any definitions or detection |
+| Order of work | Phase 1 CLI first, before any definitions or detection |
+| Layout | The tool owns `<sync root>/savetether/` only: targets at `savetether/<app>/<save folder>`, metadata at `savetether/.savetether/`. The rest of the sync root is ignored. Decided 2026-11-12 |
+| Migration | None. No `scan` or `adopt`; old script links and data are moved by hand (5.7). Decided 2026-11-12 |
+| Language | C#/.NET 10 (LTS), Native AOT CLI. Decided 2026-11-12. SDK 10.0.402 is installed on the Windows device |
+| Licence | MIT. Decided 2026-11-12 |
+| Switch (yuzu family) targets | One app folder per emulator (`savetether/yuzu/`, `savetether/eden/`, `savetether/citron/`, ...), not one shared Switch folder. Decided 2026-11-12 |
+| Config mechanism formats | Phase 1 supports `retroarch-cfg` only. ini, xml and toml (Dolphin, PCSX2, DuckStation, Cemu, xemu, shadPS4, Citra) arrive in phase 2. Until then those apps use `link` where possible. Decided 2026-11-12 |
 
-### Still open (owner to decide)
+### Deferred, with the default the tool uses meanwhile
 
-1. **Language.** C#/.NET is recommended (3.2) but has not been confirmed. Rust is the runner-up.
-2. **Definition file format for phase 2.** YAML needs a third-party parser; JSON with comments does not. Phase 1 avoids the question by using JSON.
-3. **Licence.** MIT recommended (5.9), not confirmed.
-4. **Name availability** on GitHub, package registries and trademark registers. Only a web search has been done.
-5. **Backup location on the Deck.** Internal storage is the safe default but is small. An SD card is larger but removable.
-6. **Whether to contact Ludusavi's maintainer** about run-time use of the manifest before phase 3.
+These do not block phase 1. Each is taken up at the phase named.
+
+| Item | Default until then | Revisit |
+|---|---|---|
+| Definition file format | Phase 1 uses JSON with the built-in parser only, so no third-party dependency | Phase 2, when contributor-edited definitions arrive. YAML needs the owner's sign-off for a parser dependency |
+| Backup location on the Deck | Internal storage, `~/.local/share/savetether/backups`, configurable through `backup_root`. The precheck refuses a backup root that is not present, the same way it checks the sync root | If internal space runs short. An SD card works but is removable |
+| Name availability | Not checked beyond the earlier web search | Before the phase 4 public release |
+| Contacting Ludusavi's maintainer | No use of the manifest | Before phase 3 |
+
+**Switch profile note.** Yuzu-family save paths embed the profile ID held in `nand/system` **[I, section 6]**. If two devices have different profiles, the same game saves under different folders. Map the emulator's `system` folder as well as `save`, or make sure both devices use the same profile, before relying on Switch saves syncing.
 
 ### Before writing code
 
-1. Copy the whole sync folder somewhere outside it.
-2. Rotate the network-share credential and move its script out of the sync folder (appendix A, weakness 8).
-3. On each device, list the links that exist now. This is the input for `scan` and `adopt`, and it will show how far the scripts have drifted from the table in appendix A.
-4. Check the unconfirmed items in section 6 that affect phase 1: the PPSSPP Flatpak's filesystem permissions, and the process names for the app-running check.
+None of these block phase 1 code; they matter before the first real `apply`.
+
+1. Check the unconfirmed items in section 6 that affect phase 1: the PPSSPP Flatpak's filesystem access to `~/Sync/savetether`, and the process names for the app-running check.
+2. Owner housekeeping, outside the tool: the old `Scripts/` folder is still inside the Syncthing folder, so whatever it holds reaches every device and Unraid. It contains `steam_deck/fstab`, `fstab.backup` and `update_fstab.sh` (contents not read). If the share credential is in them, rotate it (appendix A, weakness 8).
 
 ### First implementation steps
 
@@ -738,8 +761,8 @@ Local, `state.json`: per mapping, the resolved source and target, the mechanism 
 2. The backup store with verification.
 3. Classification and the planner, with dry-run output.
 4. The executor, journal and recovery, with the fault-injection tests.
-5. `scan`, `adopt` and `status`, then run them read-only against the real devices.
-6. `apply` and `revert` on a throwaway mapping, then on the real ones.
+5. `init` and `status`.
+6. `apply` and `revert` on a throwaway mapping, then on a real one.
 
 ## Appendix A. Context from the original brief
 
@@ -777,6 +800,44 @@ Notes for migration. The Windows targets sit under a per-emulator folder (`<emu>
 6. **Too much data synced:** shader caches, textures, screenshots, DLC and `load` mods. Emulator NAND folders are an accepted exception where saves or profiles depend on them.
 7. **No health check.** If an emulator update, Proton prefix rebuild or reinstall replaces a link with a real folder, saves silently stop syncing.
 8. **Secrets in the synced folder.** A script there holds a plaintext network-share credential (it adds a CIFS mount to `fstab`).
+
+## Appendix B. Windows device inventory (2026-11-12)
+
+Background only. The tool does not migrate (section 1), so nothing here is input to phase 1. It records where the old scripts left links, which matters for the hand migration in 5.7: each S listed below must have its link removed before `apply` will accept it.
+
+Read-only scan of `E:\LaunchBox`, `G:\Windows Games`, `%APPDATA%`, `%LOCALAPPDATA%`, `LocalLow` and `Documents` (depth 7) for links into `E:\CloudSaveEmulation`, plus a search of emulator config files for that path. Nothing was changed. The sync folder holds about 17 GB across 25 top-level folders, far more than appendix A lists.
+
+### Links (all are `mklink /D` symlinks; there are no junctions yet)
+
+| Link | Target in the sync folder | Note |
+|---|---|---|
+| `E:\LaunchBox\Emulators\yuzu\user\nand\user\save` | `yuzu\save` | |
+| `E:\LaunchBox\Emulators\yuzu\user\nand\system` | `yuzu\system` | |
+| `E:\LaunchBox\Emulators\yuzu\user\load` | `yuzu\load` | mods; default off under the footprint rule |
+| `E:\LaunchBox\Emulators\yuzu-ea\user\load` | `yuzu\load` | as above. Two links share one target; only `load`, not saves, is linked for yuzu-EA |
+| `E:\LaunchBox\Emulators\eden\user\nand\user\save` | `eden\save` | `nand\system` is not linked, see the Switch profile note (section 7) |
+| `E:\LaunchBox\Emulators\xenia_manager\Emulators\Xenia Canary\content` | `xenia\content` | `content` also holds DLC and title updates; check its footprint |
+| `G:\Windows Games\HorizonXI\Game\SquareEnix\FINAL FANTASY XI\USER` | `FINAL FANTASY XI\USER` | |
+| `G:\Windows Games\HorizonXI\Game\screenshots` | `FINAL FANTASY XI\screenshots` | media; `FINAL FANTASY XI` is 3.9 GB |
+| `%USERPROFILE%\AppData\LocalLow\SquareEnix\FINAL FANTASY IX` | `FINAL FANTASY IX` | Steam Cloud, out of scope; remove the link by hand |
+| `%USERPROFILE%\Documents\SQUARE ENIX\FINAL FANTASY VII Steam` | `FINAL FANTASY VII Steam` | not in appendix A. Probably has Steam Cloud **[K, unchecked]**; if so, out of scope |
+
+Not found by the scan: the visual novels (DohnaDohna, Rondo2) and Citron. Their links may live outside the scanned roots, or their scripts were never run on this device.
+
+### Config redirects set by hand
+
+Emulator config files that contain the sync folder path. These are left to phase 2.
+
+- RetroArch: `retroarch.cfg` (also `retroarch - Copy.cfg`, `retroarch.cfg.cheevos.cfg`, and one core override)
+- Cemu and Cemu BetterVR: `settings.xml`
+- DuckStation: `settings.ini`
+- Dolphin: `User\Config\Dolphin.ini`
+- PCSX2: `inis\PCSX2.ini`
+- shadPS4 Qt launcher: `user\config.toml`
+- xemu: `xemu.toml`
+- Citra: `user\config\qt-config.ini`
+
+App folders with neither a link nor a config hit on this device: `melonDS`, `PPSSPP`, `Ryujinx`, `Citron`, `Steam`, `SteamRomManager`, `ludusavi`. They may be Deck-only, or set some other way. `Scripts/` and `Backup/` are not app folders and are out of scope (section 1).
 
 ## Sources
 
