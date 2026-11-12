@@ -1,6 +1,7 @@
 using SaveTether.Core.Backup;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
+using SaveTether.Core.Planning;
 using SaveTether.Core.Storage;
 
 namespace SaveTether.Core.Diagnostics;
@@ -130,6 +131,18 @@ public static class SelfTest
             var backup = store.Create(mappingId, saves, BackupReason.PreApply);
             Require(store.Verify(backup.Id).IsValid, "backup did not verify");
             Require(store.List(mappingId).Single().Reason == BackupReason.PreApply, "backup was not listed");
+        });
+
+        yield return ("plan and render", () =>
+        {
+            var device = shared.ReadDevice("selftest-device");
+            var snapshot = SnapshotReader.Read(
+                shared, shared.ReadMapping(mappingId), device.DeviceName, device.Paths[mappingId], backups,
+                new SystemProcessLister(), journalOpen: false);
+            var outcome = Planner.Plan(snapshot, new ApplyRequest(SetupChoice.Copy, AssumeSynced: true));
+            Require(outcome.Plan is { Classification: Classification.FirstDevice }, "the planner did not see a first device");
+            Require(PlanRenderer.ToJson(outcome).Contains("\"first-device\"", StringComparison.Ordinal), "the plan did not render as JSON");
+            Require(PlanRenderer.ToText(outcome).Contains("1. Back up", StringComparison.Ordinal), "the plan did not render as text");
         });
 
         yield return ("directory link", () =>

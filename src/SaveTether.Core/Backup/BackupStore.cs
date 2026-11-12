@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text.Json;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
@@ -340,11 +339,7 @@ public sealed class BackupStore
         }
     }
 
-    private static string HashFile(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexStringLower(SHA256.HashData(stream));
-    }
+    private static string HashFile(string path) => FileHasher.Sha256Hex(path);
 
     private static BackupInfo ToInfo(BackupManifest manifest, string location) => new(
         manifest.Id, manifest.MappingId, manifest.CreatedUtc, manifest.Reason, manifest.SourcePath,
