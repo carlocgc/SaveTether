@@ -1,8 +1,8 @@
 # SaveTether: implementation and test plan
 
-Status: phase 1 (M0 to M7) is built and trialled on both devices; phase 2 is planned and not started. Written 2026-11-12, after the design in [save-redirection-design.md](../design/save-redirection-design.md) was merged. The design says *what* and *why*; this says *in what order*, *in which files*, and *how each piece is proven*. Section numbers such as "design 5.3" refer to the design document.
+Status: plan, nothing implemented. Written 2026-11-12, after the design in [save-redirection-design.md](../design/save-redirection-design.md) was merged. The design says *what* and *why*; this says *in what order*, *in which files*, and *how each piece is proven*. Section numbers such as "design 5.3" refer to the design document.
 
-Detail falls off on purpose. Phase 1 was planned to the level of types and test cases and is built. Phase 2 is now planned to milestone level (section 4). Phases 3 and 4 are still planned to the level of work items and exit tests, and each starts with a short step that turns its outline into the same level of detail.
+Detail falls off on purpose. Phase 1 is planned to the level of types and test cases, because it is next and its design is closed. Phases 2 to 4 are planned to the level of work items and exit tests, and each starts with a short step that turns its outline into the same level of detail.
 
 ## 1. Decisions this plan rests on
 
@@ -12,7 +12,7 @@ Settled on 2026-11-12, in addition to the design's section 7.
 |---|---|---|
 | Test framework | xUnit | Approved dependency, test project only. Nothing from it ships |
 | CLI argument parsing | Hand-written | No dependency. Help text is written by hand and tested |
-| Definition file format (phase 2) | YAML, with YamlDotNet | Approved dependency, shipped in the CLI from phase 2. Phase 1 stays JSON-only. Native AOT support must be proven first (P2.3) |
+| Definition file format (phase 2) | YAML, with YamlDotNet | Approved dependency, shipped in the CLI from phase 2. Phase 1 stays JSON-only. Native AOT support must be proven first (step 2.2) |
 | Branch flow | Feature branches, PRs straight to `main` | A `development` branch is introduced in phase 4, when releases are tagged |
 | JSON | `System.Text.Json` with source generation | Built in. Reflection-based serialisation does not work under Native AOT |
 | CI | GitHub Actions from the first PR | The repository is public, so hosted Linux ARM64 runners are available **[K, confirm in M0]** |
@@ -21,7 +21,7 @@ Still open, and not blocking:
 
 - ~~Which real mapping is the first trial in M7.~~ Settled 2026-11-12: Cemu's save folder (`mlc01/usr/save`), mapping `cemu.save`.
 - The two Deck checks from the design. Flatpak reach: checked 2026-11-12 for Xemu, Dolphin, PPSSPP, melonDS and Citra; each has `home` or `host` in its permissions, so each can see `~/Sync/savetether`. A link inside a Flatpak app's folder has still not been tried. Process names: only Cemu's is confirmed in use; the others are still to be read from the Deck when each is mapped.
-- ~~The config-mechanism questions.~~ Settled 2026-11-12: config redirects are deferred, and links are the only mechanism. Design 5.13 has the reasons and the trigger for revisiting.
+- The config-mechanism questions in design 5.3. Section 3.1 below proposes answers; they are confirmed when phase 2 starts.
 
 ## 2. Conventions for every phase
 
@@ -233,88 +233,37 @@ Found during the trial, for phase 2:
 
 Status 2026-11-12: M0 to M7 are done and `status` was clean on both devices. Four Deck checklist items in section 7 are not ticked (running over SSH, a link inside a Flatpak app's folder, a source on the SD card, and the sync root unmounted), so the exit condition as written is not fully met.
 
-## 4. Phase 2: entry depth, definitions, resolver
+## 4. Phase 2: config redirects, definitions, resolver
 
-Goal: stop typing absolute paths. Exit test: a device restored after its SD card ID or install folder changed, with no hand edits.
+Goal: stop typing absolute paths, and manage apps that redirect through a setting. Exit test: a device restored after its SD card ID or install folder changed, with no hand edits.
 
-Planned to milestone level on 2026-11-12, after the M7 trial. Nine milestones in dependency order, numbered P2.0 to P2.8. Sizes are relative (S, M, L). The conventions of section 2 apply unchanged: one PR per milestone, all three CI targets, the delete audit green.
+### 2.1 Specify the config mechanism (S, design work)
 
-Config redirects were part of this phase and were dropped on 2026-11-12 (design 5.13). Two orderings are deliberate:
+Proposed answers to the questions design 5.3 leaves open. Confirm or change them in a design PR before any code.
 
-- **By-hand first, definitions second.** P2.2 makes entry depth usable from `map add` with typed paths, as phase 1 did for links, and it fixes something the trial found. Definitions and the resolver (P2.3 to P2.5) then remove the typing.
-- **The dependency is proven before anything is built on it** (P2.3).
+- **"This device's saves"** are the folder the key points at now, or the app's default folder (from its definition) when the key is unset.
+- **Already applied** means the key's value resolves to T.
+- **The old folder is never renamed or deleted.** A config redirect only changes a key, so there is no "aside" step. This also makes it safe when the old folder is itself inside the sync root, as RetroArch's is on the Deck today: the precondition "S is not inside the sync root" does not apply to this mechanism.
+- **Setup choices** work as for links, applied to (old folder, T).
+- **Revert** writes the recorded previous value back and nothing else. Copying T's content back into the old folder is offered only when that folder is empty.
+- **The app must be closed**, checked as for links, because some apps rewrite their config on exit.
 
-### P2.0 Close out phase 1 on hardware (S, manual)
-
-The four Deck items section 7 still has open. None needs new code.
-
-1. Run the binary over SSH.
-2. One mapping for a Flatpak emulator, so a link sits inside `~/.var/app/<id>/` and the app is seen to load a save through it.
-3. One mapping whose save folder is on the SD card, with the sync root on internal storage.
-4. Rename the sync root, run `status` and `apply`, and confirm both refuse; rename it back.
-
-Done when: section 7 is ticked for phase 1 and dated. Item 2 should come before any Flatpak emulator is mapped for real.
-
-### P2.1 Specify entry depth; settle config redirects (S, design)
-
-Design 5.13. Entry depth is specified there. Config redirects, which this plan first scheduled for phase 2, are deferred: the owner decided on 2026-11-12 that links cover the apps in question and that editing app config files is not worth its cost and risk yet. 5.13 records the reasons, what to do by hand for apps whose setting was changed by hand, and when to revisit.
-
-Done when: the owner has confirmed 5.13.
-
-### P2.2 Entry depth (S)
-
-Deliver:
-- Mapping file `schema: 2` with `entry_depth` (default 1). A schema 1 file is still read, as depth 1.
-- `Comparison` and the add-missing plan work on entries at that depth. `CopyIntoTarget` takes entry paths, not only top-level names, and creates parent folders.
-- `map add --entry-depth <n>`, which may also change the depth of an existing mapping (design 5.13).
-
-Tests:
-- Comparison at depth 1, 2 and 3: an entry present on one side only, on both and identical, on both and different; a file sitting above the entry depth is its own entry.
-- Add-missing at depth 2 on a Cemu-shaped tree adds one game and writes nothing into a game the shared copy already has. Names differing only by case still count as present.
-- A schema 1 mapping file reads as depth 1; a schema 3 file is refused.
-- Two-device scenario 2 repeated at depth 2.
-
-Done when: tests pass on three targets, and the existing `cemu.save` mapping is set to depth 2 and `--add-missing` is seen to work per game on the real devices.
-
-### P2.3 Prove YamlDotNet under Native AOT (S, spike)
+### 2.2 Prove YamlDotNet under Native AOT (S, spike)
 
 Before building on it: parse one definition in the published native binary on all three targets. YamlDotNet's reflection-based deserialiser is not expected to work under AOT **[K]**; the options are its static generator or reading the document tree and mapping it by hand. If neither works cleanly, come back to the owner before going further (JSON with comments is the fallback).
 
-Done when: CI's native smoke test loads a YAML definition on three targets, or the fallback has been agreed.
+### 2.3 Work items
 
-### P2.4 Definitions (M)
-
-Deliver: the loader for the schema in design 5.2, a JSON Schema file, and validation errors that name the file and line.
-
-Tests: every example in design 5.2 loads; a table of invalid files, each with its expected message; an unknown field is an error.
-
-### P2.5 Tokens and resolver (L)
-
-Deliver: `{home}`, `{appdata}`, `{localappdata}`, `{locallow}`, `{documents}`, `{xdg_*}`, `{flatpak:id}`, `{install_dir}`, `{sd_card}`, `{emudeck}`, `{steam_compatdata:id}`; `winpath` with `steam`, `steam_shortcut`, `lutris` and `path` prefixes.
-
-Tests: fixture directory trees and fixture `libraryfolders.vdf`, `shortcuts.vdf` and Lutris config files, including a game on a second Steam library and a missing SD card. No real Steam needed.
-
-### P2.6 `app add` (M)
-
-Deliver: add an app from a definition. Resolve its install, show the roles with their sizes, write the mapping and device entries.
-
-Tests: end to end against fixture trees; an ambiguous install asks, never guesses; with `--json` it refuses instead of asking.
-
-### P2.7 Flatpak precheck (S)
-
-Deliver: read the app's permissions; refuse with the exact `flatpak override --user` command when T is unreachable.
-
-Tests: parser tests on captured `flatpak info --show-permissions` output, including the five emulators read on 2026-11-12; live check on the Deck.
-
-### P2.8 Snapshots and the login-time check (M)
-
-Deliver:
-- On-demand and scheduled copy of T to the backup store, with retention.
-- An opt-in Task Scheduler entry on Windows and a systemd user timer on Linux that run `status`.
-
-Tests: retention and space reporting; a snapshot never runs while a journal entry is open; generated unit and task files compared with expected text; install and remove on real hardware.
-
-**Phase 2 exit:** a device restored after its SD card ID or install folder changed, with no hand edits, and the phase 2 lines of the hardware checklist ticked.
+| Item | Deliver | Tests |
+|---|---|---|
+| Config editors | Line-preserving edit of one key for `retroarch-cfg`, `ini`, `toml`; `xml` through the built-in XML reader with whitespace preserved | Golden files: edit a key and assert the rest of the file is byte-identical, including comments, ordering, line endings and encoding. Key missing, duplicated, commented out |
+| Config transaction | Plan steps and executor support per 2.1 | Fault matrix extended to config steps; round trip; "old folder inside sync root" case |
+| Definitions | YAML loader, JSON Schema file, validation errors with file and line | Every example in design 5.2 loads; a table of invalid files with the expected message |
+| Tokens and resolver | `{home}`, `{appdata}`, `{localappdata}`, `{locallow}`, `{documents}`, `{xdg_*}`, `{flatpak:id}`, `{install_dir}`, `{sd_card}`, `{emudeck}`, `{steam_compatdata:id}`; `winpath` with `steam`, `steam_shortcut`, `lutris` and `path` prefixes | Fixture directory trees and fixture `libraryfolders.vdf`, `shortcuts.vdf` and Lutris config files, including a game on a second Steam library and a missing SD card. No real Steam needed |
+| `app add` | Add an app from a definition: resolve, show roles with sizes, write mapping and device entries | End to end against fixture trees; ambiguous install asks, never guesses |
+| Flatpak precheck | Read the app's permissions; refuse with the exact `flatpak override --user` command when T is unreachable | Parser tests on captured `flatpak info --show-permissions` output; live check on the Deck |
+| Snapshots | On-demand and scheduled copy of T to the backup store, with retention | Retention and space reporting; never runs while a journal entry is open |
+| Login-time check | Opt-in Task Scheduler entry on Windows, systemd user timer on Linux | Generated unit and task files compared with expected text; install and remove on real hardware |
 
 ## 5. Phase 3: Decky plugin and detection
 
@@ -373,6 +322,6 @@ Run before each phase exit. Record the date and tool version in the PR that clos
 | Hosted ARM64 runner unavailable or flaky | M0 | Fall back to cross-publishing for ARM64 and running tests under emulation; note the gap |
 | Fault matrix grows too slow | M5 | Small fixture trees; run steps in parallel per choice |
 | A sync tool syncs the tool's temporary files mid-write | M3 | Temporary names start with a dot and end `.tmp`; readers ignore them; rename is atomic |
-| YamlDotNet and Native AOT | P2.3 | Spike before building; fallback agreed in advance |
+| YamlDotNet and Native AOT | 2.2 | Spike before building; fallback agreed in advance |
 | Process-name check misses a running app | M4, M7 | Names recorded per device and verified on hardware; output lists what was looked for |
 | Decky API changes with SteamOS | Phase 3 | Plugin holds no logic, so a break costs the UI only |
