@@ -3,6 +3,8 @@
   <!-- Core library: no console, no UI, no process exit. Must stay trimmable and AOT-safe. -->
   <PropertyGroup>
     <IsAotCompatible>true</IsAotCompatible>
+    <!-- Needed by the source-generated P/Invoke in FileSystem/WindowsReparse.cs. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
