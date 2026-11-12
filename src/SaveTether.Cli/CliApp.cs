@@ -1,4 +1,5 @@
 using SaveTether.Core;
+using SaveTether.Core.Diagnostics;
 
 namespace SaveTether.Cli;
 
@@ -16,6 +17,9 @@ internal static class CliApp
     /// </summary>
     public const int ExitUsage = 64;
 
+    /// <summary>The self-test found this build does not work on this machine.</summary>
+    public const int ExitSelfTestFailed = 70;
+
     public static int Run(string[] args, TextWriter stdout, TextWriter stderr)
     {
         if (args.Length == 0 || args is ["--help"] or ["-h"])
@@ -28,6 +32,12 @@ internal static class CliApp
         {
             stdout.WriteLine($"savetether {ProductInfo.Version}");
             return ExitSuccess;
+        }
+
+        // Not listed in the help: a diagnostic that CI runs against the native binary.
+        if (args is ["--self-test"])
+        {
+            return SelfTest.Run(stdout) ? ExitSuccess : ExitSelfTestFailed;
         }
 
         stderr.WriteLine($"savetether: unknown command or option '{args[0]}'");
