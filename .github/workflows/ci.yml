@@ -62,6 +62,10 @@ jobs:
           # Reads and writes every file type, links and backs up, inside the native binary.
           ./publish/${{ matrix.exe }} --self-test
 
+      - name: Two-device scenario with the native binary
+        shell: bash
+        run: bash tests/e2e/scenario1.sh "$PWD/publish/${{ matrix.exe }}"
+
       - uses: actions/upload-artifact@v4
         with:
           name: savetether-${{ matrix.rid }}

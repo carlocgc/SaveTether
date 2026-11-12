@@ -36,7 +36,7 @@ public class CliAppTests
     }
 
     [Theory]
-    [InlineData("apply")]
+    [InlineData("frobnicate")]
     [InlineData("--bogus")]
     [InlineData("--version", "extra")]
     public void Unknown_input_fails_on_stderr_only(params string[] args)

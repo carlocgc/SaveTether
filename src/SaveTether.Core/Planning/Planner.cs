@@ -33,7 +33,7 @@ public static class Planner
         var classification = Classify(snapshot, request.AssumeSynced);
         var outcome = classification switch
         {
-            Classification.AlreadyApplied => PlanAlreadyApplied(snapshot),
+            Classification.AlreadyApplied => PlanAlreadyApplied(snapshot, request),
             Classification.BrokenLink => Refuse(
                 snapshot, RefusalKind.BrokenLink, classification,
                 $"'{snapshot.Source}' is linked to '{snapshot.Target}', but that folder is missing. " +
@@ -324,13 +324,37 @@ public static class Planner
         return failures;
     }
 
-    private static PlanOutcome PlanAlreadyApplied(Snapshot s) => Planned(
-        s, Classification.AlreadyApplied, choice: null,
-        [
-            new PlanStep(StepKind.VerifyLink, s.Source, s.Target),
-            new PlanStep(StepKind.WriteState, s.Source, s.Target),
-        ],
-        ["Already linked. Nothing to change; the link is checked and recorded."]);
+    private static PlanOutcome PlanAlreadyApplied(Snapshot s, ApplyRequest request)
+    {
+        // The way out of a double seed (design 5.3). This device is already linked, so there is nothing
+        // to copy or delete: the shared folder as it stands is declared the winner, by renewing this
+        // device's marker and superseding the others.
+        if (request.Choice == SetupChoice.ReplaceShared && OthersHaveMarkers(s))
+        {
+            return Planned(
+                s, Classification.AlreadyApplied, SetupChoice.ReplaceShared,
+                [
+                    new PlanStep(StepKind.VerifyLink, s.Source, s.Target),
+                    new PlanStep(StepKind.WriteSeedMarker, s.Target),
+                    new PlanStep(StepKind.SupersedeMarkers, s.Target),
+                    new PlanStep(StepKind.WriteState, s.Source, s.Target),
+                ],
+                [
+                    "Already linked, so no saves are copied or deleted. The shared folder as it is now becomes the agreed copy, " +
+                    "and the other devices' records are marked as superseded.",
+                    "If the shared folder does not hold the saves you want: revert, restore this device's backup with 'savetether backup restore', " +
+                    "then apply with --replace-shared again.",
+                ]);
+        }
+
+        return Planned(
+            s, Classification.AlreadyApplied, choice: null,
+            [
+                new PlanStep(StepKind.VerifyLink, s.Source, s.Target),
+                new PlanStep(StepKind.WriteState, s.Source, s.Target),
+            ],
+            ["Already linked. Nothing to change; the link is checked and recorded."]);
+    }
 
     private static PlanOutcome PlanLinkOnly(Snapshot s, ApplyRequest request)
     {

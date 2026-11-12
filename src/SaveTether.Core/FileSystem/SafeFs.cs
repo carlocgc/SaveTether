@@ -91,6 +91,38 @@ public sealed class SafeFs
         }
     }
 
+    /// <summary>
+    /// Creates a link again from a backup's record of it: the same kind, with the target exactly
+    /// as it was stored (which may be relative). Never inside the sync root. Creating a symbolic
+    /// link on Windows needs a privilege, so this can fail there; the caller decides what that means.
+    /// </summary>
+    public void RecreateRecordedLink(string link, EntryKind kind, string rawTarget)
+    {
+        var linkPath = RequireAbsolute(link, nameof(link));
+        ArgumentException.ThrowIfNullOrWhiteSpace(rawTarget);
+        if (kind is not (EntryKind.Symlink or EntryKind.Junction))
+        {
+            throw new SafeFsException($"Cannot recreate '{linkPath}' as a link: {Describe(kind)} is not a kind of link.");
+        }
+
+        RefuseInsideProtectedRoot(linkPath, "create a link");
+        if (Probe(linkPath) != EntryKind.Missing)
+        {
+            throw new SafeFsException($"Cannot create a link at '{linkPath}': something is already there.");
+        }
+
+        var parent = Path.GetDirectoryName(linkPath);
+        if (parent is null || Probe(parent) != EntryKind.Directory)
+        {
+            throw new SafeFsException($"Cannot create a link at '{linkPath}': its parent is not a real folder.");
+        }
+
+        // Windows needs to know whether a symbolic link is to a folder. Judge by what the target is now.
+        var target = Path.GetFullPath(Path.Combine(parent, rawTarget));
+        var toFolder = kind == EntryKind.Junction || Probe(PathRules.ResolveAll(target)) == EntryKind.Directory;
+        RecreateLink(linkPath, kind, toFolder ? FileAttributes.Directory : FileAttributes.Normal, rawTarget);
+    }
+
     /// <summary>Removes the link at <paramref name="path"/> and nothing else. Refuses anything that is not a link.</summary>
     public void RemoveLink(string path)
     {

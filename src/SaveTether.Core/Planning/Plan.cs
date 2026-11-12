@@ -117,6 +117,13 @@ public enum StepKind
     /// <summary>Rename the verified staging folder to its final name. Revert and restore.</summary>
     [JsonStringEnumMemberName("rename-into-place")]
     RenameIntoPlace,
+
+    /// <summary>
+    /// Recreate, in the staging folder, the links a backup recorded. Restore of a local folder only.
+    /// Path is the staging folder, OtherPath the backup ID, Entries the links' relative paths.
+    /// </summary>
+    [JsonStringEnumMemberName("recreate-links")]
+    RecreateLinks,
 }
 
 /// <summary>One step of a plan.</summary>
