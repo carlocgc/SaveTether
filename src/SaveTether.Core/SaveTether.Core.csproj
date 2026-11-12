@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Core library: no console, no UI, no process exit. Must stay trimmable and AOT-safe. -->
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SaveTether.Tests" />
+  </ItemGroup>
+
+</Project>
