@@ -277,7 +277,7 @@ Local locations: `%LOCALAPPDATA%\SaveTether` on Windows; `~/.config/savetether` 
 
 ### 5.2 Definition format
 
-YAML validated by a JSON Schema, one file per app. YAML needs a third-party parser in any of the candidate stacks; that dependency needs your sign-off. JSON with comments is the dependency-free fallback.
+YAML validated by a JSON Schema, one file per app. YAML needs a third-party parser; YamlDotNet was approved for this on 2026-11-12, subject to proving it works under Native AOT. JSON with comments is the dependency-free fallback.
 
 Tokens: `{home}`, `{appdata}`, `{localappdata}`, `{locallow}`, `{documents}`, `{xdg_config}`, `{xdg_data}`, `{flatpak:<id>}` (to `~/.var/app/<id>`), `{steam_compatdata:<appid>}` (found by reading Steam's `libraryfolders.vdf`, since the prefix lives in whichever library holds the game, which may be the SD card), `{sd_card}`, `{emudeck}` (EmuDeck's configured `Emulation` root), `{install_dir}` (set per device for portable apps).
 
@@ -632,7 +632,7 @@ The plugin's Python backend does nothing but run the CLI with JSON output and pa
 
 Phase 1 has no app definitions and no tokens. Every path is written by hand. This keeps the first release to the part that must be right: the transaction engine.
 
-**Files.** All JSON in phase 1, using the platform's built-in parser, so phase 1 needs no third-party dependency. The YAML decision is deferred to phase 2, where contributor-edited definitions arrive.
+**Files.** All JSON in phase 1, using the platform's built-in parser, so phase 1 needs no third-party dependency. YAML arrives in phase 2 with the contributor-edited definitions.
 
 Phase 1 is **link mechanism only**. Config redirects (RetroArch and the rest) move to phase 2, where they get the specification 5.3 says they still need.
 
@@ -751,6 +751,11 @@ Local, `state.json`: per mapping, the resolved source and target, the link type 
 | Licence | MIT. Decided 2026-11-12 |
 | Switch (yuzu family) targets | One app folder per emulator (`savetether/yuzu/`, `savetether/eden/`, `savetether/citron/`, ...), not one shared Switch folder. Decided 2026-11-12 |
 | Config mechanism | Not in phase 1, which is links only. Specified and built in phase 2 for all formats (retroarch-cfg, ini, xml, toml). Until then config-redirected apps use `link` where possible, or stay as they are. Decided 2026-11-12 |
+| Definition file format | YAML with YamlDotNet, from phase 2. Phase 1 files are JSON with the built-in parser. Falls back to JSON with comments if YamlDotNet cannot run under Native AOT. Decided 2026-11-12 |
+| Test framework | xUnit (test project only). Decided 2026-11-12 |
+| CLI argument parsing | Hand-written, no dependency. Decided 2026-11-12 |
+| Branch flow | Feature branches with PRs straight to `main`; a `development` branch is added in phase 4. Decided 2026-11-12 |
+| Implementation order | See the [implementation and test plan](../plans/implementation-plan.md) |
 | Device config location | Shared, one file per device in `savetether/.savetether/devices/`. A local bootstrap file holds only the sync root and device name. State, journal and backups stay local (5.6). Decided 2026-11-12 |
 
 ### Deferred, with the default the tool uses meanwhile
@@ -759,7 +764,6 @@ These do not block phase 1. Each is taken up at the phase named.
 
 | Item | Default until then | Revisit |
 |---|---|---|
-| Definition file format | Phase 1 uses JSON with the built-in parser only, so no third-party dependency | Phase 2, when contributor-edited definitions arrive. YAML needs the owner's sign-off for a parser dependency |
 | Backup location on the Deck | Internal storage, `~/.local/share/savetether/backups`, configurable through `backup_root`. The precheck refuses a backup root that is not present, the same way it checks the sync root | If internal space runs short. An SD card works but is removable |
 | Name availability | Not checked beyond the earlier web search | Before the phase 4 public release |
 | Contacting Ludusavi's maintainer | No use of the manifest | Before phase 3 |
