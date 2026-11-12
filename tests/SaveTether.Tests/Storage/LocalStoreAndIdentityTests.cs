@@ -7,6 +7,7 @@ using static SaveTether.Tests.Storage.SharedStoreTests;
 
 namespace SaveTether.Tests.Storage;
 
+[Collection("self-test")]
 public class LocalStoreAndIdentityTests
 {
     [Fact]

@@ -488,14 +488,18 @@ Whole top-level entries are the unit for `--add-missing` because most emulators 
 |---|---|---|---|
 | 1 | link to T | exists | already applied: verify, record, done (this is also how lost local state is rebuilt) |
 | 2 | link elsewhere | any | stop: foreign link, owner removes it by hand (5.7) |
-| 3 | any | empty or missing, but an active seed marker exists | stop: the shared copy has not arrived yet |
+| 3 | any | empty or missing, but an active seed marker exists | stop: the shared copy has not arrived yet. `--assume-synced` skips this row, for the rare case where the shared saves really were all deleted |
 | 4 | empty or missing | any | link, no choice needed (T is created if missing). If T is missing files an active seed marker lists, the output notes the shared copy may still be arriving |
 | 5 | has data | empty, no active seed marker | first device: `--copy` or `--no-copy` |
 | 6 | has data | has data | **guard**: "the shared location already holds saves". Shows the comparison (5.4). `--copy` is refused; `--no-copy`, `--add-missing` or `--replace-shared`. If T is missing files an active seed marker lists, `--add-missing` and `--replace-shared` also need `--assume-synced` |
 
 **Seed marker.** `savetether/.savetether/seed/<mapping>/<device>.json` records which device seeded, when, and the seed's file list (relative path and size). Each device writes its own file, named after itself, so two devices never write the same marker file whatever sync tool is in use.
 
-A marker is a snapshot of the moment of seeding. Emulators later rename and delete save files, so "T is missing files the marker lists" can mean either "not delivered yet" or "changed since". That is why it never blocks a plain link or `--no-copy` (the sync tool keeps filling T either way), and only blocks the two choices that write into T on the strength of a comparison. Only an empty T with an active marker is a hard stop (row 3): that is never a legitimate later state.
+A marker is a snapshot of the moment of seeding. Emulators later rename and delete save files, so "T is missing files the marker lists" can mean either "not delivered yet" or "changed since". That is why it never blocks a plain link or `--no-copy` (the sync tool keeps filling T either way), and only blocks the two choices that write into T on the strength of a comparison. Only an empty T with an active marker stops every choice (row 3): that is almost never a legitimate later state, and `--assume-synced` is the way past it when it is.
+
+**What counts as "has data".** A folder has data when it holds at least one file or link, at any depth. Empty subfolders do not count: a freshly installed app often creates its folder layout before it has any saves, and that must not turn a restore into a question. In "add missing", a top-level entry counts as already present in T when T has the same name in any letter case, since on Windows the two would be one folder.
+
+**Order of checks.** The structural preconditions are checked first and all failures are reported together; if the sync root marker is missing, only that is reported, since nothing else can be judged. An existing link to T (row 1) is only verified and recorded, so the app-running and backup-location checks do not apply to it. Free space is checked last, against what the chosen plan would actually write.
 
 A marker is **active** unless it has been superseded. `--replace-shared` supersedes all other devices' markers for that mapping by rewriting them with a `superseded_by` field (it does not delete them).
 
@@ -525,7 +529,7 @@ stateDiagram-v2
   RolledBack --> [*]
 ```
 
-Preconditions: sync root exists and has the tool's marker; T resolves inside `<sync root>/savetether/` and S does not resolve inside the sync root at all; neither path contains the other; S's parent folder exists (so a mistyped path fails instead of creating a link in the wrong place), and the plan prints S and T in full; the app is not running; free space for the backup, and for the copy if S and T are on different volumes; no unfinished journal entry; on Windows, T is on a local volume; on Flatpak apps, the sandbox can reach T.
+Preconditions: sync root exists and has the tool's marker; T resolves inside `<sync root>/savetether/` and S does not resolve inside the sync root at all; neither path contains the other; S's parent folder exists (so a mistyped path fails instead of creating a link in the wrong place), and the plan prints S and T in full; the app is not running; free space for the backup, and for the copy if S and T are on different volumes; no unfinished journal entry; on Windows, T is on a local volume; on Flatpak apps, the sandbox can reach T (this one check arrives in phase 2 with the Flatpak work; phase 1 leaves it to the owner).
 
 **Journal.** Each step is written as intent before it runs and as done after. On start, an unfinished transaction is rolled back using the table above: before "Aside" there is nothing to undo on S; after it, the rename is reversed. Files already copied into T during a failed copy or add-missing are left in place and reported, because of invariant 2. For replace-shared, the local backup of T taken first is what recovery offers to restore.
 

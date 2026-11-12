@@ -57,6 +57,7 @@ public class CliAppTests
     }
 }
 
+[Collection("self-test")]
 public class CliSelfTestTests
 {
     [Fact]
