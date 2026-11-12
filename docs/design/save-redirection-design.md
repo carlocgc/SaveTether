@@ -11,7 +11,7 @@ Labels used throughout: **[V]** verified by a source I checked today, **[K]** fr
 1. **The premise is mostly right.** Links from the app's save folder *into* one Syncthing folder are a sound mechanism. The scripts are the problem, not the links. On Windows, use **directory junctions** instead of `mklink /D`: no admin, no Developer Mode.
 2. **The scope is not right for a first version.** You expect 10 to 20 apps. Weaknesses 1, 2, 3, 5, 7 and 8 are fixed by a single safe CLI with a mapping file. The GUI, autodetection, Decky plugin and community definitions are a product that is perhaps ten times that effort. Build the CLI, live on it, then decide whether the product is worth it.
 3. **No existing tool does this job**, but Ludusavi is a real alternative for the Steam/Proton games if you accept copy-on-launch instead of live sync (design C).
-4. **Recommended:** design A, a link manager with a per-app mechanism (junction, symlink or config redirect), as a CLI core that emits JSON, with UIs added later. Stack: C#/.NET Native AOT, with Rust the runner-up. Reasoning in section 3.2.
+4. **Recommended:** design A, a link manager (junction on Windows, symlink on Linux; config redirects were considered and deferred, see 5.13), as a CLI core that emits JSON, with UIs added later. Stack: C#/.NET Native AOT, with Rust the runner-up. Reasoning in section 3.2.
 5. **Do this before any code:** the plaintext share credential in the Syncthing folder has already been copied to every device and to Unraid (and into any Syncthing file versions and backups). Moving the file is not enough. Rotate the credential.
 
 ## 1. Requirements and assumptions
@@ -65,7 +65,7 @@ Direction matters more than link type. **[V]** Syncthing never follows symlinks,
 | Symlink (Linux) | none | dirs and files, any filesystem | fine (data is real in the sync folder) | transparent. Wine and Proton resolve host symlinks below the prefix normally **[K]** | default on Linux |
 | Directory symlink (Windows) | admin, or Developer Mode | dirs and files | fine | transparent | avoid; junctions do the same job for directories |
 | Junction (Windows) | none | directories on local volumes, cross-drive allowed, absolute target only | fine | transparent to almost everything | default on Windows |
-| Config redirect | none | apps with a save-path setting (RetroArch, Dolphin, PCSX2, DuckStation) | fine | the most robust: nothing to be replaced on disk | preferred where the app supports it |
+| Config redirect | none | apps with a save-path setting (RetroArch, Dolphin, PCSX2, DuckStation) | fine | the most robust: nothing to be replaced on disk | deferred on 2026-11-12 (5.13): links cover the same apps, and this means editing files the app owns |
 | Bind mount | root, and a persistent unit on SteamOS | anything | fine | transparent | rejected: needs root, fragile across SteamOS updates |
 | Copy in/out around launch | none | anything, including single files, with file-level filters | best isolation: Syncthing never touches a file the game has open | needs a launch hook per game; nothing syncs if the game never exits cleanly (crash, or Deck suspended mid-game) | rejected by the owner: no reacting to app lifecycle |
 | One Syncthing folder per save folder | none | directories | native | no redirection at all | design B |
@@ -73,7 +73,7 @@ Direction matters more than link type. **[V]** Syncthing never follows symlinks,
 Behaviours that need handling whatever the choice:
 
 - **Atomic-rename saves** (write temp, rename over). Safe through a directory link, because temp and final file are both inside the target. This is why you link the *directory*, never an individual file.
-- **Apps that delete and recreate the save folder.** `rmdir` on a link fails or removes only the link; the app then makes a real folder and saves stop syncing. This is the main drift case (R7). Linking one level higher, or using a config redirect, avoids it for known offenders. The definition records which.
+- **Apps that delete and recreate the save folder.** `rmdir` on a link fails or removes only the link; the app then makes a real folder and saves stop syncing. This is the main drift case (R7). Linking one level higher avoids it for known offenders, and the definition records that. A config redirect would avoid it too; that mechanism is deferred (5.13).
 - **Cross-filesystem rename.** If an app builds a save in its cache folder and renames it into the save folder, a link to another volume turns that into a cross-device rename, which fails. Most apps fall back to copy. Record exceptions as quirks.
 - **Flatpak sandboxes.** A link inside `~/.var/app/<id>/` that points to `~/Sync/...` dangles *inside the sandbox* unless that Flatpak has filesystem access to the target. Your PPSSPP link works today, so that access exists, probably via EmuDeck's overrides **[I]**. The tool must check this before applying and offer `flatpak override --user --filesystem=<target> <id>`, which needs no root.
 - **Proton prefix lifecycle.** Deleting `compatdata/<appid>` removes the link, not the target. A recreated prefix has a real folder again: drift, caught by the health check.
@@ -207,7 +207,7 @@ Main trade-offs:
 
 What would change my mind:
 
-- Phase 1 testing shows an emulator you care about repeatedly replaces its link. Use config redirects where possible, then consider B for those apps.
+- Phase 1 testing shows an emulator you care about repeatedly replaces its link. Build config redirects (deferred, 5.13) for those apps, then consider B.
 - Nobody else shows interest after a public phase 2 release. For 10 to 20 personal apps the CLI is enough, so phases 3 and 4 would then be effort without a user.
 - Flash and visual-novel saves turn out not to live in stable, linkable directories (see section 6). That would cut the non-emulator half of your list.
 
@@ -232,7 +232,7 @@ flowchart TB
     EXEC["Executor: runs or prints the plan"]
     HEALTH["Health checker"]
     SAFEFS["Safe filesystem layer: lstat-first, never follows links"]
-    MECH["Mechanisms: junction, symlink, config edit"]
+    MECH["Mechanisms: junction, symlink"]
     BK["Backup store: copy tree plus SHA-256 manifest"]
     JR["Journal and recovery"]
   end
@@ -306,14 +306,11 @@ roles:
   - id: string
     class: save | system | state | cache | mod | media
     default: bool        # enabled when the app is added
-    mechanism: link | config
+    mechanism: link      # the only mechanism (config redirects are deferred, 5.13)
     path: string | { <install-id>: string }   # relative to base
     target: string       # relative to <sync_root>/savetether/<app-id>/
+    entry_depth: int     # how many folder levels down one game's saves sit; default 1 (see 5.13)
     ignore: [pattern]    # files a sync-tool integration may exclude (later; unused by the core)
-    config:              # only for mechanism: config
-      file: path
-      format: retroarch-cfg | ini
-      keys: { <key>: "{target}" }
     notes: string
 quirks: [string]
 ```
@@ -386,7 +383,7 @@ roles:
   - { id: game,     class: mod,   default: false, mechanism: link, path: "GAME",         target: "PSP/GAME" }
 ```
 
-**RetroArch.**
+**RetroArch.** The `saves` and `states` folder names are RetroArch's defaults as far as is known **[K]**; check them on each device before this definition is used.
 
 ```yaml
 schema: 1
@@ -406,23 +403,17 @@ roles:
   - id: saves
     class: save
     default: true
-    mechanism: config
+    mechanism: link
+    path: "saves"
     target: "saves"
-    config:
-      file: "retroarch.cfg"
-      format: retroarch-cfg
-      keys: { savefile_directory: "{target}" }
   - id: states
     class: state
     default: true
-    mechanism: config
+    mechanism: link
+    path: "states"
     target: "states"
-    config:
-      file: "retroarch.cfg"
-      format: retroarch-cfg
-      keys: { savestate_directory: "{target}" }
 quirks:
-  - "RetroArch rewrites retroarch.cfg on exit; it must be closed during apply."
+  - "savefile_directory and savestate_directory in retroarch.cfg must be at their defaults, so RetroArch uses the linked folders."
   - "The sort-saves-by-core and by-content settings must match on every device, or the same game saves to different subfolders."
 ```
 
@@ -548,7 +539,7 @@ A step that fails during a normal run (as opposed to a crash) is handled the sam
 
 **Revert.** Check the app is closed and S is our link. Back up T's current content locally (it is the live save). Copy T to `S.savetether-new` beside S and verify. Remove the link non-recursively. Rename `S.savetether-new` to S. T is left untouched for the other devices.
 
-**Config mechanism (phase 2, not yet specified).** The setup choices, classification and state machine above are for links. A config redirect needs its own answers before it is built: what "this device's saves" are (the folder the key points at now, which may itself be inside the sync root, as RetroArch's is on the Deck today), how `--copy` and the guard apply, and what revert restores. Outline only: back up the config file and the folder the key points at, record the previous value in local state, edit the key, verify by re-reading; revert writes the recorded value back.
+**Config mechanism (deferred).** Everything above is for links, which are the only mechanism. A second mechanism that edits an app's save-path setting instead of linking its folder was planned and has been deferred; 5.13 gives the reasons and what to do by hand meanwhile.
 
 **Dry run.** The planner outputs a step list. Dry run prints it; a real run executes the same list. There is no second code path to drift.
 
@@ -563,7 +554,7 @@ A step that fails during a normal run (as opposed to a crash) is handled the sam
 
 | State | Meaning |
 |---|---|
-| OK | link or config value is as recorded, target exists |
+| OK | link is as recorded, target exists |
 | Not applied | mapping enabled in the shared list, not yet applied here |
 | Replaced | S is a real folder again. If it holds files, saves are stranded locally; offer to re-run `apply`, which stops at the guard |
 | Broken | link is intact, target is missing (sync root not mounted, or target deleted) |
@@ -628,7 +619,7 @@ If step 2 is skipped, `apply` finds a foreign link at S and refuses, so a leftov
 |---|---|---|
 | 0 | Settle the open decisions in section 7 (done 2026-11-12) | decisions recorded |
 | 1 | CLI: `init`, `map add/remove`, `status`, `apply` (including `--all`), `revert`, `backup list/restore`, `recover`. Link mechanism only. Journal, backups, the setup choices and guard with the comparison (5.3, 5.4), shared per-device config (5.6), all six invariants, the test suite in 5.8. Absolute paths, entered with `map add`. No definitions, no detection, no config redirects, no adoption of old links. Specified in 5.12 | one real mapping seeded on Windows, joined on the Deck, reverted and re-applied; a wiped device (simulated by deleting the local folder and the links) restored with `init` and `apply --all`; status clean on both |
-| 2 | Config mechanism specified and built (retroarch-cfg, ini, xml, toml). Definition format and tokens, path resolver including Lutris and non-Steam prefixes, optional snapshots, login-time check | a device restored after its SD card ID or install folder changed, with no hand edits |
+| 2 | Entry depth (5.13). Definition format and tokens, path resolver including Lutris and non-Steam prefixes, optional snapshots, login-time check | a device restored after its SD card ID or install folder changed, with no hand edits |
 | 3 | Decky plugin (5.11). Detection, with the Ludusavi manifest as an optional hint source | apply and revert from Game Mode |
 | 4 | Public release: CI matrix, signing, package manifests, definitions repo split, contributor docs | first outside definition merged |
 | Later | Desktop GUI for Windows; Steam Frame support; optional sync-tool integrations, each a separate opt-in module the core never depends on (for Syncthing: folder-idle check before apply, listing and resolving conflict files, generated ignore patterns) | |
@@ -651,7 +642,7 @@ Phase 1 has no app definitions and no tokens. Every path is written by hand. Thi
 
 **Files.** All JSON in phase 1, using the platform's built-in parser, so phase 1 needs no third-party dependency. YAML arrives in phase 2 with the contributor-edited definitions.
 
-Phase 1 is **link mechanism only**. Config redirects (RetroArch and the rest) move to phase 2, where they get the specification 5.3 says they still need.
+Phase 1 is **link mechanism only**. Config redirects were first planned for phase 2 and have since been deferred (5.13).
 
 Every shared file is one file per mapping or per device, so no two devices ever write the same file.
 
@@ -723,6 +714,37 @@ Local, `state.json`: per mapping, the resolved source and target, the link type 
 
 **Suggested code layout.** A core library with no console or UI code; a CLI project that only parses arguments, calls the core and formats output; a test project that runs against real temporary directories. The safe filesystem layer is the only place allowed to delete, rename or create links, which makes invariant 1 checkable by a code search.
 
+### 5.13 Phase 2 specification: entry depth, and config redirects deferred
+
+Status: proposed 2026-11-12, for the owner to confirm before it is built.
+
+**Entry depth.** Found in the M7 trial. `--add-missing` and the comparison work on the top-level entries of a save folder, on the assumption that each is one game (5.3). Cemu's save folder has `00050000`, `00050010` and `system` at the top and the games one level down, so both devices always have "the same entries" and nothing is ever added.
+
+A mapping gains `entry_depth`, default 1. With `entry_depth: 2` the unit is a path two levels down, for example `00050000/101c9500`. A file or an empty folder that sits above that depth is its own entry. `--add-missing` then copies whole entries that T lacks, creating their parent folders, and still never writes into an entry T already has. The comparison groups by the same entries.
+
+The value lives in the shared mapping file, because every device must agree on what one entry is. It is set with `map add --entry-depth <n>` or by an app definition. Unlike `target` it can be changed later: no link points at it and no data moves, it only changes how the next comparison and `--add-missing` group the files.
+
+This is a new field, so the mapping file moves to `schema: 2`. A schema 1 file is still read, as depth 1; a phase 1 tool refuses a schema 2 file with the "update SaveTether" message instead of misreading it (5.12, file format policy). Every device must therefore be updated before any of them writes a schema 2 mapping.
+
+**Config redirects: deferred.** Decided 2026-11-12. Some apps have a setting that says where saves go, and the original design planned a second mechanism that edits that setting instead of linking the folder. It is not being built in phase 2. Links are the only mechanism.
+
+Why:
+
+- Links already cover these apps. Every app with a save-path setting also has a save folder, and a folder can be linked. The M7 trial linked Cemu's save folder although Cemu has such a setting.
+- It was the most expensive and riskiest part of phase 2: four config-file editors, a second kind of transaction with its own recovery and revert rules, and edits to files the app owns, where a mistake breaks the app's settings.
+- Its one real advantage, surviving an app that deletes and recreates its save folder, has not been needed yet. That case is not silent: `status` reports it as Replaced.
+
+What this means in practice:
+
+- An app whose save-path setting was changed by hand (appendix B lists them) is prepared by hand before it is linked: close it, set the setting back to its default folder, and copy the saves into that folder. Then `map add` and `apply` as for any other app. This is the same kind of step as removing an old script link (5.7).
+- Nothing stops the owner pointing an app's setting at a folder under `savetether/` by hand. SaveTether then does not manage, check or back up that app.
+
+When to revisit: an app that matters keeps showing as Replaced after being linked, or cannot be linked at all. If it is revisited, three points were worked out and should be kept:
+
+- One role edits one key whose whole value is the shared folder, so "the old folder" is never ambiguous.
+- The app must be closed, with a process name required and not optional, because some apps rewrite their config on exit and would undo the edit.
+- Revert must not blindly restore the old setting. The old folder still holds the saves from the day of applying, so when it differs from the shared folder the owner has to choose which the app should see.
+
 ## 6. Open questions and unknowns
 
 ### Verified today
@@ -780,7 +802,7 @@ Local, `state.json`: per mapping, the resolved source and target, the link type 
 | Language | C#/.NET 10 (LTS), Native AOT CLI. Decided 2026-11-12. SDK 10.0.402 is installed on the Windows device |
 | Licence | MIT. Decided 2026-11-12 |
 | Switch (yuzu family) targets | One app folder per emulator (`savetether/yuzu/`, `savetether/eden/`, `savetether/citron/`, ...), not one shared Switch folder. Decided 2026-11-12 |
-| Config mechanism | Not in phase 1, which is links only. Specified and built in phase 2 for all formats (retroarch-cfg, ini, xml, toml). Until then config-redirected apps use `link` where possible, or stay as they are. Decided 2026-11-12 |
+| Config mechanism | Deferred on 2026-11-12, after phase 1 (5.13). Links are the only mechanism. Apps whose save-path setting was changed by hand are set back to their default folder by hand and then linked |
 | Definition file format | YAML with YamlDotNet, from phase 2. Phase 1 files are JSON with the built-in parser. Falls back to JSON with comments if YamlDotNet cannot run under Native AOT. Decided 2026-11-12 |
 | Test framework | xUnit (test project only). Decided 2026-11-12 |
 | CLI argument parsing | Hand-written, no dependency. Decided 2026-11-12 |
@@ -878,7 +900,7 @@ Not found by the scan: the visual novels (DohnaDohna, Rondo2) and Citron. Their 
 
 ### Config redirects set by hand
 
-Emulator config files that contain the sync folder path. These are left to phase 2.
+Emulator config files that contain the sync folder path. The tool does not edit these (5.13): each setting is put back to the app's default folder by hand before that app is linked. The Cemu entry was already out of date on 2026-11-12, when its `mlc_path` was found empty.
 
 - RetroArch: `retroarch.cfg` (also `retroarch - Copy.cfg`, `retroarch.cfg.cheevos.cfg`, and one core override)
 - Cemu and Cemu BetterVR: `settings.xml`
