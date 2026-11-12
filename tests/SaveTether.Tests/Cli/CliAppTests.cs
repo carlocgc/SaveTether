@@ -56,3 +56,19 @@ public class CliAppTests
         return (exit, stdout.ToString(), stderr.ToString());
     }
 }
+
+public class CliSelfTestTests
+{
+    [Fact]
+    public void Self_test_flag_runs_and_succeeds()
+    {
+        using var stdout = new StringWriter();
+        using var stderr = new StringWriter();
+
+        var exit = CliApp.Run(["--self-test"], stdout, stderr);
+
+        Assert.Equal(CliApp.ExitSuccess, exit);
+        Assert.Contains("self-test passed", stdout.ToString(), StringComparison.Ordinal);
+        Assert.Empty(stderr.ToString());
+    }
+}

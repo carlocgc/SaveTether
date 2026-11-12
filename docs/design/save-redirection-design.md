@@ -638,6 +638,13 @@ Phase 1 is **link mechanism only**. Config redirects (RetroArch and the rest) mo
 
 Every shared file is one file per mapping or per device, so no two devices ever write the same file.
 
+**File format policy.** Every file carries a `schema` number.
+
+- A file with a newer `schema` than the tool knows is refused, and never rewritten, so an older SaveTether cannot drop what a newer one stored. The message says to update SaveTether on that device.
+- A file with a known `schema` must have every required field and no unknown ones. Device files are meant to be edited by hand, and a mistyped field name should be an error, not a setting that is silently ignored. Any new field therefore needs a schema bump.
+- Files are written to a hidden temporary name in the same folder (`.<name>.<random>.tmp`) and renamed into place, so a reader or a sync tool never sees half a file. Listings skip hidden and temporary names.
+- An existing mapping's `target` cannot be changed, and two mappings cannot use the same target or targets differing only by case.
+
 Shared, one file per mapping at `<sync root>/savetether/.savetether/mappings/<id>.json`. No machine paths:
 
 ```json

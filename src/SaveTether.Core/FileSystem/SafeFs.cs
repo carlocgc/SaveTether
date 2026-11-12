@@ -200,6 +200,46 @@ public sealed class SafeFs
         return Walk(start, string.Empty);
     }
 
+    /// <summary>The ending of the temporary files <see cref="WriteFileAtomically"/> uses. Readers skip them.</summary>
+    public const string TemporarySuffix = ".tmp";
+
+    /// <summary>
+    /// Writes a small file so that readers, and a sync tool watching the folder, only ever see the
+    /// old content or the new, never half of it. The content goes to a hidden temporary file in
+    /// the same folder, which is then renamed over <paramref name="path"/>.
+    /// </summary>
+    public static void WriteFileAtomically(string path, string content)
+    {
+        var destination = RequireAbsolute(path, nameof(path));
+        ArgumentNullException.ThrowIfNull(content);
+
+        var kind = Probe(destination);
+        if (kind is not (EntryKind.Missing or EntryKind.File))
+        {
+            throw new SafeFsException($"Cannot write the file '{destination}': {Describe(kind)} is in the way.");
+        }
+
+        var folder = Path.GetDirectoryName(destination)
+            ?? throw new SafeFsException($"Cannot write the file '{destination}': it has no parent folder.");
+        var temporary = Path.Combine(
+            folder, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}{TemporarySuffix}");
+
+        try
+        {
+            File.WriteAllText(temporary, content);
+            File.Move(temporary, destination, overwrite: true);
+        }
+        catch
+        {
+            if (Probe(temporary) == EntryKind.File)
+            {
+                File.Delete(temporary);
+            }
+
+            throw;
+        }
+    }
+
     private static IEnumerable<TreeEntry> Walk(string directory, string relative)
     {
         foreach (var path in SortedEntries(directory))
