@@ -261,7 +261,7 @@ flowchart TB
     JOUR["journal/"]
   end
   subgraph DEFS["App definitions (separate repo, versioned data)"]
-    D1["definitions/*.yaml + JSON Schema"]
+    D1["definitions/*.jsonc + JSON Schema"]
   end
   RES --> BOOT
   RES --> DEV
@@ -277,167 +277,222 @@ Local locations: `%LOCALAPPDATA%\SaveTether` on Windows; `~/.config/savetether` 
 
 ### 5.2 Definition format
 
-YAML validated by a JSON Schema, one file per app. YAML needs a third-party parser; YamlDotNet was approved for this on 2026-11-12, subject to proving it works under Native AOT. JSON with comments is the dependency-free fallback.
+JSON with comments, one file per app (`<app-id>.jsonc`), validated by a JSON Schema. Comments and trailing commas are allowed, because these files are written and edited by hand; nothing else about them is special. They are read with the platform's built-in parser, so definitions add no third-party dependency.
+
+YAML with the YamlDotNet library was the first choice, approved on 2026-11-12 subject to proving it under Native AOT. The owner dropped it on 2026-11-13 before that was tried: the built-in parser already handles commented JSON, and one more dependency and one more format were not worth it while there is a single author. If outside contributors later find the format a barrier, converting is mechanical.
 
 Tokens: `{home}`, `{appdata}`, `{localappdata}`, `{locallow}`, `{documents}`, `{xdg_config}`, `{xdg_data}`, `{flatpak:<id>}` (to `~/.var/app/<id>`), `{steam_compatdata:<appid>}` (found by reading Steam's `libraryfolders.vdf`, since the prefix lives in whichever library holds the game, which may be the SD card), `{sd_card}`, `{emudeck}` (EmuDeck's configured `Emulation` root), `{install_dir}` (set per device for portable apps).
 
 A `winpath` location is the one cross-OS trick: on Windows it resolves natively, on Linux it resolves inside a Wine prefix. One line covers both. The prefix is named by kind, because your non-emulator apps are mostly not Steam titles:
 
-- `prefix: { steam: <appid> }` for a Steam game under Proton.
-- `prefix: { steam_shortcut: <name> }` for a non-Steam game added to Steam. Steam generates the ID, so it is looked up from Steam's shortcuts file by name on each device.
-- `prefix: { lutris: <slug> }` for a Lutris game. The prefix path is read from that game's Lutris config **[K]**.
-- `prefix: { path: ... }` set in that device's config file, as the fallback.
+- `"prefix": { "steam": <appid> }` for a Steam game under Proton.
+- `"prefix": { "steam_shortcut": "<name>" }` for a non-Steam game added to Steam. Steam generates the ID, so it is looked up from Steam's shortcuts file by name on each device.
+- `"prefix": { "lutris": "<slug>" }` for a Lutris game. The prefix path is read from that game's Lutris config **[K]**.
+- `"prefix": { "path": "..." }` set in that device's config file, as the fallback.
 
 Games with platform cloud saves are out of scope. Where the tool can tell (the Ludusavi manifest records this per game **[K]**), it warns before managing one.
 
-Schema, abbreviated:
+Shape, abbreviated. Links are the only mechanism (5.13), so a role does not name one.
 
-```yaml
-schema: 1                # format version
-id: string               # stable, lowercase
-name: string
-kind: emulator | game
-installs:                # ways this app can exist on a device; detection picks one
-  - id: string
-    os: windows | linux
-    detect: { dir: path } | { file: path } | { flatpak: id } | { steam: appid }
-    base: path           # root that role paths are relative to
-roles:
-  - id: string
-    class: save | system | state | cache | mod | media
-    default: bool        # enabled when the app is added
-    mechanism: link      # the only mechanism (config redirects are deferred, 5.13)
-    path: string | { <install-id>: string }   # relative to base
-    target: string       # relative to <sync_root>/savetether/<app-id>/
-    entry_depth: int     # how many folder levels down one game's saves sit; default 1 (see 5.13)
-    ignore: [pattern]    # files a sync-tool integration may exclude (later; unused by the core)
-    notes: string
-quirks: [string]
+```jsonc
+{
+  "schema": 1,                    // format version
+  "id": "string",                 // stable, lowercase
+  "name": "string",
+  "kind": "emulator",             // or "game"
+  "installs": [                   // ways this app can exist on a device; detection picks one
+    {
+      "id": "string",
+      "os": "windows",            // or "linux", or ["windows", "linux"]
+      "detect": { "dir": "path" },   // or { "file": "path" }, { "flatpak": "id" }, { "steam": 12345 }
+      "base": "path"              // root that role paths are relative to; or a winpath object
+    }
+  ],
+  "roles": [
+    {
+      "id": "string",
+      "class": "save",            // or "system", "state", "cache", "mod", "media"
+      "default": true,            // enabled when the app is added
+      "path": "string",           // relative to base; or { "<install-id>": "string" } when installs differ
+      "target": "string",         // relative to <sync_root>/savetether/<app-id>/
+      "entry_depth": 1,           // optional: how many folder levels down one game's saves sit (5.13)
+      "ignore": ["pattern"],      // optional: files a sync-tool integration may exclude (later; unused by the core)
+      "notes": "string"           // optional
+    }
+  ],
+  "quirks": ["string"]            // optional
+}
+```
+
+**Cemu.** The one definition whose paths have been used on both of the owner's devices (M7 trial, 2026-11-12). Its save folder is why entry depth exists.
+
+```jsonc
+{
+  "schema": 1,
+  "id": "cemu",
+  "name": "Cemu",
+  "kind": "emulator",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/mlc01" },
+      "base": "{install_dir}/mlc01"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/Cemu/mlc01" },
+      "base": "{xdg_data}/Cemu/mlc01"
+    }
+  ],
+  "roles": [
+    {
+      "id": "save",
+      "class": "save",
+      "default": true,
+      "path": "usr/save",
+      "target": "save",
+      // Games sit two levels down: usr/save/00050000/<title id>.
+      "entry_depth": 2
+    }
+  ],
+  "quirks": [
+    "Link usr/save, not mlc01: game updates and DLC install into mlc01/usr/title and can run to many gigabytes.",
+    "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it."
+  ]
+}
 ```
 
 **Switch emulator (Eden).** The Deck paths are untested: Eden is not installed on the Deck at present. The definition lists both candidates and detection uses whichever exists, asking if more than one does.
 
-```yaml
-schema: 1
-id: eden
-name: Eden
-kind: emulator
-installs:
-  - id: win-portable
-    os: windows
-    detect: { dir: "{install_dir}/user/nand" }
-    base: "{install_dir}/user"
-  - id: emudeck-eden          # unverified path
-    os: linux
-    detect: { dir: "{emudeck}/storage/eden/nand" }
-    base: "{emudeck}/storage/eden"
-  - id: emudeck-yuzu-layout   # what the current Deck script uses
-    os: linux
-    detect: { dir: "{emudeck}/storage/yuzu/nand" }
-    base: "{emudeck}/storage/yuzu"
-roles:
-  - id: saves
-    class: save
-    default: true
-    mechanism: link
-    path: "nand/user/save"
-    target: "save"
-  - id: nand-system
-    class: system
-    default: true
-    mechanism: link
-    path: "nand/system"
-    target: "system"
-    notes: >
-      Holds the user profiles. Save paths contain the profile ID, so saves
-      do not line up across devices unless profiles are shared.
-  - id: mods
-    class: mod
-    default: false
-    mechanism: link
-    path: "load"
-    target: "load"
+```jsonc
+{
+  "schema": 1,
+  "id": "eden",
+  "name": "Eden",
+  "kind": "emulator",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/user/nand" },
+      "base": "{install_dir}/user"
+    },
+    {
+      "id": "emudeck-eden",          // unverified path
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/storage/eden/nand" },
+      "base": "{emudeck}/storage/eden"
+    },
+    {
+      "id": "emudeck-yuzu-layout",   // what the current Deck script uses
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/storage/yuzu/nand" },
+      "base": "{emudeck}/storage/yuzu"
+    }
+  ],
+  "roles": [
+    { "id": "saves", "class": "save", "default": true, "path": "nand/user/save", "target": "save" },
+    {
+      "id": "nand-system",
+      "class": "system",
+      "default": true,
+      "path": "nand/system",
+      "target": "system",
+      "notes": "Holds the user profiles. Save paths contain the profile ID, so saves do not line up across devices unless profiles are shared."
+    },
+    { "id": "mods", "class": "mod", "default": false, "path": "load", "target": "load" }
+  ]
+}
 ```
 
 **PPSSPP.**
 
-```yaml
-schema: 1
-id: ppsspp
-name: PPSSPP
-kind: emulator
-installs:
-  - id: flatpak
-    os: linux
-    detect: { flatpak: org.ppsspp.PPSSPP }
-    base: "{flatpak:org.ppsspp.PPSSPP}/config/ppsspp/PSP"
-  - id: win-portable
-    os: windows
-    detect: { dir: "{install_dir}/memstick/PSP" }
-    base: "{install_dir}/memstick/PSP"
-roles:
-  - { id: savedata, class: save,  default: true,  mechanism: link, path: "SAVEDATA",     target: "PSP/SAVEDATA" }
-  - { id: states,   class: state, default: true,  mechanism: link, path: "PPSSPP_STATE", target: "PSP/PPSSPP_STATE" }
-  - { id: textures, class: media, default: false, mechanism: link, path: "TEXTURES",     target: "PSP/TEXTURES" }
-  - { id: shots,    class: media, default: false, mechanism: link, path: "SCREENSHOT",   target: "PSP/SCREENSHOT" }
-  - { id: game,     class: mod,   default: false, mechanism: link, path: "GAME",         target: "PSP/GAME" }
+```jsonc
+{
+  "schema": 1,
+  "id": "ppsspp",
+  "name": "PPSSPP",
+  "kind": "emulator",
+  "installs": [
+    {
+      "id": "flatpak",
+      "os": "linux",
+      "detect": { "flatpak": "org.ppsspp.PPSSPP" },
+      "base": "{flatpak:org.ppsspp.PPSSPP}/config/ppsspp/PSP"
+    },
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/memstick/PSP" },
+      "base": "{install_dir}/memstick/PSP"
+    }
+  ],
+  "roles": [
+    { "id": "savedata", "class": "save",  "default": true,  "path": "SAVEDATA",     "target": "PSP/SAVEDATA" },
+    { "id": "states",   "class": "state", "default": true,  "path": "PPSSPP_STATE", "target": "PSP/PPSSPP_STATE" },
+    { "id": "textures", "class": "media", "default": false, "path": "TEXTURES",     "target": "PSP/TEXTURES" },
+    { "id": "shots",    "class": "media", "default": false, "path": "SCREENSHOT",   "target": "PSP/SCREENSHOT" },
+    { "id": "game",     "class": "mod",   "default": false, "path": "GAME",         "target": "PSP/GAME" }
+  ]
+}
 ```
 
 **RetroArch.** The `saves` and `states` folder names are RetroArch's defaults as far as is known **[K]**; check them on each device before this definition is used.
 
-```yaml
-schema: 1
-id: retroarch
-name: RetroArch
-kind: emulator
-installs:
-  - id: flatpak
-    os: linux
-    detect: { flatpak: org.libretro.RetroArch }
-    base: "{flatpak:org.libretro.RetroArch}/config/retroarch"
-  - id: win-portable
-    os: windows
-    detect: { file: "{install_dir}/retroarch.cfg" }
-    base: "{install_dir}"
-roles:
-  - id: saves
-    class: save
-    default: true
-    mechanism: link
-    path: "saves"
-    target: "saves"
-  - id: states
-    class: state
-    default: true
-    mechanism: link
-    path: "states"
-    target: "states"
-quirks:
-  - "savefile_directory and savestate_directory in retroarch.cfg must be at their defaults, so RetroArch uses the linked folders."
-  - "The sort-saves-by-core and by-content settings must match on every device, or the same game saves to different subfolders."
+```jsonc
+{
+  "schema": 1,
+  "id": "retroarch",
+  "name": "RetroArch",
+  "kind": "emulator",
+  "installs": [
+    {
+      "id": "flatpak",
+      "os": "linux",
+      "detect": { "flatpak": "org.libretro.RetroArch" },
+      "base": "{flatpak:org.libretro.RetroArch}/config/retroarch"
+    },
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "file": "{install_dir}/retroarch.cfg" },
+      "base": "{install_dir}"
+    }
+  ],
+  "roles": [
+    { "id": "saves",  "class": "save",  "default": true, "path": "saves",  "target": "saves" },
+    { "id": "states", "class": "state", "default": true, "path": "states", "target": "states" }
+  ],
+  "quirks": [
+    "savefile_directory and savestate_directory in retroarch.cfg must be at their defaults, so RetroArch uses the linked folders.",
+    "The sort-saves-by-core and by-content settings must match on every device, or the same game saves to different subfolders."
+  ]
+}
 ```
 
 **Proton game (Final Fantasy IX).** Format illustration only. FF IX has Steam Cloud, so it is out of scope and the tool would warn.
 
-```yaml
-schema: 1
-id: final-fantasy-ix
-name: FINAL FANTASY IX
-kind: game
-installs:
-  - id: steam
-    os: [windows, linux]
-    detect: { steam: 377840 }
-    base: { winpath: "{locallow}/SquareEnix", prefix: { steam: 377840 } }
-roles:
-  - id: saves
-    class: save
-    default: true
-    mechanism: link
-    path: "FINAL FANTASY IX"
-    target: "."
-quirks:
-  - "Has Steam Cloud: out of scope."
+```jsonc
+{
+  "schema": 1,
+  "id": "final-fantasy-ix",
+  "name": "FINAL FANTASY IX",
+  "kind": "game",
+  "installs": [
+    {
+      "id": "steam",
+      "os": ["windows", "linux"],
+      "detect": { "steam": 377840 },
+      "base": { "winpath": "{locallow}/SquareEnix", "prefix": { "steam": 377840 } }
+    }
+  ],
+  "roles": [
+    { "id": "saves", "class": "save", "default": true, "path": "FINAL FANTASY IX", "target": "." }
+  ],
+  "quirks": ["Has Steam Cloud: out of scope."]
+}
 ```
 
 **Reusing the Ludusavi manifest.** Yes, there is an open database, and it is meant to be reused.
@@ -605,8 +660,8 @@ If step 2 is skipped, `apply` finds a foreign link at S and refuses, so a leftov
 
 ### 5.9 Open-source setup
 
-- **Licence.** MIT for the code, matching the neighbouring tools (Ludusavi MIT, Decky BSD-3-Clause **[K]**) and the likely dependencies (.NET, Avalonia, YamlDotNet are MIT **[K]**). Apache-2.0 is equally fine if you want the patent grant. GPL-3.0 buys little here and becomes mandatory only if you copy code from a GPL project such as EmuDeck. Definitions as CC0 or MIT, authored independently of PCGamingWiki.
-- **Definitions repository.** Separate repo, one YAML file per app, JSON Schema checked in CI, a required "tested on" line per install variant in each pull request, and its own version number. The app downloads a signed or hash-pinned release of it, so definitions update without an app release. Until there is a second contributor, keep it as a folder in the main repo.
+- **Licence.** MIT for the code, matching the neighbouring tools (Ludusavi MIT, Decky BSD-3-Clause **[K]**) and the likely dependencies (.NET and Avalonia are MIT **[K]**). Apache-2.0 is equally fine if you want the patent grant. GPL-3.0 buys little here and becomes mandatory only if you copy code from a GPL project such as EmuDeck. Definitions as CC0 or MIT, authored independently of PCGamingWiki.
+- **Definitions repository.** Separate repo, one JSON-with-comments file per app, JSON Schema checked in CI, a required "tested on" line per install variant in each pull request, and its own version number. The app downloads a signed or hash-pinned release of it, so definitions update without an app release. Until there is a second contributor, keep it as a folder in the main repo.
 - **Builds.** GitHub Actions, the three-target matrix, release artefacts built only from tags, checksums published. Deterministic builds are on by default in .NET; byte-identical reproducibility across machines is a stretch goal, not a launch requirement.
 - **Signing.** Unsigned Windows binaries trigger SmartScreen warnings. Options **[K, prices approximate and unverified]**: SignPath Foundation (free for qualifying open-source projects, by application), Microsoft's cloud signing service (around US$10 a month, with country and identity restrictions), or a conventional certificate (a few hundred US dollars a year, hardware-token bound). An EV certificate no longer buys instant reputation. A CLI installed through Scoop or winget sidesteps most of the problem.
 - **Channels.** GitHub Releases first. Scoop and winget second (manifest plus hash). Decky store when the plugin exists. Flathub not planned, for the sandbox reasons in 3.3.
@@ -640,7 +695,7 @@ The plugin's Python backend does nothing but run the CLI with JSON output and pa
 
 Phase 1 has no app definitions and no tokens. Every path is written by hand. This keeps the first release to the part that must be right: the transaction engine.
 
-**Files.** All JSON in phase 1, using the platform's built-in parser, so phase 1 needs no third-party dependency. YAML arrives in phase 2 with the contributor-edited definitions.
+**Files.** All JSON, using the platform's built-in parser, so the tool needs no third-party dependency. Phase 2's app definitions are JSON too, with comments allowed (5.2).
 
 Phase 1 is **link mechanism only**. Config redirects were first planned for phase 2 and have since been deferred (5.13).
 
@@ -803,7 +858,7 @@ When to revisit: an app that matters keeps showing as Replaced after being linke
 | Licence | MIT. Decided 2026-11-12 |
 | Switch (yuzu family) targets | One app folder per emulator (`savetether/yuzu/`, `savetether/eden/`, `savetether/citron/`, ...), not one shared Switch folder. Decided 2026-11-12 |
 | Config mechanism | Deferred on 2026-11-12, after phase 1 (5.13). Links are the only mechanism. Apps whose save-path setting was changed by hand are set back to their default folder by hand and then linked |
-| Definition file format | YAML with YamlDotNet, from phase 2. Phase 1 files are JSON with the built-in parser. Falls back to JSON with comments if YamlDotNet cannot run under Native AOT. Decided 2026-11-12 |
+| Definition file format | JSON with comments, read by the built-in parser, so no third-party dependency. YAML with YamlDotNet was approved on 2026-11-12 and dropped on 2026-11-13 before it was built (5.2) |
 | Test framework | xUnit (test project only). Decided 2026-11-12 |
 | CLI argument parsing | Hand-written, no dependency. Decided 2026-11-12 |
 | Branch flow | Feature branches with PRs straight to `main`; a `development` branch is added in phase 4. Decided 2026-11-12 |
