@@ -50,7 +50,8 @@ public sealed record Comparison(
     public IReadOnlyList<string> OnlyLocalEntries =>
         Entries.Where(e => e.Presence == EntryPresence.OnlyLocal).Select(e => e.Name).ToList();
 
-    public static Comparison Build(TreeFacts local, TreeFacts shared)
+    /// <param name="entryDepth">How many levels down one unit sits (design 5.13). 1 means the top-level entries.</param>
+    public static Comparison Build(TreeFacts local, TreeFacts shared, int entryDepth = 1)
     {
         ArgumentNullException.ThrowIfNull(local);
         ArgumentNullException.ThrowIfNull(shared);
@@ -60,11 +61,18 @@ public sealed record Comparison(
 
         // "Has it" is judged without regard to case: on Windows two names differing only by
         // case are one folder, so adding the local one beside the shared one would collide.
-        var sharedNames = new HashSet<string>(shared.TopLevelNames, StringComparer.OrdinalIgnoreCase);
-        var localNames = new HashSet<string>(local.TopLevelNames, StringComparer.OrdinalIgnoreCase);
+        var localEntries = local.EntryNames(entryDepth);
+        var sharedEntries = shared.EntryNames(entryDepth);
+
+        // A folder that is empty on one side and holds entries on the other is not an entry
+        // itself: the entries inside it are what is compared.
+        var all = localEntries.Union(sharedEntries, StringComparer.Ordinal).ToList();
+        var names = all
+            .Where(name => !all.Any(other => other.Length > name.Length && TreeFacts.IsUnder(other, name)))
+            .Order(StringComparer.Ordinal);
 
         var entries = new List<EntryComparison>();
-        foreach (var name in local.TopLevelNames.Union(shared.TopLevelNames, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        foreach (var name in names)
         {
             var differences = new List<FileDifference>();
             foreach (var path in PathsUnder(name, localByPath.Keys).Union(PathsUnder(name, sharedByPath.Keys), StringComparer.Ordinal).Order(StringComparer.Ordinal))
@@ -78,8 +86,8 @@ public sealed record Comparison(
             }
 
             var presence =
-                !sharedNames.Contains(name) ? EntryPresence.OnlyLocal
-                : !localNames.Contains(name) ? EntryPresence.OnlyShared
+                !Has(shared, name) ? EntryPresence.OnlyLocal
+                : !Has(local, name) ? EntryPresence.OnlyShared
                 : differences.Count == 0 ? EntryPresence.Identical
                 : EntryPresence.Different;
             entries.Add(new EntryComparison(name, presence, differences));
@@ -88,8 +96,16 @@ public sealed record Comparison(
         return new Comparison(entries, local.NewestWriteUtc, shared.NewestWriteUtc);
     }
 
-    private static IEnumerable<string> PathsUnder(string topLevelName, IEnumerable<string> paths) =>
-        paths.Where(p => TreeFacts.TopLevelOf(p) == topLevelName);
+    /// <summary>
+    /// True when the side has something where the entry would go: the entry itself, anything inside
+    /// it, or a file sitting where one of its parent folders would be.
+    /// </summary>
+    private static bool Has(TreeFacts side, string entry) => side.Entries.Any(e =>
+        TreeFacts.IsUnder(e.RelativePath, entry, StringComparison.OrdinalIgnoreCase)
+        || (e.Kind != EntryKind.Directory && TreeFacts.IsUnder(entry, e.RelativePath, StringComparison.OrdinalIgnoreCase)));
+
+    private static IEnumerable<string> PathsUnder(string entry, IEnumerable<string> paths) =>
+        paths.Where(p => TreeFacts.IsUnder(p, entry));
 
     private static long? SizeOf(FileFact? fact) => fact is { Kind: EntryKind.File } ? fact.Length : null;
 

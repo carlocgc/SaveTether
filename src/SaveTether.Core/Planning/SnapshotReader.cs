@@ -62,6 +62,7 @@ public static class SnapshotReader
             SourceTree = sourceTree,
             TargetKind = targetKind,
             TargetTree = targetTree,
+            EntryDepth = mapping.Depth,
             ActiveMarkers = markers,
             MissingSeedFiles = MissingSeedFiles(markers, targetTree),
             ProcessNamesChecked = devicePath.ProcessNames,

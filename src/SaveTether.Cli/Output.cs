@@ -52,7 +52,8 @@ internal sealed record OperationOutput(
     string? Error);
 
 internal sealed record MappingOutput(
-    string Id, string Target, string Source, IReadOnlyList<string> ProcessNames, bool CreatedMapping, bool Removed);
+    string Id, string Target, string Source, IReadOnlyList<string> ProcessNames, int EntryDepth,
+    bool CreatedMapping, bool EntryDepthChanged, bool Removed);
 
 /// <summary>
 /// The one JSON object a command prints with <c>--json</c>. Which section is present depends on
@@ -166,6 +167,11 @@ internal static class OutputWriter
         if (mapping.ProcessNames.Count > 0)
         {
             stdout.WriteLine($"  app processes: {string.Join(", ", mapping.ProcessNames)}");
+        }
+
+        if (mapping.EntryDepth > 1 || mapping.EntryDepthChanged)
+        {
+            stdout.WriteLine($"  entry depth:   {mapping.EntryDepth}{(mapping.EntryDepthChanged ? " (changed)" : string.Empty)}");
         }
 
         stdout.WriteLine($"No saves were touched. Run 'savetether apply {mapping.Id}' to link it.");

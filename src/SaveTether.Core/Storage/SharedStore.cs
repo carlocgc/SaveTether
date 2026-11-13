@@ -95,14 +95,15 @@ public sealed class SharedStore
     }
 
     /// <summary>
-    /// Adds a mapping, or rewrites one unchanged. An existing mapping's target cannot be changed,
-    /// because other devices already link to it.
+    /// Adds a mapping, or rewrites one. An existing mapping's target cannot be changed, because
+    /// other devices already link to it. Its entry depth can: nothing points at it.
     /// </summary>
     public void WriteMapping(MappingFile mapping)
     {
         RequireInitialized();
         ArgumentNullException.ThrowIfNull(mapping);
         RequireMappingId(mapping.Id);
+        mapping = mapping.Normalized();
         CheckMapping(mapping, mapping.Id);
 
         foreach (var other in ListMappings())
@@ -247,6 +248,20 @@ public sealed class SharedStore
         if (Identifiers.DescribeTargetProblem(mapping.Id, mapping.Target) is { } problem)
         {
             throw new StoreException(StoreProblem.Invalid, $"Mapping '{mapping.Id}' is not valid: {problem}");
+        }
+
+        if (mapping.Depth is < 1 or > MappingFile.MaxEntryDepth)
+        {
+            throw new StoreException(
+                StoreProblem.Invalid,
+                $"Mapping '{mapping.Id}' is not valid: its entry depth is {mapping.Depth}, and must be from 1 to {MappingFile.MaxEntryDepth}.");
+        }
+
+        if (mapping.EntryDepth is not null && mapping.Schema < 2)
+        {
+            throw new StoreException(
+                StoreProblem.Invalid,
+                $"Mapping '{mapping.Id}' is not valid: it has an entry depth, which needs \"schema\": 2.");
         }
 
         return mapping;

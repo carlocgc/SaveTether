@@ -222,9 +222,13 @@ public sealed class SafeFs
     /// directory <paramref name="destination"/>. Folders are merged; an existing file is never
     /// overwritten (the copy fails instead). Links inside the source are never followed.
     /// </summary>
-    /// <param name="topLevelEntries">The names directly inside the source to copy, or null for all of them.</param>
+    /// <param name="entries">
+    /// What to copy, or null for everything. Each is a path below the source with forward slashes:
+    /// a name directly inside it ("GAME1") or deeper ("00050000/101c9500"). A named entry must not
+    /// already exist in the destination, in any letter case; its parent folders are created as needed.
+    /// </param>
     public static CopyResult CopyInto(
-        string source, string destination, IReadOnlyCollection<string>? topLevelEntries = null,
+        string source, string destination, IReadOnlyCollection<string>? entries = null,
         LinkCopyPolicy links = LinkCopyPolicy.RecordOnly)
     {
         var from = RequireAbsolute(source, nameof(source));
@@ -252,7 +256,31 @@ public sealed class SafeFs
         var found = new List<LinkRecord>();
         var fileCount = 0;
         long byteCount = 0;
-        CopyDirectory(from, to, string.Empty, links, found, ref fileCount, ref byteCount, topLevelEntries);
+        if (entries is null)
+        {
+            CopyDirectory(from, to, string.Empty, links, found, ref fileCount, ref byteCount);
+        }
+        else
+        {
+            foreach (var entry in entries.Order(StringComparer.Ordinal))
+            {
+                var parts = entry.Split('/');
+                if (parts.Any(part => part.Length == 0 || part is "." or ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+                {
+                    throw new SafeFsException($"Cannot copy '{entry}': it is not a path below '{from}'.");
+                }
+
+                var entrySource = Path.Combine([from, .. parts]);
+                var entryDestination = Path.Combine(PlaceFor(to, parts[..^1], entry), parts[^1]);
+                if (FindIgnoringCase(Path.GetDirectoryName(entryDestination)!, parts[^1]) is not null)
+                {
+                    throw new SafeFsException($"Cannot copy '{entry}' into '{to}': it is already there.");
+                }
+
+                CopyEntry(entrySource, entryDestination, entry, links, found, ref fileCount, ref byteCount);
+            }
+        }
+
         return new CopyResult(fileCount, byteCount, found);
     }
 
@@ -344,52 +372,94 @@ public sealed class SafeFs
         }
     }
 
+    /// <summary>
+    /// The folder inside <paramref name="root"/> that an entry's parent folders lead to, creating
+    /// those that are missing. A folder that exists under a name differing only by letter case is
+    /// refused where case matters: copying beside it would give two folders that are one on Windows.
+    /// </summary>
+    private static string PlaceFor(string root, string[] parents, string entry)
+    {
+        var current = root;
+        foreach (var name in parents)
+        {
+            var existing = FindIgnoringCase(current, name);
+            if (existing is not null && existing != name && !OperatingSystem.IsWindows())
+            {
+                throw new SafeFsException(
+                    $"Cannot copy '{entry}' into '{root}': it has '{existing}' where the source has '{name}'. " +
+                    "The two names differ only by letter case; rename one by hand.");
+            }
+
+            current = Path.Combine(current, existing ?? name);
+            var kind = Probe(current);
+            if (kind == EntryKind.Missing)
+            {
+                Directory.CreateDirectory(current);
+            }
+            else if (kind != EntryKind.Directory)
+            {
+                throw new SafeFsException($"Cannot copy '{entry}' into '{root}': '{current}' is {Describe(kind)}, not a folder.");
+            }
+        }
+
+        return current;
+    }
+
+    /// <summary>The name of the entry in <paramref name="directory"/> that equals <paramref name="name"/> ignoring case, or null.</summary>
+    private static string? FindIgnoringCase(string directory, string name) =>
+        Directory.GetFileSystemEntries(directory)
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .Order(StringComparer.Ordinal)
+            .FirstOrDefault(found => found.Equals(name, StringComparison.OrdinalIgnoreCase));
+
     private static void CopyDirectory(
         string from, string to, string relative, LinkCopyPolicy policy,
-        List<LinkRecord> found, ref int fileCount, ref long byteCount, IReadOnlyCollection<string>? only = null)
+        List<LinkRecord> found, ref int fileCount, ref long byteCount)
     {
         Directory.CreateDirectory(to);
         foreach (var path in SortedEntries(from))
         {
             var name = Path.GetFileName(path);
-            if (only is not null && !only.Contains(name, StringComparer.Ordinal))
-            {
-                continue;
-            }
-
             var entryRelative = relative.Length == 0 ? name : relative + "/" + name;
-            var destination = Path.Combine(to, name);
-            var (kind, attributes) = ProbeWithAttributes(path);
+            CopyEntry(path, Path.Combine(to, name), entryRelative, policy, found, ref fileCount, ref byteCount);
+        }
+    }
 
-            switch (kind)
-            {
-                case EntryKind.File:
-                    File.Copy(path, destination, overwrite: false);
-                    File.SetLastWriteTimeUtc(destination, File.GetLastWriteTimeUtc(path));
-                    fileCount++;
-                    byteCount += new FileInfo(path).Length;
-                    break;
+    /// <summary>Copies one file or folder to <paramref name="destination"/>. A link is recorded, and recreated if the policy says so; it is never followed.</summary>
+    private static void CopyEntry(
+        string path, string destination, string entryRelative, LinkCopyPolicy policy,
+        List<LinkRecord> found, ref int fileCount, ref long byteCount)
+    {
+        var (kind, attributes) = ProbeWithAttributes(path);
+        switch (kind)
+        {
+            case EntryKind.File:
+                File.Copy(path, destination, overwrite: false);
+                File.SetLastWriteTimeUtc(destination, File.GetLastWriteTimeUtc(path));
+                fileCount++;
+                byteCount += new FileInfo(path).Length;
+                break;
 
-                case EntryKind.Directory:
-                    CopyDirectory(path, destination, entryRelative, policy, found, ref fileCount, ref byteCount);
-                    break;
+            case EntryKind.Directory:
+                CopyDirectory(path, destination, entryRelative, policy, found, ref fileCount, ref byteCount);
+                break;
 
-                case EntryKind.Symlink or EntryKind.Junction:
-                    var target = ReadRawLinkTarget(path);
-                    found.Add(new LinkRecord(entryRelative, kind, target));
-                    if (policy == LinkCopyPolicy.Recreate)
-                    {
-                        RecreateLink(destination, kind, attributes, target);
-                    }
+            case EntryKind.Symlink or EntryKind.Junction:
+                var target = ReadRawLinkTarget(path);
+                found.Add(new LinkRecord(entryRelative, kind, target));
+                if (policy == LinkCopyPolicy.Recreate)
+                {
+                    RecreateLink(destination, kind, attributes, target);
+                }
 
-                    break;
+                break;
 
-                case EntryKind.Missing:
-                    break; // Removed while we were copying. Nothing to copy.
+            case EntryKind.Missing:
+                break; // Removed while we were copying. Nothing to copy.
 
-                default:
-                    throw new SafeFsException($"Cannot copy '{path}': it is {Describe(kind)}.");
-            }
+            default:
+                throw new SafeFsException($"Cannot copy '{path}': it is {Describe(kind)}.");
         }
     }
 

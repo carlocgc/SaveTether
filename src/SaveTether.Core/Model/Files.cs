@@ -41,7 +41,10 @@ public enum SetupChoice
 /// </summary>
 public sealed record MappingFile
 {
-    public const int CurrentSchema = 1;
+    /// <summary>The newest format this version reads. Format 2 added <see cref="EntryDepth"/>.</summary>
+    public const int CurrentSchema = 2;
+
+    public const int MaxEntryDepth = 8;
 
     public required int Schema { get; init; }
 
@@ -52,6 +55,29 @@ public sealed record MappingFile
     public required string Target { get; init; }
 
     public required Mechanism Mechanism { get; init; }
+
+    /// <summary>
+    /// How many folder levels down one game's saves sit (design 5.13). Absent means 1: each
+    /// entry directly inside the save folder is one unit for the comparison and "add missing".
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? EntryDepth { get; init; }
+
+    /// <summary><see cref="EntryDepth"/> with its default filled in.</summary>
+    [JsonIgnore]
+    public int Depth => EntryDepth ?? 1;
+
+    /// <summary>
+    /// The form that is written to disk. A mapping at depth 1 is written exactly as format 1
+    /// was, so a device still running an older SaveTether keeps reading it; only a mapping that
+    /// really uses the new field needs every device updated.
+    /// </summary>
+    public MappingFile Normalized() => Depth switch
+    {
+        > 1 => this with { Schema = CurrentSchema },
+        1 => this with { Schema = 1, EntryDepth = null },
+        _ => this, // Not a valid depth. Left as it is, for validation to refuse.
+    };
 }
 
 /// <summary>One mapping's settings on one device.</summary>

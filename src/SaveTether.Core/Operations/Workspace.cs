@@ -20,7 +20,8 @@ public sealed record InitResult(
     IReadOnlyList<string> Devices, IReadOnlyList<string> Notes);
 
 /// <param name="CreatedMapping">False when the shared mapping already existed and only this device's path was set.</param>
-public sealed record MapResult(MappingFile Mapping, DevicePath Path, bool CreatedMapping);
+/// <param name="EntryDepthChanged">True when an existing mapping's entry depth was changed by this call.</param>
+public sealed record MapResult(MappingFile Mapping, DevicePath Path, bool CreatedMapping, bool EntryDepthChanged);
 
 public sealed record StatusReport(
     string DeviceName, string SyncRoot, bool DeviceFileMismatch, bool JournalOpen, IReadOnlyList<MappingHealth> Mappings);
@@ -156,7 +157,9 @@ public sealed class Workspace
     }
 
     /// <summary>"map add": the shared mapping, if it is new, and this device's save folder for it.</summary>
-    public MapResult MapAdd(string mappingId, string? target, string source, IReadOnlyList<string> processNames)
+    /// <param name="entryDepth">How many levels down one game's saves sit (design 5.13), or null to leave it as it is.</param>
+    public MapResult MapAdd(
+        string mappingId, string? target, string source, IReadOnlyList<string> processNames, int? entryDepth = null)
     {
         ArgumentNullException.ThrowIfNull(processNames);
         var device = ReadOwnDevice();
@@ -190,7 +193,10 @@ public sealed class Workspace
                     $"There is no mapping '{mappingId}' yet, so it needs --target <app>/<save folder>, for example --target {Identifiers.AppOf(mappingId)}/saves.");
             }
 
-            mapping = new MappingFile { Schema = MappingFile.CurrentSchema, Id = mappingId, Target = target, Mechanism = Mechanism.Link };
+            mapping = new MappingFile
+            {
+                Schema = MappingFile.CurrentSchema, Id = mappingId, Target = target, Mechanism = Mechanism.Link, EntryDepth = entryDepth,
+            }.Normalized();
             Shared.WriteMapping(mapping);
         }
         else if (target is not null && target != mapping.Target)
@@ -200,9 +206,17 @@ public sealed class Workspace
                 $"Mapping '{mappingId}' already exists with target '{mapping.Target}'. Its target cannot be changed to '{target}'.");
         }
 
+        // Unlike the target, the entry depth of an existing mapping may be changed: nothing points at it.
+        var depthChanged = !created && entryDepth is { } depth && depth != mapping.Depth;
+        if (depthChanged)
+        {
+            mapping = (mapping with { EntryDepth = entryDepth }).Normalized();
+            Shared.WriteMapping(mapping);
+        }
+
         var path = new DevicePath { Source = newSource, ProcessNames = processNames.ToList() };
         Shared.WriteDevice(device with { Paths = new Dictionary<string, DevicePath>(device.Paths) { [mappingId] = path } });
-        return new MapResult(mapping, path, created);
+        return new MapResult(mapping, path, created, depthChanged);
     }
 
     /// <summary>"map remove": drops this device's entry only. The shared mapping stays for the other devices.</summary>

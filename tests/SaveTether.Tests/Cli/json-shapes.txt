@@ -213,6 +213,8 @@ $: object
 $.command: string
 $.exit_code: number
 $.mapping.created_mapping: boolean
+$.mapping.entry_depth: number
+$.mapping.entry_depth_changed: boolean
 $.mapping.id: string
 $.mapping.process_names: array
 $.mapping.process_names[]: string
@@ -227,6 +229,8 @@ $: object
 $.command: string
 $.exit_code: number
 $.mapping.created_mapping: boolean
+$.mapping.entry_depth: number
+$.mapping.entry_depth_changed: boolean
 $.mapping.id: string
 $.mapping.process_names: array
 $.mapping.process_names[]: string
