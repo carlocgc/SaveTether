@@ -276,6 +276,15 @@ Tests:
 
 Done when: tests pass on three targets, and the existing `cemu.save` mapping is set to depth 2 and `--add-missing` is seen to work per game on the real devices.
 
+As built (differences from the list above, and decisions made while building):
+- A mapping at depth 1 is still written as `schema: 1`, with no `entry_depth`. Only a mapping that uses a depth above 1 is written as `schema: 2`. Devices on an older SaveTether therefore keep working until a deeper mapping is actually created. Design 5.13 says what stops working for them then.
+- Entries are paths, so `CopyIntoTarget` and the journal carry values such as `00050000/101c9500`. A plan at depth 1 is unchanged.
+- A folder that is empty on one side and holds entries on the other is not compared as an entry itself; only what is inside it is.
+- Where letter case matters (Linux), an entry whose parent folder exists in the shared copy under a name differing only by case is refused, with a message naming both, instead of creating a second folder beside it.
+- Before copying anything, the executor checks every entry it is about to add against the shared folder, ignoring case, so a game the sync tool delivered after planning stops the copy before it starts.
+- JSON output of `map add` and `map remove` gained `entry_depth` and `entry_depth_changed`. Nothing was removed or renamed.
+- Not yet done: setting the real `cemu.save` mapping to depth 2 on the two devices. That is the owner's step, after both have the new binary.
+
 ### P2.3 Prove YamlDotNet under Native AOT (S, spike)
 
 Before building on it: parse one definition in the published native binary on all three targets. YamlDotNet's reflection-based deserialiser is not expected to work under AOT **[K]**; the options are its static generator or reading the document tree and mapping it by hand. If neither works cleanly, come back to the owner before going further (JSON with comments is the fallback).

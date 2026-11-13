@@ -94,10 +94,12 @@ internal static class CliApp
               device waits for the sync tool to deliver the savetether folder.
               --take-over claims an existing device name, after a reinstall.
 
-          savetether map add <id> --source <path> [--target <app>/<save folder>] [--process <name>]...
+          savetether map add <id> --source <path> [--target <app>/<save folder>] [--process <name>]... [--entry-depth <n>]
               Add a mapping, or set this device's save folder for an existing one.
               <id> is app.role, for example ppsspp.savedata. --target is needed for a new mapping.
               --process names the app's process, so apply can refuse while it runs.
+              --entry-depth says how many folder levels down one game's saves sit (default 1). It is
+              the unit --add-missing copies in. Give it again later to change it.
           savetether map remove <id>
               Remove this device's save folder for a mapping. Other devices keep theirs.
 
@@ -234,12 +236,25 @@ internal static class CliApp
         {
             var id = command.Positionals[0];
             var source = Path.GetFullPath(command.Value("--source") ?? throw new UsageException("'map add' needs --source <path>"));
-            var result = Open().MapAdd(id, command.Value("--target"), source, command.Values("--process"));
+            int? entryDepth = null;
+            if (command.Value("--entry-depth") is { } given)
+            {
+                if (!int.TryParse(given, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var depth)
+                    || depth is < 1 or > MappingFile.MaxEntryDepth)
+                {
+                    throw new UsageException($"'--entry-depth' needs a whole number from 1 to {MappingFile.MaxEntryDepth}");
+                }
+
+                entryDepth = depth;
+            }
+
+            var result = Open().MapAdd(id, command.Value("--target"), source, command.Values("--process"), entryDepth);
             return new CliOutput
             {
                 Command = command.Name, ExitCode = ExitSuccess,
                 Mapping = new MappingOutput(
-                    id, result.Mapping.Target, result.Path.Source, result.Path.ProcessNames, result.CreatedMapping, Removed: false),
+                    id, result.Mapping.Target, result.Path.Source, result.Path.ProcessNames, result.Mapping.Depth,
+                    result.CreatedMapping, result.EntryDepthChanged, Removed: false),
             };
         }
 
@@ -248,11 +263,13 @@ internal static class CliApp
             var id = command.Positionals[0];
             var workspace = Open();
             var removed = workspace.MapRemove(id);
-            var target = workspace.Shared.TryReadMapping(id)?.Target ?? string.Empty;
+            var mapping = workspace.Shared.TryReadMapping(id);
             return new CliOutput
             {
                 Command = command.Name, ExitCode = ExitSuccess,
-                Mapping = new MappingOutput(id, target, removed.Source, removed.ProcessNames, CreatedMapping: false, Removed: true),
+                Mapping = new MappingOutput(
+                    id, mapping?.Target ?? string.Empty, removed.Source, removed.ProcessNames, mapping?.Depth ?? 1,
+                    CreatedMapping: false, EntryDepthChanged: false, Removed: true),
             };
         }
 

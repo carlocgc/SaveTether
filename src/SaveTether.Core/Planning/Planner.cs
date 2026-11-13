@@ -290,7 +290,7 @@ public static class Planner
                     targetBytes += step.Entries is null
                         ? s.SourceTree.TotalBytes
                         : s.SourceTree.Entries
-                            .Where(e => step.Entries.Contains(TreeFacts.TopLevelOf(e.RelativePath), StringComparer.Ordinal))
+                            .Where(e => step.Entries.Any(entry => TreeFacts.IsUnder(e.RelativePath, entry)))
                             .Sum(e => e.Length);
                     break;
                 case StepKind.CopyToStaging:
@@ -551,7 +551,7 @@ public static class Planner
 
     private static bool OthersHaveMarkers(Snapshot s) => s.ActiveMarkers.Any(m => m.DeviceName != s.DeviceName);
 
-    private static Comparison Compare(Snapshot s) => Comparison.Build(s.SourceTree, s.TargetTree);
+    private static Comparison Compare(Snapshot s) => Comparison.Build(s.SourceTree, s.TargetTree, s.EntryDepth);
 
     private static PlanOutcome Planned(
         Snapshot s, Classification classification, SetupChoice? choice, IReadOnlyList<PlanStep> steps,

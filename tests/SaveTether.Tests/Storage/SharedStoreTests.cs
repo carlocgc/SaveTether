@@ -54,8 +54,8 @@ public class SharedStoreTests
 
         store.WriteMapping(mapping);
 
-        Assert.Equal(mapping, store.ReadMapping("ppsspp.savedata"));
-        Assert.Equal(mapping, store.TryReadMapping("ppsspp.savedata"));
+        Assert.Equal(mapping.Normalized(), store.ReadMapping("ppsspp.savedata"));
+        Assert.Equal(mapping.Normalized(), store.TryReadMapping("ppsspp.savedata"));
         Assert.Null(store.TryReadMapping("eden.save"));
         AssertProblem(StoreProblem.NotFound, () => store.ReadMapping("eden.save"));
         Assert.Equal(Path.Combine(store.DataRoot, "ppsspp", "SAVEDATA"), store.TargetPathOf(mapping));
@@ -96,7 +96,11 @@ public class SharedStoreTests
     [InlineData("{ \"schema\": 1, \"id\": \"ppsspp.savedata\", \"targett\": \"x\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\" }", StoreProblem.Invalid)]
     [InlineData("{ \"schema\": 1, \"id\": \"eden.save\", \"target\": \"eden/save\", \"mechanism\": \"link\" }", StoreProblem.Invalid)]
     [InlineData("{ \"schema\": 1, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/../x\", \"mechanism\": \"link\" }", StoreProblem.Invalid)]
-    [InlineData("{ \"schema\": 2, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"new_field\": true }", StoreProblem.SchemaTooNew)]
+    [InlineData("{ \"schema\": 3, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"new_field\": true }", StoreProblem.SchemaTooNew)]
+    [InlineData("{ \"schema\": 2, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"new_field\": true }", StoreProblem.Invalid)]
+    [InlineData("{ \"schema\": 1, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"entry_depth\": 2 }", StoreProblem.Invalid)]
+    [InlineData("{ \"schema\": 2, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"entry_depth\": 0 }", StoreProblem.Invalid)]
+    [InlineData("{ \"schema\": 2, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"entry_depth\": 9 }", StoreProblem.Invalid)]
     public void A_bad_mapping_file_is_refused_with_the_reason(string json, StoreProblem expected)
     {
         using var sandbox = new Sandbox();

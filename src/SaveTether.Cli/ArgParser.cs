@@ -61,7 +61,7 @@ internal static class ArgParser
     public static IReadOnlyList<CommandSpec> Commands { get; } =
     [
         new("init", 0, 0, ["--create-root", "--take-over"], ["--sync-root", "--device", "--backup-root"], None),
-        new("map add", 1, 1, None, ["--target", "--source"], ["--process"]),
+        new("map add", 1, 1, None, ["--target", "--source", "--entry-depth"], ["--process"]),
         new("map remove", 1, 1, None, None, None),
         new("status", 0, 1, None, None, None),
         new(

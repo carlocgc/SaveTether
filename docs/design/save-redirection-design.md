@@ -697,7 +697,7 @@ Local, `state.json`: per mapping, the resolved source and target, the link type 
 | Command | Does |
 |---|---|
 | `init --sync-root <path> [--device <name>] [--create-root] [--take-over] [--backup-root <path>]` | Writes `bootstrap.json`. The backup location is created when it is the default or was named here; one read from an existing device file is not created if missing, since its drive may not be connected. Requires `savetether/.savetether/` to exist; only `--create-root` creates it, once, on the first device. Lists existing device files and offers them; taking over an existing name needs confirmation and writes this install's ID into that file. A new name creates a new device file |
-| `map add <id> --source <path> [--target <app>/<save folder>] [--process <name>...]` | Creates the mapping file if it does not exist (`--target` is then required), or checks the target matches if it does, and adds this device's source path to its own device file. Changes no save data. `map remove <id>` removes only this device's entry; the shared mapping is left for other devices. Both are refused while the mapping is applied here and the change would orphan the link (revert first) |
+| `map add <id> --source <path> [--target <app>/<save folder>] [--process <name>...] [--entry-depth <n>]` | Creates the mapping file if it does not exist (`--target` is then required), or checks the target matches if it does, and adds this device's source path to its own device file. Changes no save data. `--entry-depth` sets, or later changes, the mapping's entry depth (5.13). `map remove <id>` removes only this device's entry; the shared mapping is left for other devices. Both are refused while the mapping is applied here and the change would orphan the link (revert first) |
 | `status [id]` | Health states from 5.5 |
 | `apply <id> \| --all [--copy \| --no-copy \| --add-missing \| --replace-shared --confirm-replace] [--assume-synced]` | The transaction in 5.3, with the setup choices there. Without a choice it links only when the local folder is empty, and otherwise stops, listing the allowed choices and the comparison. `--all` runs each mapping this device has a path for, one transaction each, and stops at the first that needs a choice; choices cannot be combined with `--all` |
 | `revert <id>` | The revert flow in 5.3 |
@@ -716,7 +716,7 @@ Local, `state.json`: per mapping, the resolved source and target, the link type 
 
 ### 5.13 Phase 2 specification: entry depth, and config redirects deferred
 
-Status: proposed 2026-11-12, for the owner to confirm before it is built.
+Status: confirmed by the owner on 2026-11-12. Entry depth is built (plan P2.2).
 
 **Entry depth.** Found in the M7 trial. `--add-missing` and the comparison work on the top-level entries of a save folder, on the assumption that each is one game (5.3). Cemu's save folder has `00050000`, `00050010` and `system` at the top and the games one level down, so both devices always have "the same entries" and nothing is ever added.
 
@@ -724,7 +724,7 @@ A mapping gains `entry_depth`, default 1. With `entry_depth: 2` the unit is a pa
 
 The value lives in the shared mapping file, because every device must agree on what one entry is. It is set with `map add --entry-depth <n>` or by an app definition. Unlike `target` it can be changed later: no link points at it and no data moves, it only changes how the next comparison and `--add-missing` group the files.
 
-This is a new field, so the mapping file moves to `schema: 2`. A schema 1 file is still read, as depth 1; a phase 1 tool refuses a schema 2 file with the "update SaveTether" message instead of misreading it (5.12, file format policy). Every device must therefore be updated before any of them writes a schema 2 mapping.
+This is a new field, so a mapping that uses it is written as `schema: 2`, and a phase 1 tool refuses that file with the "update SaveTether" message instead of misreading it (5.12, file format policy). A mapping at depth 1 is still written exactly as before, as `schema: 1` with no `entry_depth`, so mappings that do not need the field stay readable by an older tool. Even so, update every device before setting a depth above 1 on any mapping: an older tool cannot list the mappings at all while one of them is in a format it does not know, so its `status` and `map add` stop working and its `apply --all` stops at that mapping, though `apply <id>` for another mapping still works.
 
 **Config redirects: deferred.** Decided 2026-11-12. Some apps have a setting that says where saves go, and the original design planned a second mechanism that edits that setting instead of linking the folder. It is not being built in phase 2. Links are the only mechanism.
 

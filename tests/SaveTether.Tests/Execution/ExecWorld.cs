@@ -20,14 +20,18 @@ internal sealed class ExecWorld : IDisposable
 
     private static readonly string[] ProcessNames = ["PPSSPPSDL"];
 
-    private readonly MappingFile _mapping = new()
-    {
-        Schema = MappingFile.CurrentSchema, Id = MappingId, Target = "ppsspp/SAVEDATA", Mechanism = Mechanism.Link,
-    };
+    private readonly MappingFile _mapping;
 
     /// <param name="syncRoot">Where the sync root goes; inside the sandbox when null.</param>
-    public ExecWorld(string? syncRoot = null)
+    /// <param name="entryDepth">The mapping's entry depth (design 5.13).</param>
+    public ExecWorld(string? syncRoot = null, int entryDepth = 1)
     {
+        _mapping = new MappingFile
+        {
+            Schema = MappingFile.CurrentSchema, Id = MappingId, Target = "ppsspp/SAVEDATA", Mechanism = Mechanism.Link,
+            EntryDepth = entryDepth,
+        }.Normalized();
+
         if (syncRoot is not null)
         {
             Directory.CreateDirectory(syncRoot);

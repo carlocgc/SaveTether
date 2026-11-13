@@ -28,14 +28,60 @@ public sealed record TreeFacts(IReadOnlyList<FileFact> Entries)
         Entries.Where(e => e.Kind == EntryKind.File).Select(e => (DateTime?)e.LastWriteTimeUtc).Max();
 
     /// <summary>The names directly inside the folder, in order.</summary>
-    public IReadOnlyList<string> TopLevelNames =>
-        Entries.Select(e => TopLevelOf(e.RelativePath)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+    public IReadOnlyList<string> TopLevelNames => EntryNames(1);
 
-    public static string TopLevelOf(string relativePath)
+    /// <summary>
+    /// The units the comparison and "add missing" work in (design 5.13): paths
+    /// <paramref name="depth"/> levels down, for example "00050000/101c9500" at depth 2. A file,
+    /// a link or an empty folder that sits higher up is an entry of its own; a folder that holds
+    /// something is not, since what it holds is.
+    /// </summary>
+    public IReadOnlyList<string> EntryNames(int depth)
     {
-        var slash = relativePath.IndexOf('/', StringComparison.Ordinal);
-        return slash < 0 ? relativePath : relativePath[..slash];
+        ArgumentOutOfRangeException.ThrowIfLessThan(depth, 1);
+        var parents = Entries
+            .Where(e => e.RelativePath.Contains('/', StringComparison.Ordinal))
+            .Select(e => e.RelativePath[..e.RelativePath.LastIndexOf('/')])
+            .ToHashSet(StringComparer.Ordinal);
+
+        return Entries
+            .Where(e => SegmentCount(e.RelativePath) >= depth || e.Kind != EntryKind.Directory || !parents.Contains(e.RelativePath))
+            .Select(e => EntryOf(e.RelativePath, depth))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
     }
+
+    public static string TopLevelOf(string relativePath) => EntryOf(relativePath, 1);
+
+    /// <summary>The first <paramref name="depth"/> parts of a path, or all of it when it has fewer.</summary>
+    public static string EntryOf(string relativePath, int depth)
+    {
+        ArgumentNullException.ThrowIfNull(relativePath);
+        var end = -1;
+        for (var i = 0; i < depth; i++)
+        {
+            end = relativePath.IndexOf('/', end + 1);
+            if (end < 0)
+            {
+                return relativePath;
+            }
+        }
+
+        return relativePath[..end];
+    }
+
+    /// <summary>True when <paramref name="relativePath"/> is the entry itself or lies inside it.</summary>
+    public static bool IsUnder(string relativePath, string entry, StringComparison comparison = StringComparison.Ordinal)
+    {
+        ArgumentNullException.ThrowIfNull(relativePath);
+        ArgumentNullException.ThrowIfNull(entry);
+        return relativePath.Length == entry.Length
+            ? relativePath.Equals(entry, comparison)
+            : relativePath.Length > entry.Length && relativePath[entry.Length] == '/' && relativePath.StartsWith(entry, comparison);
+    }
+
+    private static int SegmentCount(string relativePath) => relativePath.Count(c => c == '/') + 1;
 }
 
 /// <summary>
@@ -84,6 +130,9 @@ public sealed record Snapshot
 
     /// <summary>T's content when it is a real folder; empty otherwise.</summary>
     public TreeFacts TargetTree { get; init; } = TreeFacts.Empty;
+
+    /// <summary>How many levels down one game's saves sit: the unit of the comparison and "add missing".</summary>
+    public int EntryDepth { get; init; } = 1;
 
     /// <summary>Seed markers for this mapping that have not been superseded.</summary>
     public IReadOnlyList<SeedMarker> ActiveMarkers { get; init; } = [];

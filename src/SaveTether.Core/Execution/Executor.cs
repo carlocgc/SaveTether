@@ -323,8 +323,7 @@ public sealed partial class Executor
         }
         else
         {
-            var present = Directory.GetFileSystemEntries(target).Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (step.Entries.FirstOrDefault(present.Contains) is { } clash)
+            if (step.Entries.FirstOrDefault(entry => ExistsIgnoringCase(target, entry)) is { } clash)
             {
                 throw new ExecutionException($"The shared folder '{target}' now has '{clash}', so nothing was copied into it. Run the command again.");
             }
@@ -333,6 +332,34 @@ public sealed partial class Executor
         var copy = SafeFs.CopyInto(step.Path, target, step.Entries, LinkCopyPolicy.RecordOnly);
         VerifyCopy(step.Path, target, step.Entries);
         NoteSkippedLinks(tx, copy, step.Path);
+    }
+
+    /// <summary>
+    /// True when something is already where the entry would go, in any letter case, or when a file
+    /// or link sits where one of its parent folders would be. Links are not followed.
+    /// </summary>
+    private static bool ExistsIgnoringCase(string root, string entry)
+    {
+        var current = root;
+        foreach (var part in entry.Split('/'))
+        {
+            if (SafeFs.Probe(current) != EntryKind.Directory)
+            {
+                return true;
+            }
+
+            var match = Directory.GetFileSystemEntries(current)
+                .Select(Path.GetFileName)
+                .FirstOrDefault(name => string.Equals(name, part, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+            {
+                return false;
+            }
+
+            current = Path.Combine(current, match);
+        }
+
+        return true;
     }
 
     private void CopyToStaging(Transaction tx, PlanStep step)
@@ -401,7 +428,7 @@ public sealed partial class Executor
         foreach (var entry in SafeFs.EnumerateTree(from))
         {
             if (entry.Kind != EntryKind.File
-                || (entries is not null && !entries.Contains(TreeFacts.TopLevelOf(entry.RelativePath), StringComparer.Ordinal)))
+                || (entries is not null && !entries.Any(wanted => TreeFacts.IsUnder(entry.RelativePath, wanted))))
             {
                 continue;
             }
