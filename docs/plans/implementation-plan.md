@@ -12,7 +12,7 @@ Settled on 2026-11-12, in addition to the design's section 7.
 |---|---|---|
 | Test framework | xUnit | Approved dependency, test project only. Nothing from it ships |
 | CLI argument parsing | Hand-written | No dependency. Help text is written by hand and tested |
-| Definition file format (phase 2) | YAML, with YamlDotNet | Approved dependency, shipped in the CLI from phase 2. Phase 1 stays JSON-only. Native AOT support must be proven first (P2.3) |
+| Definition file format (phase 2) | JSON with comments, built-in parser | No third-party dependency. YAML with YamlDotNet was approved here on 2026-11-12 and dropped by the owner on 2026-11-13, before it was built (design 5.2) |
 | Branch flow | Feature branches, PRs straight to `main` | A `development` branch is introduced in phase 4, when releases are tagged |
 | JSON | `System.Text.Json` with source generation | Built in. Reflection-based serialisation does not work under Native AOT |
 | CI | GitHub Actions from the first PR | The repository is public, so hosted Linux ARM64 runners are available **[K, confirm in M0]** |
@@ -237,12 +237,11 @@ Status 2026-11-12: M0 to M7 are done and `status` was clean on both devices. Fou
 
 Goal: stop typing absolute paths. Exit test: a device restored after its SD card ID or install folder changed, with no hand edits.
 
-Planned to milestone level on 2026-11-12, after the M7 trial. Nine milestones in dependency order, numbered P2.0 to P2.8. Sizes are relative (S, M, L). The conventions of section 2 apply unchanged: one PR per milestone, all three CI targets, the delete audit green.
+Planned to milestone level on 2026-11-12, after the M7 trial. Eight milestones in dependency order, numbered P2.0 to P2.7. Sizes are relative (S, M, L). The conventions of section 2 apply unchanged: one PR per milestone, all three CI targets, the delete audit green.
 
-Config redirects were part of this phase and were dropped on 2026-11-12 (design 5.13). Two orderings are deliberate:
+Two things were part of this phase and were dropped: config redirects on 2026-11-12 (design 5.13), and YAML definitions with their dependency and Native AOT spike on 2026-11-13 (design 5.2). One ordering is deliberate:
 
-- **By-hand first, definitions second.** P2.2 makes entry depth usable from `map add` with typed paths, as phase 1 did for links, and it fixes something the trial found. Definitions and the resolver (P2.3 to P2.5) then remove the typing.
-- **The dependency is proven before anything is built on it** (P2.3).
+- **By-hand first, definitions second.** P2.2 makes entry depth usable from `map add` with typed paths, as phase 1 did for links, and it fixes something the trial found. Definitions and the resolver (P2.3 and P2.4) then remove the typing.
 
 ### P2.0 Close out phase 1 on hardware (S, manual)
 
@@ -285,37 +284,31 @@ As built (differences from the list above, and decisions made while building):
 - JSON output of `map add` and `map remove` gained `entry_depth` and `entry_depth_changed`. Nothing was removed or renamed.
 - Not yet done: setting the real `cemu.save` mapping to depth 2 on the two devices. That is the owner's step, after both have the new binary.
 
-### P2.3 Prove YamlDotNet under Native AOT (S, spike)
+### P2.3 Definitions (M)
 
-Before building on it: parse one definition in the published native binary on all three targets. YamlDotNet's reflection-based deserialiser is not expected to work under AOT **[K]**; the options are its static generator or reading the document tree and mapping it by hand. If neither works cleanly, come back to the owner before going further (JSON with comments is the fallback).
+Deliver: the loader for the format in design 5.2 (JSON with comments and trailing commas allowed, through the built-in parser and source generation, so it works under Native AOT like the other files), a JSON Schema file, and validation errors that name the file and line.
 
-Done when: CI's native smoke test loads a YAML definition on three targets, or the fallback has been agreed.
+Tests: every example in design 5.2 loads, comments included; a table of invalid files, each with its expected message; an unknown field is an error; the self-test loads one definition, so CI proves it in the native binary on three targets.
 
-### P2.4 Definitions (M)
-
-Deliver: the loader for the schema in design 5.2, a JSON Schema file, and validation errors that name the file and line.
-
-Tests: every example in design 5.2 loads; a table of invalid files, each with its expected message; an unknown field is an error.
-
-### P2.5 Tokens and resolver (L)
+### P2.4 Tokens and resolver (L)
 
 Deliver: `{home}`, `{appdata}`, `{localappdata}`, `{locallow}`, `{documents}`, `{xdg_*}`, `{flatpak:id}`, `{install_dir}`, `{sd_card}`, `{emudeck}`, `{steam_compatdata:id}`; `winpath` with `steam`, `steam_shortcut`, `lutris` and `path` prefixes.
 
 Tests: fixture directory trees and fixture `libraryfolders.vdf`, `shortcuts.vdf` and Lutris config files, including a game on a second Steam library and a missing SD card. No real Steam needed.
 
-### P2.6 `app add` (M)
+### P2.5 `app add` (M)
 
 Deliver: add an app from a definition. Resolve its install, show the roles with their sizes, write the mapping and device entries.
 
 Tests: end to end against fixture trees; an ambiguous install asks, never guesses; with `--json` it refuses instead of asking.
 
-### P2.7 Flatpak precheck (S)
+### P2.6 Flatpak precheck (S)
 
 Deliver: read the app's permissions; refuse with the exact `flatpak override --user` command when T is unreachable.
 
 Tests: parser tests on captured `flatpak info --show-permissions` output, including the five emulators read on 2026-11-12; live check on the Deck.
 
-### P2.8 Snapshots and the login-time check (M)
+### P2.7 Snapshots and the login-time check (M)
 
 Deliver:
 - On-demand and scheduled copy of T to the backup store, with retention.
@@ -382,6 +375,5 @@ Run before each phase exit. Record the date and tool version in the PR that clos
 | Hosted ARM64 runner unavailable or flaky | M0 | Fall back to cross-publishing for ARM64 and running tests under emulation; note the gap |
 | Fault matrix grows too slow | M5 | Small fixture trees; run steps in parallel per choice |
 | A sync tool syncs the tool's temporary files mid-write | M3 | Temporary names start with a dot and end `.tmp`; readers ignore them; rename is atomic |
-| YamlDotNet and Native AOT | P2.3 | Spike before building; fallback agreed in advance |
 | Process-name check misses a running app | M4, M7 | Names recorded per device and verified on hardware; output lists what was looked for |
 | Decky API changes with SteamOS | Phase 3 | Plugin holds no logic, so a break costs the UI only |
