@@ -1,4 +1,5 @@
 using SaveTether.Core.Backup;
+using SaveTether.Core.Definitions;
 using SaveTether.Core.Execution;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
@@ -169,6 +170,25 @@ public static class SelfTest
             Require(executor.Run(revert).Status == ExecutionStatus.Completed, "revert did not complete");
             Require(File.ReadAllText(Path.Combine(saves, "slot1.sav")) == "save data", "revert did not bring the save back");
             Require(executor.Recover().Status == ExecutionStatus.NothingToRecover, "a journal was left open");
+        });
+
+        yield return ("app definition", () =>
+        {
+            // JSON with comments and a trailing comma, read without reflection.
+            const string text = """
+                {
+                  // The self-test's own definition.
+                  "schema": 1, "id": "selftest", "name": "Self-test", "kind": "emulator",
+                  "installs": [ { "id": "portable", "os": ["windows", "linux"], "detect": { "dir": "{install_dir}/saves" }, "base": "{install_dir}" } ],
+                  "roles": [ { "id": "saves", "class": "save", "default": true, "path": "saves", "target": "saves", "entry_depth": 2 }, ],
+                }
+                """;
+            var loaded = DefinitionLoader.Parse(text, "selftest.jsonc");
+            Require(loaded.Definition is { Roles: [{ EntryDepth: 2 }] }, "the definition did not load: " + string.Join("; ", loaded.Errors));
+            Require(loaded.Definition!.Roles[0].MappingIdFor(loaded.Definition.Id) == mappingId, "the role did not give the expected mapping ID");
+
+            var broken = DefinitionLoader.Parse(text.Replace("\"emulator\"", "\"toaster\"", StringComparison.Ordinal), "selftest.jsonc");
+            Require(broken.Errors is [{ Line: 3 }], "a mistake in a definition was not reported with its line");
         });
 
         yield return ("directory link", () =>
