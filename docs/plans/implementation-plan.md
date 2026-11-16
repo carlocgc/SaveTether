@@ -290,6 +290,14 @@ Deliver: the loader for the format in design 5.2 (JSON with comments and trailin
 
 Tests: every example in design 5.2 loads, comments included; a table of invalid files, each with its expected message; an unknown field is an error; the self-test loads one definition, so CI proves it in the native binary on three targets.
 
+As built (differences from the list above, and decisions made while building):
+- The loader does not use source generation. It reads the file with the built-in tokenizer into a small tree that keeps line numbers, then validates that by hand. The built-in document model keeps no positions, and "name the file and line" needs them. No reflection is involved, so it runs in the native binary; the self-test proves it there.
+- All problems in a file are reported together, in line order, not only the first.
+- A test loads every `jsonc` block in design 5.2, so the examples in the design cannot drift from what the loader accepts.
+- Found by that test: the PPSSPP and Final Fantasy IX examples had role targets (`PSP/SAVEDATA`, `.`) that could never become valid mapping targets, which are exactly `<app>/<save folder>`. A role's target is now one folder name, and the examples are corrected.
+- The JSON Schema is `definitions/definition.schema.json`, kept in step with the loader by a test. No definition files are shipped yet; where they live and how the tool finds them is settled with `app add` (P2.5).
+- Tokens inside paths are not validated here. That belongs to the resolver (P2.4).
+
 ### P2.4 Tokens and resolver (L)
 
 Deliver: `{home}`, `{appdata}`, `{localappdata}`, `{locallow}`, `{documents}`, `{xdg_*}`, `{flatpak:id}`, `{install_dir}`, `{sd_card}`, `{emudeck}`, `{steam_compatdata:id}`; `winpath` with `steam`, `steam_shortcut`, `lutris` and `path` prefixes.

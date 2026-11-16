@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/carlocgc/SaveTether/definitions/definition.schema.json",
+  "title": "SaveTether app definition",
+  "description": "Where one app keeps its saves, on each way it can be installed. Files are JSON with comments and trailing commas, named <app id>.jsonc. This schema is for editors; SaveTether's own loader is what decides, and it also checks things a schema cannot (unique ids, install ids named under \"path\").",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "name", "kind", "installs", "roles"],
+  "properties": {
+    "schema": {
+      "description": "Format version of this file.",
+      "const": 1
+    },
+    "id": {
+      "description": "Stable app id. It becomes the first part of mapping ids and the folder under savetether/.",
+      "$ref": "#/$defs/id"
+    },
+    "name": {
+      "description": "The app's name as people know it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": ["emulator", "game"]
+    },
+    "installs": {
+      "description": "The ways this app can exist on a device. Detection picks one.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/install" }
+    },
+    "roles": {
+      "description": "The folders of this app that can be shared.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/role" }
+    },
+    "quirks": {
+      "description": "Things the owner should know about this app. Shown, not acted on.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "os": {
+      "enum": ["windows", "linux"]
+    },
+    "relativePath": {
+      "description": "A path with '/' between parts, relative to the install's base.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\:][^\\\\:]*$"
+    },
+    "install": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "os", "detect", "base"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "os": {
+          "description": "One system, or a list of them.",
+          "oneOf": [
+            { "$ref": "#/$defs/os" },
+            { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/os" } }
+          ]
+        },
+        "detect": {
+          "description": "How this install is recognised. Exactly one field.",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 1,
+          "properties": {
+            "dir": { "type": "string", "minLength": 1 },
+            "file": { "type": "string", "minLength": 1 },
+            "flatpak": { "type": "string", "minLength": 1 },
+            "steam": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "base": {
+          "description": "The folder role paths are relative to: a path with tokens, or a Windows path inside a Wine prefix.",
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["winpath", "prefix"],
+              "properties": {
+                "winpath": { "type": "string", "minLength": 1 },
+                "prefix": {
+                  "description": "Which Wine prefix, on Linux. Exactly one field.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "maxProperties": 1,
+                  "properties": {
+                    "steam": { "type": "integer", "minimum": 1 },
+                    "steam_shortcut": { "type": "string", "minLength": 1 },
+                    "lutris": { "type": "string", "minLength": 1 },
+                    "path": { "type": "string", "minLength": 1 }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "class", "default", "path", "target"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "class": {
+          "enum": ["save", "system", "state", "cache", "mod", "media"]
+        },
+        "default": {
+          "description": "Whether this role is on when the app is added.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The folder, relative to the install's base: one path for every install, or a path per install id.",
+          "oneOf": [
+            { "$ref": "#/$defs/relativePath" },
+            {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": { "$ref": "#/$defs/relativePath" }
+            }
+          ]
+        },
+        "target": {
+          "description": "One folder name under savetether/<app id>/.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[^./\\\\<>:\"|?*][^/\\\\<>:\"|?*]*$"
+        },
+        "entry_depth": {
+          "description": "How many folder levels down one game's saves sit. Default 1.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "ignore": {
+          "description": "Files a sync-tool integration may exclude. Unused by the core.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "notes": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

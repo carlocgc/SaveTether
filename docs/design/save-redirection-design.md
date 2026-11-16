@@ -314,7 +314,7 @@ Shape, abbreviated. Links are the only mechanism (5.13), so a role does not name
       "class": "save",            // or "system", "state", "cache", "mod", "media"
       "default": true,            // enabled when the app is added
       "path": "string",           // relative to base; or { "<install-id>": "string" } when installs differ
-      "target": "string",         // relative to <sync_root>/savetether/<app-id>/
+      "target": "string",         // one folder name under <sync_root>/savetether/<app-id>/
       "entry_depth": 1,           // optional: how many folder levels down one game's saves sit (5.13)
       "ignore": ["pattern"],      // optional: files a sync-tool integration may exclude (later; unused by the core)
       "notes": "string"           // optional
@@ -323,6 +323,19 @@ Shape, abbreviated. Links are the only mechanism (5.13), so a role does not name
   "quirks": ["string"]            // optional
 }
 ```
+
+Rules the loader enforces, beyond the shape:
+
+- The file is named after its app: `cemu.jsonc` holds `"id": "cemu"`.
+- An `id` (app, install or role) is lowercase letters, digits, `-` and `_`, with no dot, because `<app id>.<role id>` becomes the mapping ID.
+- A role's `target` is one folder name. With the app ID in front it becomes the mapping's target, which is exactly `<app>/<save folder>` (5.12), so it follows the same rules: no `/`, no leading dot, nothing Windows refuses. Two roles of one app may not share a target, ignoring letter case.
+- A role's `path` is relative to the install's base: forward slashes, no `.` or `..` parts, not absolute. As an object it gives a path per install ID; an install that is not named does not have that role.
+- `detect` has exactly one field, and so does `prefix`.
+- An unknown field is an error, as in every other SaveTether file, and so is a field given twice.
+
+Every problem in a file is reported, each as `file(line): message`, so a mistake in a hand-written file can be found. Tokens such as `{install_dir}` are not checked when a definition is loaded; that is the resolver's job (plan P2.4).
+
+`definitions/definition.schema.json` is a JSON Schema of the same format, for editors that offer completion and checking. The loader is what decides; a test keeps the two agreeing on which fields and values exist.
 
 **Cemu.** The one definition whose paths have been used on both of the owner's devices (M7 trial, 2026-11-12). Its save folder is why entry depth exists.
 
@@ -430,11 +443,11 @@ Shape, abbreviated. Links are the only mechanism (5.13), so a role does not name
     }
   ],
   "roles": [
-    { "id": "savedata", "class": "save",  "default": true,  "path": "SAVEDATA",     "target": "PSP/SAVEDATA" },
-    { "id": "states",   "class": "state", "default": true,  "path": "PPSSPP_STATE", "target": "PSP/PPSSPP_STATE" },
-    { "id": "textures", "class": "media", "default": false, "path": "TEXTURES",     "target": "PSP/TEXTURES" },
-    { "id": "shots",    "class": "media", "default": false, "path": "SCREENSHOT",   "target": "PSP/SCREENSHOT" },
-    { "id": "game",     "class": "mod",   "default": false, "path": "GAME",         "target": "PSP/GAME" }
+    { "id": "savedata", "class": "save",  "default": true,  "path": "SAVEDATA",     "target": "SAVEDATA" },
+    { "id": "states",   "class": "state", "default": true,  "path": "PPSSPP_STATE", "target": "PPSSPP_STATE" },
+    { "id": "textures", "class": "media", "default": false, "path": "TEXTURES",     "target": "TEXTURES" },
+    { "id": "shots",    "class": "media", "default": false, "path": "SCREENSHOT",   "target": "SCREENSHOT" },
+    { "id": "game",     "class": "mod",   "default": false, "path": "GAME",         "target": "GAME" }
   ]
 }
 ```
@@ -489,7 +502,7 @@ Shape, abbreviated. Links are the only mechanism (5.13), so a role does not name
     }
   ],
   "roles": [
-    { "id": "saves", "class": "save", "default": true, "path": "FINAL FANTASY IX", "target": "." }
+    { "id": "saves", "class": "save", "default": true, "path": "FINAL FANTASY IX", "target": "saves" }
   ],
   "quirks": ["Has Steam Cloud: out of scope."]
 }
