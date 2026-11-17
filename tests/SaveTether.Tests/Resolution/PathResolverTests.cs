@@ -215,9 +215,44 @@ public partial class PathResolverTests
         Assert.Equal(Path.Combine("/run/media/deck/SD Card/Emulation", "storage", "eden", "nand"), resolved);
     }
 
+    [Fact]
+    public void EmuDeck_root_as_the_decks_settings_file_writes_it()
+    {
+        // Lines 90, 91 and 95 of the owner's Deck's settings.sh, 2026-11-17: the quotes wrap only part of the value.
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.FileAt("""
+            emulationPath="/run/media/deck/5ff30fc3-e755-47f9-9c3b-d985a08dd5a8"/Emulation
+            romsPath="/run/media/deck/5ff30fc3-e755-47f9-9c3b-d985a08dd5a8"/Emulation/roms
+            storagePath="/run/media/deck/5ff30fc3-e755-47f9-9c3b-d985a08dd5a8"/Emulation/storage
+            """, "home", ".config", "EmuDeck", "settings.sh");
+
+        var resolved = Ok(new PathResolver(Linux(home)).Resolve("{emudeck}/storage", DeviceValues.None));
+
+        Assert.Equal(Path.Combine("/run/media/deck/5ff30fc3-e755-47f9-9c3b-d985a08dd5a8/Emulation", "storage"), resolved);
+    }
+
+    [Theory]
+    [InlineData("\"/a b\"/c", "/a b/c")]
+    [InlineData("'/a'\"/b\"/c", "/a/b/c")]
+    [InlineData("/a\\ b", "/a b")]
+    [InlineData("/a # comment", "/a")]
+    [InlineData("'$HOME/x'", "$HOME/x")]
+    public void Shell_words_are_unquoted_as_the_shell_reads_them(string word, string expected)
+    {
+        Assert.Equal(expected, ShellSettings.Unquote(word));
+    }
+
+    [Fact]
+    public void Home_inside_single_quotes_is_not_expanded()
+    {
+        Assert.Equal("$HOME/Emulation", ShellSettings.Find("emulationPath='$HOME/Emulation'\n", "emulationPath", "/home/deck"));
+    }
+
     [Theory]
     [InlineData("emulationPath=$HOME/Emulation")]
-    [InlineData("export emulationPath='${HOME}/Emulation'")]
+    [InlineData("export emulationPath=\"${HOME}/Emulation\"")]
+    [InlineData("emulationPath=\"$HOME\"/Emulation")]
     [InlineData("emulationPath=~/Emulation")]
     public void EmuDeck_root_under_home_is_expanded(string line)
     {

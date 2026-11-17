@@ -324,7 +324,9 @@ As built, P2.4b:
 - A small reader for Valve's KeyValues, text and binary (`Vdf`), written here rather than taken as a dependency. Binary 32-bit integers are read unsigned, as Steam uses shortcut app IDs.
 - Lutris configs are YAML; only the `game:` section's own `prefix:` line is read, so phase 2 still adds no dependency.
 - Fixtures cover a game on a second library (the SD card case), a game not listed but with a compatdata folder, a game listed twice, the pre-2021 `libraryfolders.vdf`, Flatpak Steam, a broken `libraryfolders.vdf`, a shortcut before its first run, two shortcuts with one name, and Lutris configs for other slugs, without a prefix, or in two files that disagree.
-- Not yet checked against a real Steam or Lutris install on Linux: the Deck has Steam, and Mint can have both installed for the check. Until then the file layouts are taken from how Steam and Lutris are known to write them.
+- Checked on the owner's Deck over SSH on 2026-11-17, with `app add --dry-run` and a throwaway definition, sync root and local folder (removed afterwards): `{emudeck}`, `{sd_card}`, `{steam_compatdata}` and the `steam` prefix (game 1426210, through `libraryfolders.vdf` with a second library on the SD card), `{flatpak:...}` and the `lutris` prefix (Flatpak Lutris) all resolved to the right folders. The `steam_shortcut` prefix read the binary `shortcuts.vdf` and found the shortcut's app ID; none of the shortcuts has a Proton prefix, so that last step was seen to refuse correctly but not to succeed.
+- Found on the Deck and fixed: EmuDeck writes `emulationPath="/run/media/deck/<uuid>"/Emulation`, with quotes around part of the value, which `{emudeck}` could not read; and Flatpak Lutris keeps its game configs in `~/.var/app/net.lutris.Lutris/config/lutris/games`, which was not searched. Also found: `init` failed when `.savetether` existed without its `devices` folder; shared files now create their folder.
+- Steam is reached through `~/.steam/steam`, a link to `~/.local/share/Steam`; paths are reported through that link. Native Lutris is still unchecked.
 
 ### P2.5 `app add` (M)
 
@@ -396,8 +398,8 @@ Run before each phase exit. Record the date and tool version in the PR that clos
 - [x] Apply is refused while the app is running. *2026-11-12: refused against a running process name (`explorer`), and went ahead with `--assume-closed`. Not yet tried with a real emulator's process name.*
 
 **Steam Deck**
-- [ ] Native binary runs from `~/.local/bin` in Desktop Mode and over SSH. *2026-11-12: ran in Desktop Mode from Konsole for the whole trial. Not yet run over SSH.*
-- [ ] Flatpak app: link inside `~/.var/app/<id>/` resolves inside the sandbox. *Not tried: Cemu on the Deck is not a Flatpak app. Permissions of five Flatpak emulators were read and all can reach the sync folder (section 1).*
+- [x] Native binary runs from `~/.local/bin` in Desktop Mode and over SSH. *2026-11-12: ran in Desktop Mode from Konsole for the whole trial. 2026-11-17: a newer native build ran over SSH (from `~/sttest`, not `~/.local/bin`): self-test, `app list`, `app add --dry-run` and `apply --dry-run`.*
+- [ ] Flatpak app: link inside `~/.var/app/<id>/` resolves inside the sandbox. *Not tried: Cemu on the Deck is not a Flatpak app. 2026-11-17: every emulator's permissions were read on the Deck; all but RPCS3 can write `~/Sync` (P2.6). A link has still not been tried inside a sandbox.*
 - [ ] Source on the SD card, sync root on internal storage.
 - [ ] Sync root unmounted or renamed: every command refuses.
 - [ ] From phase 2: a Proton prefix mapping; a Lutris mapping.

@@ -35,6 +35,21 @@ public class CliCommandTests
     }
 
     [Fact]
+    public void A_shared_folder_set_up_only_in_part_still_takes_devices_and_mappings()
+    {
+        // Found on the Deck: a .savetether folder holding only definitions, with no devices or mappings folder.
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        Directory.CreateDirectory(Path.Combine(pc.SyncRoot, "savetether", ".savetether", "definitions"));
+
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", "pc");
+        pc.Ok("map", "add", Id, "--target", "ppsspp/SAVEDATA", "--source", pc.Source);
+
+        Assert.True(File.Exists(Path.Combine(pc.SyncRoot, "savetether", ".savetether", "devices", "pc.json")));
+        Assert.True(File.Exists(Path.Combine(pc.SyncRoot, "savetether", ".savetether", "mappings", Id + ".json")));
+    }
+
+    [Fact]
     public void A_device_name_in_use_is_only_taken_over_when_told_to()
     {
         using var sandbox = new Sandbox();

@@ -93,16 +93,51 @@ internal static class ShellSettings
                 continue;
             }
 
-            var candidate = line[(name.Length + 1)..].Trim();
-            if (candidate.Length >= 2 && (candidate[0] == '"' || candidate[0] == '\'') && candidate[^1] == candidate[0])
-            {
-                candidate = candidate[1..^1];
-            }
+            var word = line[(name.Length + 1)..];
+            var candidate = Unquote(word);
 
-            value = ExpandHome(candidate, home);
+            // The shell expands $HOME and ~ unless they are inside single quotes.
+            value = word.StartsWith('\'') ? candidate : ExpandHome(candidate, home);
         }
 
         return value is { Length: > 0 } ? value : null;
+    }
+
+    /// <summary>
+    /// One shell word with its quoting removed, as the shell would read it: quotes may wrap any part,
+    /// as in "/run/media/deck/x"/Emulation, which EmuDeck writes. Stops at unquoted white space.
+    /// </summary>
+    internal static string Unquote(string word)
+    {
+        var text = new StringBuilder(word.Length);
+        var quote = '\0';
+        for (var i = 0; i < word.Length; i++)
+        {
+            var c = word[i];
+            if (quote == '\0' && char.IsWhiteSpace(c))
+            {
+                break;
+            }
+
+            if (quote == '\0' && c is '"' or '\'')
+            {
+                quote = c;
+            }
+            else if (c == quote)
+            {
+                quote = '\0';
+            }
+            else if (c == '\\' && quote != '\'' && i + 1 < word.Length)
+            {
+                text.Append(word[++i]);
+            }
+            else
+            {
+                text.Append(c);
+            }
+        }
+
+        return text.ToString();
     }
 
     private static string ExpandHome(string value, string home)
