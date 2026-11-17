@@ -412,7 +412,9 @@ internal static class CliApp
         {
             // The jobs run this very binary, so it must be the installed one, not "dotnet" running a build.
             var executable = environment.Executable;
-            if (executable is null || !Path.GetFileNameWithoutExtension(executable).Equals("savetether", StringComparison.OrdinalIgnoreCase))
+            // Split on both separators: the schedule's own platform may differ from the one running (in tests).
+            var name = executable?.Split('/', '\\')[^1];
+            if (executable is null || name is null || !Path.GetFileNameWithoutExtension(name).Equals("savetether", StringComparison.OrdinalIgnoreCase))
             {
                 return Failed(ExitRefused, $"'schedule install' must be run from the installed savetether binary, so the jobs can run it later; this is '{executable}'.");
             }
