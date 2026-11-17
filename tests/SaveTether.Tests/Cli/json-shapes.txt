@@ -241,6 +241,14 @@ $.mapping: object
 $.schema: number
 $: object
 
+## operation-running
+$.command: string
+$.error: string
+$.exit_code: number
+$.problem: string
+$.schema: number
+$: object
+
 ## recover
 $.command: string
 $.exit_code: number

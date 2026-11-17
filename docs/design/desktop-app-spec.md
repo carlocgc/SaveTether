@@ -177,10 +177,11 @@ A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmati
 
 Plan section 5 lists the lock as its own item; this is the behaviour both front ends rely on.
 
-- File `operation.lock` in the local folder, opened with an exclusive share mode for the length of the operation. The OS releases it when the process ends, however it ends, so a killed process never leaves a lock that blocks. (.NET implements `FileShare.None` on Linux with an advisory `flock`, which is enough because every party is SaveTether; to be proved by the lock's tests.)
-- While held, the file contains one line of JSON: process ID, front end (`cli`, `gui`), command, start time. Read by the other process only for banner B6's text.
-- Taken by every command that writes: `init`, `map add`, `map remove`, `app add`, `apply`, `revert`, `backup restore`, `recover`, the Flatpak grant and revoke. Not by `status`, `backup list`, `app list` or a dry run.
-- CLI refusal: exit 1, "Another SaveTether operation is running (<front end> <command>, started <time>)." `--json`: a refusal with kind `operation-running`.
+- File `operation.lock` in the local folder, opened with no sharing (`FileShare.None`) for the length of the operation. The OS releases it when the process ends, however it ends, so a killed process never leaves a lock that blocks. On Linux .NET takes an exclusive advisory `flock` for `FileShare.None`, which is enough because every party is SaveTether. Any other share mode takes a *shared* `flock`, which would let two processes in, so the mode must stay `None`. Proved by the lock's tests against a second process: PowerShell on Windows, `flock(1)` on Linux.
+- The lock file is never deleted: deleting it while it is held would let another process lock a new file, and two operations would run.
+- Who holds the lock goes in a separate file, `operation-holder.json` (schema, process ID, front end `cli` or `gui`, command, start time), because a file opened with no sharing cannot be read by another process. It is written just after the lock is taken and left in place afterwards, so a refusal names the holder only while that process is still running; otherwise the refusal does not name one.
+- The CLI takes it for every command that writes: `init`, `map add`, `map remove`, `app add`, `apply` (including the Flatpak grant and revoke), `revert`, `backup restore`, `recover`. Not for `status`, `backup list`, `app list` or a dry run. It is taken before the journal is checked, since another process's running operation has its journal open. `init` on a device never set up takes no lock: there is no local folder yet, and taking the lock would create one, which a refused `init` must not leave behind. Two first-time `init`s at the same instant are not guarded against.
+- CLI refusal: exit 1, "Another SaveTether operation is running (<front end> <command>, process <id>, started <time>). Nothing was changed. Try again when it has finished." `--json`: `"problem": "operation-running"`. Every store refusal now carries its kind in `problem`, so scripts can tell them apart.
 
 ### 9.2 Apply
 
@@ -315,6 +316,8 @@ These come before or with the app, each its own small PR.
 
    *Built 2026-11-17* as `IProgress<StepProgress>`, where `StepProgress` carries the step, its index, the step count, and Started or Done, so the window can show the current step as well as ticking finished ones. Each report follows the journal's record of the same thing. A recovery that carries an operation through first reports the steps already done, then the rest as they run; a recovery that undoes reports nothing, since undoing does not run the plan's steps. The callback runs on the executor's thread and must not throw: a throw is treated like a crash, leaving the operation to `recover`. The app passes a `Progress<T>`, which posts to the UI thread and does not throw.
 4. **Operation lock** (9.1), in the core, used by the CLI and the app.
+
+   *Built 2026-11-17* as `OperationLock` in the core's storage layer, used by the CLI. Section 9.1 describes what was built, including the holder file, the `init` exception and the new `problem` field in `--json`. The app will take the same lock.
 5. **Autostart check** in `status` (section 11), once the app writes entries.
 6. **Facts as fields.** Where an app sentence above needs a fact the core only has inside a message (not-enough-space's sizes, app-running's process names, a conflict's other folder), the refusal carries it as a field. Found while writing the app's texts; additive.
 7. **Sync folder change guarded.** `init` with a sync root other than the one in `bootstrap.json` is refused while any mapping is applied on this device: its link points into the old sync folder, and the device would lose track of it. The refusal names the mappings to revert first. Applies to the CLI and the app alike (decision 9).

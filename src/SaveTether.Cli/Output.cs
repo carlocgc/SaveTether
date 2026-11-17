@@ -6,6 +6,7 @@ using SaveTether.Core.Definitions;
 using SaveTether.Core.Health;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
+using SaveTether.Core.Storage;
 
 namespace SaveTether.Cli;
 
@@ -83,6 +84,12 @@ internal sealed record CliOutput
 
     /// <summary>Why the command as a whole did not run. Per-operation reasons are in <see cref="Operations"/>.</summary>
     public string? Error { get; init; }
+
+    /// <summary>
+    /// When the command was refused by one of the core's store checks, which kind it was, such as
+    /// <c>operation-running</c>. Absent otherwise.
+    /// </summary>
+    public StoreProblem? Problem { get; init; }
 
     public string? Message { get; init; }
 
