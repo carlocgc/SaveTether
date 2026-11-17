@@ -361,13 +361,15 @@ public sealed partial class Workspace
     }
 
     /// <summary>Runs a plan made by one of the Plan methods.</summary>
-    public ExecutionResult Run(Plan plan) => NewExecutor(ReadOwnDevice()).Run(plan);
+    /// <param name="progress">Told as each step starts and finishes; see <see cref="Executor.Run"/>.</param>
+    public ExecutionResult Run(Plan plan, IProgress<StepProgress>? progress = null) => NewExecutor(ReadOwnDevice()).Run(plan, progress);
 
     /// <summary>"recover". Works without the backup location and without checking who owns the device name.</summary>
-    public ExecutionResult Recover()
+    /// <param name="progress">Told about the steps when the operation is carried through; see <see cref="Executor.Recover"/>.</param>
+    public ExecutionResult Recover(IProgress<StepProgress>? progress = null)
     {
         var device = Shared.IsInitialized ? Shared.TryReadDevice(DeviceName) : null;
-        return NewExecutor(device).Recover();
+        return NewExecutor(device).Recover(progress);
     }
 
     /// <summary>"backup list".</summary>
