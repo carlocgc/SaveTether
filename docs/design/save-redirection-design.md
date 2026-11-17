@@ -851,7 +851,7 @@ When to revisit: an app that matters keeps showing as Replaced after being linke
 
 ### 5.14 Desktop app: window and tray icon (phase 3)
 
-Status: direction agreed with the owner on 2026-11-17. Not yet specified to the level of 5.12; phase 3 starts by doing that. The toolkit is not decided (see the end of this section).
+Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approved the same day. Not yet specified to the level of 5.12; phase 3 starts by doing that.
 
 **Why.** SaveTether is a redirection tool. Most people will start it from a desktop, not a terminal, and what they want day to day is reassurance that their links are still healthy. So the desktop app is the front end most people use, and the CLI stays the cross-platform core: the test harness, the Decky backend, and the entry point for scripts, SSH sessions and LLM agents.
 
@@ -882,9 +882,9 @@ Status: direction agreed with the owner on 2026-11-17. Not yet specified to the 
 - Updating is replacing the files in place. On Windows the running app locks its `.exe`, so the app must be quit first; the app should say so if an update is attempted while it runs.
 - An installer, code signing (SmartScreen warns on unsigned Windows binaries), winget or Scoop manifests, and an AppImage belong to phase 5, when other people use it. Flatpak stays ruled out (3.3).
 
-**Toolkit: to be decided by the owner.** .NET has no built-in cross-platform tray icon or windowing.
+**Toolkit: Avalonia, approved by the owner on 2026-11-17** after a trial on Windows, Mint and the Deck's Desktop Mode (plan section 5 has the results). .NET has no built-in cross-platform tray icon or windowing; the options were:
 
-- **Avalonia** (MIT) has a tray icon on Windows and on Linux (StatusNotifierItem over D-Bus), real windows, keyboard focus handling, and Native AOT support. It was the GUI choice in 3.2. It is a large dependency: it brings native Skia and HarfBuzz libraries, so the app is tens of MB. Under the project rules it needs the owner's approval.
+- **Avalonia** (MIT) has a tray icon on Windows and on Linux (StatusNotifierItem over D-Bus), real windows, keyboard focus handling, and Native AOT support. It was the GUI choice in 3.2. It is a large dependency: it brings native Skia and HarfBuzz libraries, so the app is about 33 MB in four files. It draws its own controls, so the window's styling is unrestricted; the tray icon's own menu is a plain system menu.
 - **Hand-written per platform**: the Win32 tray and window APIs on Windows, and the StatusNotifierItem protocol on Linux, which needs a D-Bus library or a hand-written client, plus a separate window layer on each. Far more code to write and maintain.
 - On Linux the tray icon shows on KDE (the Deck's Desktop Mode) and Cinnamon (Mint); stock GNOME needs an extension. The window works everywhere.
 - Section 6 already lists the check to make first: a hello-world Avalonia AppImage running under gamescope in Game Mode with Steam Input keyboard mapping.
@@ -913,7 +913,7 @@ Status: direction agreed with the owner on 2026-11-17. Not yet specified to the 
 | Eden under EmuDeck uses `storage/eden` or still `storage/yuzu` | `ls` on the Deck |
 | Yuzu-family save paths embed a profile ID stored under `nand/system`, which is why that folder must be synced | inspect `nand/user/save` on both devices |
 | .NET's recursive directory delete does not descend junctions | irrelevant by design (invariant 1 bans it), but the canary test proves the tool's own routine |
-| Avalonia runs acceptably under gamescope in Game Mode with Steam Input keyboard mapping | a hello-world AppImage on the Deck before committing to a GUI |
+| Avalonia runs acceptably under gamescope in Game Mode with Steam Input keyboard mapping | the trial binary at `~/sttest-spike` on the Deck, added as a non-Steam game (plan section 5). Desktop Mode was checked on 2026-11-17 |
 | Run-time download of the Ludusavi manifest by a free tool is within PCGamingWiki's terms | ask Ludusavi's maintainer; read the licence deed for the version PCGamingWiki uses |
 | Signing prices and eligibility | each provider's current pricing page |
 | Flash games store saves under a `#SharedObjects` folder whose first subfolder has a random name per install, so the same game has a different path on each device. The resolver would need a wildcard step, and Ruffle or a standalone projector may store them elsewhere again | look at where two of your Flash games save on both devices |
