@@ -195,9 +195,30 @@ internal static class FlatpakPermissions
         return result;
     }
 
-    /// <summary>True when some entry gives write access to <paramref name="path"/>.</summary>
-    public static bool CanWrite(IReadOnlyDictionary<string, bool> filesystems, string path, string home, Func<string, string?> getVariable) =>
-        filesystems.Any(pair => !pair.Value && Covers(pair.Key, path, home, getVariable));
+    /// <summary>
+    /// True when the entry that decides <paramref name="path"/> gives write access. Where several
+    /// entries cover it, the most specific one decides, as a deeper mount is placed over a
+    /// shallower one: "host;home:ro" leaves home read-only. When unsure, this reading refuses
+    /// rather than allows.
+    /// </summary>
+    public static bool CanWrite(IReadOnlyDictionary<string, bool> filesystems, string path, string home, Func<string, string?> getVariable)
+    {
+        var covering = filesystems
+            .Select(pair => (Root: CoveredRoot(pair.Key, path, home, getVariable), ReadOnly: pair.Value))
+            .Where(c => c.Root is not null)
+            .Select(c => (Depth: Depth(c.Root!), c.ReadOnly))
+            .ToList();
+        if (covering.Count == 0)
+        {
+            return false;
+        }
+
+        var deepest = covering.Max(c => c.Depth);
+        return covering.Any(c => c.Depth == deepest && !c.ReadOnly);
+    }
+
+    private static int Depth(string root) =>
+        PathRules.Normalize(root).Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries).Length;
 
     private static (string Entry, bool ReadOnly) SplitMode(string item)
     {
@@ -212,27 +233,30 @@ internal static class FlatpakPermissions
         return (item, false);
     }
 
-    private static bool Covers(string entry, string path, string home, Func<string, string?> getVariable)
+    /// <summary>The folder an entry grants when that folder holds <paramref name="path"/>; null when it does not cover it.</summary>
+    private static string? CoveredRoot(string entry, string path, string home, Func<string, string?> getVariable)
     {
+        string? IfInside(string root) => PathRules.IsSameOrInside(path, root) ? root : null;
+
         switch (entry)
         {
             case "host":
-                return !HostReserved.Any(reserved => PathRules.IsSameOrInside(path, reserved));
+                return HostReserved.Any(reserved => PathRules.IsSameOrInside(path, reserved)) ? null : Path.GetPathRoot(PathRules.Normalize(path));
             case "host-os" or "host-etc" or "host-root":
-                return false;
+                return null;
             case "home" or "~":
-                return PathRules.IsSameOrInside(path, home);
+                return IfInside(home);
         }
 
         if (entry.StartsWith("~/", StringComparison.Ordinal))
         {
-            return PathRules.IsSameOrInside(path, Path.Combine(home, entry[2..]));
+            return IfInside(Path.Combine(home, entry[2..]));
         }
 
         // Flatpak paths start with '/'; the second test only matters when tests run on Windows.
         if (entry.StartsWith('/') || Path.IsPathFullyQualified(entry))
         {
-            return PathRules.IsSameOrInside(path, entry);
+            return IfInside(entry);
         }
 
         if (entry.StartsWith("xdg-", StringComparison.Ordinal))
@@ -240,11 +264,10 @@ internal static class FlatpakPermissions
             var slash = entry.IndexOf('/', StringComparison.Ordinal);
             var name = slash < 0 ? entry : entry[..slash];
             var rest = slash < 0 ? null : entry[(slash + 1)..];
-            return XdgFolder(name, home, getVariable) is { } folder
-                && PathRules.IsSameOrInside(path, rest is null ? folder : Path.Combine(folder, rest));
+            return XdgFolder(name, home, getVariable) is { } folder ? IfInside(rest is null ? folder : Path.Combine(folder, rest)) : null;
         }
 
-        return false;
+        return null;
     }
 
     /// <summary>The host folder an xdg-* entry names; null for those that are not under the user's control (xdg-run).</summary>

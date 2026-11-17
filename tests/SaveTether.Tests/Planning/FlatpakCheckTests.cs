@@ -84,6 +84,34 @@ public class FlatpakCheckTests
         Assert.Equal(expected, CanWrite(permissions, Target));
     }
 
+    /// <summary>
+    /// The owner's Deck, read on 2026-11-17 with "flatpak info --show-permissions": EmuDeck's
+    /// user overrides of "host" have replaced Flathub's "host:ro".
+    /// </summary>
+    [Theory]
+    [InlineData("/run/media/mmcblk0p1/Emulation/storage/xemu;host;", true)]
+    [InlineData("xdg-run/app/com.discordapp.Discord:create;xdg-config/kdeglobals:ro;xdg-run/app/com.discordapp.DiscordCanary:create;host;xdg-run/gamescope-0:ro;", true)]
+    [InlineData("host;xdg-run/gamescope-0:ro;", true)]
+    [InlineData("home;xdg-config/kdeglobals:ro;host;", true)]
+    [InlineData("xdg-run/app/com.discordapp.Discord:ro;xdg-config/kdeglobals:ro;host;", true)]
+    [InlineData("xdg-run/pipewire-0;xdg-run/app/com.discordapp.Discord:create;xdg-config/kdeglobals:ro;/run/udev:ro;xdg-run/gamescope-0:ro;host;xdg-run/discord-ipc-0:create;", true)]
+    [InlineData("home:ro;/media;xdg-config/kdeglobals:ro;/run/media;host;xdg-run/app/com.discordapp.Discord:create;", false)]
+    public void The_decks_emulators_can_write_the_sync_folder_except_rpcs3(string filesystems, bool expected)
+    {
+        // RPCS3 has both "host" and "home:ro". The more specific entry decides, so home is read-only;
+        // if Flatpak let "host" win instead, this only refuses where it could have allowed.
+        Assert.Equal(expected, CanWrite(Context(filesystems), Target));
+    }
+
+    [Fact]
+    public void The_more_specific_entry_decides()
+    {
+        Assert.False(CanWrite(Context("host;home:ro;"), Target));
+        Assert.True(CanWrite(Context("host;home:ro;~/Sync;"), Target));
+        Assert.True(CanWrite(Context("home:ro;home;"), Target));
+        Assert.False(CanWrite(Context("home;~/Sync:ro;"), Target));
+    }
+
     [Fact]
     public void An_override_granting_the_folder_makes_it_writable()
     {
