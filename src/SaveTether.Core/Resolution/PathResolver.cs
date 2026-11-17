@@ -211,9 +211,8 @@ public sealed class PathResolver
                 return LinuxOnly(name) ?? ResolveEmuDeck();
 
             case "steam_compatdata":
-                return LinuxOnly(name) ?? ResolveResult.Fail(
-                    ResolveProblem.NotYetSupported,
-                    "{steam_compatdata:...} is not resolved by this version yet.");
+                return LinuxOnly(name) ?? Steam().ResolveCompatData(
+                    ulong.Parse(argument!, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture));
 
             case "install_dir":
                 return values.InstallDir is { Length: > 0 } dir
@@ -243,6 +242,8 @@ public sealed class PathResolver
             ? ResolveResult.Ok(folder)
             : ResolveResult.Fail(ResolveProblem.Missing, $"Windows did not report a folder for {{{name}}}.");
     }
+
+    private SteamLibraries Steam() => new(_env.Home, Xdg("XDG_DATA_HOME", Path.Combine(".local", "share")));
 
     private ResolveResult? LinuxOnly(string name) =>
         _env.Os == TargetOs.Linux
@@ -322,12 +323,27 @@ public sealed class PathResolver
                 ResolveProblem.NeedsValue,
                 "A Windows path on Linux needs a Wine prefix: the definition names none and none is set for this device.");
         }
+        else if (prefix.Steam is { } appId)
+        {
+            root = appId > 0
+                ? Steam().ResolveCompatData((ulong)appId)
+                : ResolveResult.Fail(ResolveProblem.Invalid, $"{appId} is not a Steam app ID.");
+        }
+        else if (prefix.SteamShortcut is { } shortcut)
+        {
+            root = Steam().ResolveShortcutCompatData(shortcut);
+        }
+        else if (prefix.Lutris is { } slug)
+        {
+            root = new LutrisGames(_env.Home, Xdg("XDG_DATA_HOME", Path.Combine(".local", "share"))).ResolvePrefix(slug);
+            if (root.IsResolved)
+            {
+                root = RequireAbsolute(root.Path!, $"The Lutris prefix for \"{slug}\"");
+            }
+        }
         else
         {
-            var kind = prefix.Steam is not null ? "steam" : prefix.SteamShortcut is not null ? "steam_shortcut" : "lutris";
-            return ResolveResult.Fail(
-                ResolveProblem.NotYetSupported,
-                $"A \"{kind}\" prefix is not resolved by this version yet. Set the Wine prefix for this device instead.");
+            return ResolveResult.Fail(ResolveProblem.Invalid, "The prefix names no kind.");
         }
 
         if (!root.IsResolved)

@@ -110,12 +110,6 @@ public partial class PathResolverTests
         Fails(new PathResolver(Windows(@"C:\Users\owner")).Resolve(template, DeviceValues.None), ResolveProblem.NotOnThisOs, "only on Linux");
     }
 
-    [Fact]
-    public void Steam_compatdata_is_not_resolved_yet()
-    {
-        Fails(new PathResolver(Linux("/home/deck")).Resolve("{steam_compatdata:377840}/pfx", DeviceValues.None), ResolveProblem.NotYetSupported);
-    }
-
     // ---- Windows ----
 
     [Fact]
@@ -392,9 +386,9 @@ public partial class PathResolverTests
 
         Fails(resolver.ResolveWinPath("{locallow}/x", null, DeviceValues.None), ResolveProblem.NeedsValue, "Wine prefix");
         Fails(resolver.ResolveWinPath("{locallow}/x", null, new DeviceValues(WinePrefix: notPrefix)), ResolveProblem.Missing, "drive_c");
-        Fails(resolver.ResolveWinPath("{locallow}/x", new PrefixRule(Steam: 377840), DeviceValues.None), ResolveProblem.NotYetSupported, "\"steam\"");
-        Fails(resolver.ResolveWinPath("{locallow}/x", new PrefixRule(SteamShortcut: "Game"), DeviceValues.None), ResolveProblem.NotYetSupported, "\"steam_shortcut\"");
-        Fails(resolver.ResolveWinPath("{locallow}/x", new PrefixRule(Lutris: "game"), DeviceValues.None), ResolveProblem.NotYetSupported, "\"lutris\"");
+        Fails(resolver.ResolveWinPath("{locallow}/x", new PrefixRule(Steam: 377840), DeviceValues.None), ResolveProblem.Missing, "Steam was not found");
+        Fails(resolver.ResolveWinPath("{locallow}/x", new PrefixRule(SteamShortcut: "Game"), DeviceValues.None), ResolveProblem.Missing, "No Steam shortcut");
+        Fails(resolver.ResolveWinPath("{locallow}/x", new PrefixRule(Lutris: "game"), DeviceValues.None), ResolveProblem.Missing, "No Lutris game config");
     }
 
     [Fact]
