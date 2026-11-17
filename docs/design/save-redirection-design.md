@@ -336,6 +336,14 @@ Rules the loader enforces, beyond the shape:
 - `detect` has exactly one field, and so does `prefix`.
 - An unknown field is an error, as in every other SaveTether file, and so is a field given twice.
 
+**Naming.** Agreed with the owner on 2026-11-17, after the first Lutris definition was called `rondo2`, after a script folder. A definition has three kinds of name, and only one of them is the executable's:
+
+- `id`: a short slug of the real title, in lowercase words joined by `-`: `rondo-duo`, not `rondo2` or `ron2`. It names the definition file, the app's folder in the sync root (`savetether/<id>/`) and every mapping ID (`<id>.<role>`), so it is what people search the repository for and what they type; keep it short enough to type, and do not change it once devices use it, since a new ID is a new mapping. Where one thing is shared by several games, the ID names that thing, not a game: `flashplayer` for Flash Player's folder, which holds every Flash game's saves.
+- `name`: the full official title as the publisher writes it, for example `Rondo Duo -Yoake no Fortissimo- Punyu Puri ff`. Free text; it is what people read.
+- Process names: the executables, used only to refuse `apply` while the app runs (5.12). They are set with `map add --process` for now; definitions cannot carry them yet (plan, phase 2 gaps).
+
+For the definitions repository (phase 5), alternative titles and store identifiers (Steam app ID, Lutris slug) would let a search find a game by any of its names. They need fields in the format first, since the loader refuses unknown ones.
+
 Every problem in a file is reported, each as `file(line): message`, so a mistake in a hand-written file can be found. Tokens such as `{install_dir}` are not checked when a definition is loaded; that is the resolver's job (plan P2.4).
 
 **Resolving paths.** The resolver turns a path from a definition into an absolute path on one device. It reads, never writes.
