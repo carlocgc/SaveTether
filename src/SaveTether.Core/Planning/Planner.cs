@@ -244,7 +244,7 @@ public static class Planner
             Fail(
                 PrecheckKind.SandboxCannotReach,
                 $"The save folder is inside the Flatpak app {sandbox.AppId}, whose sandbox cannot write {string.Join(" or ", sandbox.Unreachable.Select(p => $"'{p}'"))}, " +
-                $"so the link would not work inside the app. Allow it with:\n  {sandbox.FixCommand}\nThen run apply again.");
+                $"so the link would not work inside the app. Add --grant-sandbox to let SaveTether allow it (only that folder, for this user), or run:\n  {sandbox.FixCommand}\nthen apply again.");
         }
 
         // An existing link is only verified and recorded, so a running app and backups do not matter.

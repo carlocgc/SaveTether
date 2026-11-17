@@ -3,30 +3,44 @@ using SaveTether.Core.FileSystem;
 
 namespace SaveTether.Core.Planning;
 
-/// <summary>Reads a Flatpak app's permissions, as "flatpak info --show-permissions &lt;id&gt;" prints them.</summary>
-public interface IFlatpakInfo
+/// <summary>The flatpak command, as far as SaveTether uses it.</summary>
+public interface IFlatpak
 {
-    /// <summary>The permissions text, or null when they could not be read (no flatpak command, app not installed).</summary>
+    /// <summary>"flatpak info --show-permissions &lt;id&gt;", or null when it could not be read (no flatpak command, app not installed).</summary>
     string? ShowPermissions(string appId);
+
+    /// <summary>"flatpak override --user --show &lt;id&gt;": this user's overrides only. Null when they could not be read.</summary>
+    string? ShowUserOverrides(string appId);
+
+    /// <summary>"flatpak override --user &lt;options&gt; &lt;id&gt;". True when it succeeded.</summary>
+    bool OverrideForUser(string appId, IReadOnlyList<string> options);
 }
 
-/// <summary>Runs the flatpak command. Reads only.</summary>
-public sealed class SystemFlatpakInfo : IFlatpakInfo
+/// <summary>Runs the flatpak command.</summary>
+public sealed class SystemFlatpak : IFlatpak
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
-    public string? ShowPermissions(string appId)
+    public string? ShowPermissions(string appId) => Run(["info", "--show-permissions", appId]);
+
+    public string? ShowUserOverrides(string appId) => Run(["override", "--user", "--show", appId]);
+
+    public bool OverrideForUser(string appId, IReadOnlyList<string> options) =>
+        Run(["override", "--user", .. options, appId]) is not null;
+
+    /// <summary>Standard output when the command exits 0; null when it cannot be run, fails or hangs.</summary>
+    private static string? Run(IReadOnlyList<string> arguments)
     {
-        ArgumentNullException.ThrowIfNull(appId);
         var start = new ProcessStartInfo("flatpak")
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        start.ArgumentList.Add("info");
-        start.ArgumentList.Add("--show-permissions");
-        start.ArgumentList.Add(appId);
+        foreach (var argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
 
         try
         {
@@ -61,32 +75,39 @@ public sealed class SystemFlatpakInfo : IFlatpakInfo
 /// <param name="AppId">The Flatpak app whose folder holds the save folder.</param>
 /// <param name="CanReach">True or false when the permissions were read; null when they could not be.</param>
 /// <param name="Unreachable">The paths the sandbox cannot write, when <paramref name="CanReach"/> is false.</param>
-/// <param name="FixCommand">The command that grants access, when <paramref name="CanReach"/> is false.</param>
-public sealed record SandboxReach(string AppId, bool? CanReach, IReadOnlyList<string> Unreachable, string? FixCommand);
+/// <param name="Grants">The folders to grant: the savetether folder, in each form that is missing.</param>
+/// <param name="FixCommand">The command that grants them, when <paramref name="CanReach"/> is false.</param>
+public sealed record SandboxReach(
+    string AppId, bool? CanReach, IReadOnlyList<string> Unreachable, IReadOnlyList<string> Grants, string? FixCommand);
+
+/// <summary>A grant of the savetether folder found in a Flatpak app's user overrides.</summary>
+/// <param name="RemoveCommand">The command that removes it.</param>
+public sealed record SandboxGrant(string AppId, IReadOnlyList<string> Paths, string RemoveCommand);
 
 /// <summary>
 /// The Flatpak precheck (plan P2.6): for a save folder inside a Flatpak app's folder, reads the
-/// app's filesystem permissions and works out whether it can write the shared folder.
+/// app's filesystem permissions and works out whether it can write the shared folder. It can also
+/// grant that one folder, and take the grant back, through "flatpak override --user".
 /// </summary>
 public sealed class FlatpakCheck
 {
-    private readonly IFlatpakInfo _info;
+    private readonly IFlatpak _flatpak;
     private readonly string _home;
     private readonly Func<string, string?> _getVariable;
 
-    public FlatpakCheck(IFlatpakInfo info, string home, Func<string, string?> getVariable)
+    public FlatpakCheck(IFlatpak flatpak, string home, Func<string, string?> getVariable)
     {
-        ArgumentNullException.ThrowIfNull(info);
+        ArgumentNullException.ThrowIfNull(flatpak);
         ArgumentNullException.ThrowIfNull(home);
         ArgumentNullException.ThrowIfNull(getVariable);
-        _info = info;
+        _flatpak = flatpak;
         _home = home;
         _getVariable = getVariable;
     }
 
     /// <summary>The check for this machine: on Linux it runs the flatpak command; elsewhere there are no Flatpaks.</summary>
     public static FlatpakCheck? ForSystem() => OperatingSystem.IsLinux()
-        ? new FlatpakCheck(new SystemFlatpakInfo(), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable)
+        ? new FlatpakCheck(new SystemFlatpak(), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable)
         : null;
 
     /// <summary>The Flatpak app whose folder (~/.var/app/&lt;id&gt;) holds <paramref name="source"/>, or null.</summary>
@@ -117,10 +138,10 @@ public sealed class FlatpakCheck
             return null;
         }
 
-        var text = _info.ShowPermissions(appId);
+        var text = _flatpak.ShowPermissions(appId);
         if (text is null)
         {
-            return new SandboxReach(appId, null, [], null);
+            return new SandboxReach(appId, null, [], [], null);
         }
 
         var needed = new List<(string Target, string Grant)> { (target, dataRoot) };
@@ -133,13 +154,52 @@ public sealed class FlatpakCheck
         var missing = needed.Where(n => !FlatpakPermissions.CanWrite(filesystems, n.Target, _home, _getVariable)).ToList();
         if (missing.Count == 0)
         {
-            return new SandboxReach(appId, true, [], null);
+            return new SandboxReach(appId, true, [], [], null);
         }
 
-        var command = "flatpak override --user " +
-            string.Join(" ", missing.Select(m => "--filesystem=" + Quote(m.Grant))) + " " + appId;
-        return new SandboxReach(appId, false, [.. missing.Select(m => m.Target)], command);
+        var grants = missing.Select(m => m.Grant).Distinct(StringComparer.Ordinal).ToList();
+        return new SandboxReach(appId, false, [.. missing.Select(m => m.Target)], grants, Command(appId, "--filesystem=", grants));
     }
+
+    /// <summary>
+    /// Grants the folders <paramref name="reach"/> lists, read-write, for this user only. It changes
+    /// that app's settings, so it is only called once the owner has agreed. True when it succeeded.
+    /// </summary>
+    public bool Grant(SandboxReach reach)
+    {
+        ArgumentNullException.ThrowIfNull(reach);
+        return reach.Grants.Count > 0 && _flatpak.OverrideForUser(reach.AppId, [.. reach.Grants.Select(g => "--filesystem=" + g)]);
+    }
+
+    /// <summary>
+    /// The grant of the savetether folder (in either form) in the user overrides of the Flatpak app
+    /// that holds <paramref name="source"/>; null when there is none. Broader grants such as EmuDeck's
+    /// "host" are not SaveTether's and are never reported here.
+    /// </summary>
+    public SandboxGrant? FindGrant(string source, string dataRoot, string resolvedDataRoot)
+    {
+        if (AppOwning(source) is not { } appId || _flatpak.ShowUserOverrides(appId) is not { } text)
+        {
+            return null;
+        }
+
+        var overrides = FlatpakPermissions.ParseFilesystems(text);
+        var paths = new[] { dataRoot, resolvedDataRoot }
+            .Distinct(StringComparer.Ordinal)
+            .Where(overrides.ContainsKey)
+            .ToList();
+        return paths.Count == 0 ? null : new SandboxGrant(appId, paths, Command(appId, "--nofilesystem=", paths));
+    }
+
+    /// <summary>Takes a grant back with --nofilesystem, which leaves the app's other overrides alone. True when it succeeded.</summary>
+    public bool Revoke(SandboxGrant grant)
+    {
+        ArgumentNullException.ThrowIfNull(grant);
+        return _flatpak.OverrideForUser(grant.AppId, [.. grant.Paths.Select(p => "--nofilesystem=" + p)]);
+    }
+
+    private static string Command(string appId, string option, IEnumerable<string> paths) =>
+        "flatpak override --user " + string.Join(" ", paths.Select(p => option + Quote(p))) + " " + appId;
 
     /// <summary>Single quotes for the shell when the path holds anything but plain characters.</summary>
     internal static string Quote(string path) =>

@@ -170,7 +170,8 @@ public class FlatpakCheckTests
 
     // ---- The check as apply uses it ----
 
-    private sealed class FakeFlatpak(string? permissions) : IFlatpakInfo
+    /// <summary>Returns fixed permissions text for any app; never overrides anything.</summary>
+    private sealed class FixedFlatpak(string? permissions) : IFlatpak
     {
         public List<string> Asked { get; } = [];
 
@@ -179,6 +180,41 @@ public class FlatpakCheckTests
             Asked.Add(appId);
             return permissions;
         }
+
+        public string? ShowUserOverrides(string appId) => null;
+
+        public bool OverrideForUser(string appId, IReadOnlyList<string> options) => false;
+    }
+
+    [Fact]
+    public void A_grant_adds_only_the_savetether_folder_and_is_found_and_taken_back_by_that_path()
+    {
+        var flatpak = new FakeFlatpak("org.ppsspp.PPSSPP", "host:ro;xdg-run/gamescope-0:ro");
+        var check = new FlatpakCheck(flatpak, Home, _ => null);
+        const string DataRoot = "/home/deck/Sync/savetether";
+
+        var reach = check.Check(Source, Target, Target, DataRoot, DataRoot)!;
+        Assert.Equal([DataRoot], reach.Grants);
+        Assert.Null(check.FindGrant(Source, DataRoot, DataRoot));
+
+        Assert.True(check.Grant(reach));
+        Assert.Equal(["--filesystem=/home/deck/Sync/savetether"], flatpak.OverrideCalls);
+        Assert.True(check.Check(Source, Target, Target, DataRoot, DataRoot)!.CanReach);
+
+        var grant = check.FindGrant(Source, DataRoot, DataRoot)!;
+        Assert.Equal("flatpak override --user --nofilesystem=/home/deck/Sync/savetether org.ppsspp.PPSSPP", grant.RemoveCommand);
+        Assert.True(check.Revoke(grant));
+        Assert.Null(check.FindGrant(Source, DataRoot, DataRoot));
+        Assert.False(check.Check(Source, Target, Target, DataRoot, DataRoot)!.CanReach);
+    }
+
+    [Fact]
+    public void A_broader_grant_such_as_emudecks_host_is_never_reported_as_savetethers()
+    {
+        var flatpak = new FakeFlatpak("org.ppsspp.PPSSPP", "host:ro");
+        flatpak.Overrides.Add("host");
+
+        Assert.Null(new FlatpakCheck(flatpak, Home, _ => null).FindGrant(Source, "/home/deck/Sync/savetether", "/home/deck/Sync/savetether"));
     }
 
     private const string Source = "/home/deck/.var/app/org.ppsspp.PPSSPP/config/ppsspp/PSP/SAVEDATA";
@@ -191,13 +227,13 @@ public class FlatpakCheckTests
     [InlineData("/home/other/.var/app/org.ppsspp.PPSSPP/x", null)]
     public void The_app_is_found_from_its_folder(string source, string? expected)
     {
-        Assert.Equal(expected, new FlatpakCheck(new FakeFlatpak(null), Home, _ => null).AppOwning(source));
+        Assert.Equal(expected, new FlatpakCheck(new FixedFlatpak(null), Home, _ => null).AppOwning(source));
     }
 
     [Fact]
     public void A_save_folder_outside_any_flatpak_is_not_checked()
     {
-        var flatpak = new FakeFlatpak(Ppsspp);
+        var flatpak = new FixedFlatpak(Ppsspp);
 
         Assert.Null(new FlatpakCheck(flatpak, Home, _ => null).Check("/home/deck/Emu/saves", Target, Target, "/home/deck/Sync/savetether", "/home/deck/Sync/savetether"));
         Assert.Empty(flatpak.Asked);
@@ -206,7 +242,7 @@ public class FlatpakCheckTests
     [Fact]
     public void A_read_only_sandbox_is_refused_with_the_command_that_fixes_it()
     {
-        var reach = new FlatpakCheck(new FakeFlatpak(Ppsspp), Home, _ => null)
+        var reach = new FlatpakCheck(new FixedFlatpak(Ppsspp), Home, _ => null)
             .Check(Source, Target, Target, "/home/deck/Sync/savetether", "/home/deck/Sync/savetether")!;
 
         Assert.False(reach.CanReach);
@@ -219,7 +255,7 @@ public class FlatpakCheckTests
     {
         // ~/Sync is a link to /data/Sync: home covers the link, not where it leads.
         var resolved = "/data/Sync/savetether/ppsspp/SAVEDATA";
-        var reach = new FlatpakCheck(new FakeFlatpak(MelonDs), Home, _ => null)
+        var reach = new FlatpakCheck(new FixedFlatpak(MelonDs), Home, _ => null)
             .Check(Source, Target, resolved, "/home/deck/Sync/savetether", "/data/Sync/savetether")!;
 
         Assert.False(reach.CanReach);
@@ -230,7 +266,7 @@ public class FlatpakCheckTests
     [Fact]
     public void Unreadable_permissions_are_reported_as_unknown_not_refused()
     {
-        var reach = new FlatpakCheck(new FakeFlatpak(null), Home, _ => null)
+        var reach = new FlatpakCheck(new FixedFlatpak(null), Home, _ => null)
             .Check(Source, Target, Target, "/home/deck/Sync/savetether", "/home/deck/Sync/savetether")!;
 
         Assert.Null(reach.CanReach);

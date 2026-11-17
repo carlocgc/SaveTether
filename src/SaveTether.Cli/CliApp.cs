@@ -117,8 +117,8 @@ internal static class CliApp
               Show each mapping's state on this device.
 
           savetether apply <id> [--copy | --no-copy | --add-missing | --replace-shared --confirm-replace]
-                           [--assume-synced] [--assume-closed] [--dry-run]
-          savetether apply --all [--assume-synced] [--assume-closed] [--dry-run]
+                           [--assume-synced] [--assume-closed] [--grant-sandbox] [--dry-run]
+          savetether apply --all [--assume-synced] [--assume-closed] [--grant-sandbox] [--dry-run]
               Link the save folder to the shared folder. When this device has saves, choose:
                 --copy            they become the shared copy (only when the shared folder is empty)
                 --no-copy         use the shared saves; this device's are kept in the backup only
@@ -126,6 +126,8 @@ internal static class CliApp
                 --replace-shared  they replace the shared copy on every device (needs --confirm-replace)
               --assume-synced  go ahead although the shared copy may not have fully arrived
               --assume-closed  go ahead although the app appears to be running
+              --grant-sandbox  when a Flatpak app cannot write the shared folder, allow it (that
+                               folder only, for this user) instead of stopping
               --all stops at the first mapping that needs a choice.
 
           savetether revert <id> [--assume-closed] [--dry-run]
@@ -182,8 +184,7 @@ internal static class CliApp
                     "app list" => AppList(),
                     "status" => Status(),
                     "apply" => Apply(),
-                    "revert" => Single(
-                        ws => ws.PlanRevert(command.Positionals[0], command.Has("--assume-closed")), command.Positionals[0]),
+                    "revert" => Revert(),
                     "backup list" => new CliOutput
                     {
                         Command = command.Name, ExitCode = ExitSuccess,
@@ -409,6 +410,39 @@ internal static class CliApp
             };
         }
 
+        /// <summary>
+        /// Revert, then: when SaveTether's grant to a Flatpak app is no longer used by any mapping
+        /// here, offer to take it back. Without a person to ask, only say how.
+        /// </summary>
+        private CliOutput Revert()
+        {
+            var id = command.Positionals[0];
+            var workspace = Open();
+            var output = Single(ws => ws.PlanRevert(id, command.Has("--assume-closed")), id);
+            if (output.Operations is not [{ Outcome: OperationOutcome.Completed } operation]
+                || workspace.SandboxGrantNoLongerNeeded(id) is not { } grant)
+            {
+                return output;
+            }
+
+            var folders = string.Join(" and ", grant.Paths.Select(p => $"'{p}'"));
+            string note;
+            if (CanAsk && Confirm(
+                $"The Flatpak app {grant.AppId} was allowed to write {folders} for SaveTether, and no mapping here needs it now. " +
+                $"Take that back by running:\n  {grant.RemoveCommand}\n(Other permissions of the app are left alone.)\nTake it back?"))
+            {
+                note = workspace.RevokeSandbox(grant)
+                    ? $"Took back the Flatpak app {grant.AppId}'s access to {folders}."
+                    : $"'{grant.RemoveCommand}' did not succeed. The app can still write {folders}.";
+            }
+            else
+            {
+                note = $"The Flatpak app {grant.AppId} can still write {folders}. To take that back: {grant.RemoveCommand}";
+            }
+
+            return output with { Operations = [operation with { Messages = [.. operation.Messages, note] }] };
+        }
+
         private CliOutput Restore()
         {
             var backupId = command.Positionals[0];
@@ -450,9 +484,34 @@ internal static class CliApp
                 new(mappingId, made?.Operation ?? refusal?.Operation, outcome, made, refusal, [], [], error);
 
             PlanOutcome outcome;
+            string? granted = null;
             try
             {
                 outcome = plan(false);
+
+                // A Flatpak app that cannot write the shared folder: allow it, if the owner agrees, then plan again.
+                // Never on a dry run, which changes nothing, and only when that is all that stands in the way.
+                if (outcome.Refusal is { Kind: RefusalKind.Precondition, Failures: [_, ..] failures }
+                    && failures.All(f => f.Kind == PrecheckKind.SandboxCannotReach)
+                    && !command.Has(ArgParser.DryRun)
+                    && workspace.CheckSandbox(mappingId) is { CanReach: false } reach)
+                {
+                    var agreed = command.Has("--grant-sandbox") || (CanAsk && Confirm(
+                        $"The Flatpak app {reach.AppId} cannot write the shared folder, so the link would not work inside it. " +
+                        $"SaveTether can allow it, for this user and only {string.Join(" and ", reach.Grants.Select(g => $"'{g}'"))}, by running:\n" +
+                        $"  {reach.FixCommand}\nAllow it?"));
+                    if (agreed)
+                    {
+                        if (!workspace.GrantSandbox(reach))
+                        {
+                            return Ended(OperationOutcome.Refused, error: $"'{reach.FixCommand}' did not succeed. Nothing was changed.");
+                        }
+
+                        granted = $"Allowed the Flatpak app {reach.AppId} to write {string.Join(" and ", reach.Grants.Select(g => $"'{g}'"))}.";
+                        outcome = plan(false);
+                    }
+                }
+
                 if (outcome.Refusal is { Kind: RefusalKind.ConfirmationNeeded } unconfirmed && CanAsk)
                 {
                     if (!Confirm(unconfirmed.Message.Replace(" Add --confirm-replace to go ahead.", string.Empty, StringComparison.Ordinal) + "\nReplace the shared saves?"))
@@ -487,7 +546,8 @@ internal static class CliApp
 
             var result = workspace.Run(made);
             return new OperationOutput(
-                mappingId, made.Operation, OutcomeOf(result.Status), made, null, result.BackupIds, result.Messages, result.Error);
+                mappingId, made.Operation, OutcomeOf(result.Status), made, null, result.BackupIds,
+                granted is null ? result.Messages : [granted, .. result.Messages], result.Error);
         }
 
         private static OperationOutcome OutcomeOf(ExecutionStatus status) => status switch

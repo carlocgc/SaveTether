@@ -271,6 +271,40 @@ public sealed partial class Workspace
     private Snapshot WithSandbox(Snapshot s) =>
         _flatpak is null ? s : s with { Sandbox = _flatpak.Check(s.Source, s.Target, s.ResolvedTarget, Shared.DataRoot, s.DataRoot) };
 
+    /// <summary>The Flatpak precheck for one mapping on its own; null when its save folder is not in a Flatpak app.</summary>
+    public SandboxReach? CheckSandbox(string mappingId) => _flatpak is null ? null : WithSandbox(ReadSnapshot(mappingId)).Sandbox;
+
+    /// <summary>
+    /// Grants a Flatpak app write access to the savetether folder ("flatpak override --user"). It
+    /// changes that app's settings: call it only once the owner has agreed. True when it succeeded.
+    /// </summary>
+    public bool GrantSandbox(SandboxReach reach) => _flatpak?.Grant(reach) ?? false;
+
+    /// <summary>
+    /// After a revert: SaveTether's grant to the Flatpak app holding this mapping's save folder,
+    /// when no other mapping applied on this device still links from inside that app. Null otherwise.
+    /// </summary>
+    public SandboxGrant? SandboxGrantNoLongerNeeded(string mappingId)
+    {
+        if (_flatpak is null)
+        {
+            return null;
+        }
+
+        var device = ReadOwnDevice();
+        if (!device.Paths.TryGetValue(mappingId, out var path) || _flatpak.AppOwning(path.Source) is not { } appId)
+        {
+            return null;
+        }
+
+        var stillUsed = device.Paths.Any(other =>
+            other.Key != mappingId && _flatpak.AppOwning(other.Value.Source) == appId && IsLink(other.Value.Source));
+        return stillUsed ? null : _flatpak.FindGrant(path.Source, Shared.DataRoot, PathRules.ResolveAll(Shared.DataRoot));
+    }
+
+    /// <summary>Takes back SaveTether's grant to a Flatpak app. Call it only once the owner has agreed. True when it succeeded.</summary>
+    public bool RevokeSandbox(SandboxGrant grant) => _flatpak?.Revoke(grant) ?? false;
+
     public PlanOutcome PlanRevert(string mappingId, bool assumeClosed) => Planner.PlanRevert(ReadSnapshot(mappingId), assumeClosed);
 
     public PlanOutcome PlanRestore(string backupId, RestoreRequest request)

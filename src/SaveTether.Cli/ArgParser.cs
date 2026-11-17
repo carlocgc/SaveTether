@@ -70,7 +70,7 @@ internal static class ArgParser
             "apply", 0, 1,
             [
                 "--all", "--copy", "--no-copy", "--add-missing", "--replace-shared", "--confirm-replace",
-                "--assume-synced", "--assume-closed", DryRun,
+                "--assume-synced", "--assume-closed", "--grant-sandbox", DryRun,
             ],
             None, None),
         new("revert", 1, 1, ["--assume-closed", DryRun], None, None),
