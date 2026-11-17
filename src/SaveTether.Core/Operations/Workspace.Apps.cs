@@ -57,7 +57,8 @@ public enum AppAddProblem
 /// <summary>One install of the app, and whether it was found here.</summary>
 /// <param name="Found">What showed it is there: a folder, file, Flatpak app or Steam manifest. Null when not found.</param>
 /// <param name="Reason">Why it was not found. Null when found.</param>
-public sealed record InstallCandidate(string Id, string? Found, string? Reason)
+/// <param name="Problem">Why it was not found, as a kind: missing, needs a value, and so on. Null when found.</param>
+public sealed record InstallCandidate(string Id, string? Found, string? Reason, ResolveProblem? Problem = null)
 {
     public bool IsDetected => Found is not null;
 }
@@ -151,7 +152,7 @@ public sealed partial class Workspace
         var candidates = forThisOs.Select(install =>
         {
             var detected = resolver.Detect(install, values);
-            return new InstallCandidate(install.Id, detected.Path, detected.Message);
+            return new InstallCandidate(install.Id, detected.Path, detected.Message, detected.Problem);
         }).ToList();
 
         InstallDefinition chosen;
@@ -171,11 +172,17 @@ public sealed partial class Workspace
             var detected = candidates.Where(c => c.IsDetected).ToList();
             if (detected.Count == 0)
             {
+                // An install that could only not be looked for, because it needs a value such as its
+                // install folder, is the likely one: say how to give that value.
+                var needValues = candidates.Where(c => c.Problem == ResolveProblem.NeedsValue).Select(c => $"'{c.Id}'").ToList();
+                var hint = needValues.Count == 0
+                    ? string.Empty
+                    : $" {(needValues.Count == 1 ? "Install" : "Installs")} {string.Join(", ", needValues)} can only be looked for once you say where:{HintFor(ResolveProblem.NeedsValue)}";
                 return AppAddOutcome.Refuse(
                     AppAddProblem.NotInstalled,
                     forThisOs.Count == 0
                         ? $"'{definition.Id}' has no install for this system."
-                        : $"No install of {definition.Name} was found on this device.",
+                        : $"No install of {definition.Name} was found on this device.{hint}",
                     candidates);
             }
 

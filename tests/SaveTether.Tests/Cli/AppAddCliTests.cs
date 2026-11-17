@@ -416,4 +416,53 @@ public class AppAddCliTests
 
         Assert.Equal(2, DeviceFile(deck).GetProperty("schema").GetInt32());
     }
+
+    // ---- Messages (found on the owner's devices, 2026-11-17) ----
+
+    [Fact]
+    public void An_install_that_needs_its_folder_is_named_with_the_option_that_gives_it()
+    {
+        // On Windows Cemu is portable, so with no --install-dir nothing could be looked for at all.
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        ShareDefinition(deck, "testapp", TestApp);
+
+        var json = deck.Expect(CliApp.ExitRefused, "app", "add", "testapp", "--json").Json();
+
+        Assert.Equal("not-installed", json.GetProperty("app").GetProperty("problem").GetString());
+        Assert.Contains("Install 'portable' can only be looked for once you say where: Give it with --install-dir", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        var portable = json.GetProperty("app").GetProperty("candidates").EnumerateArray().Single(c => c.GetProperty("id").GetString() == "portable");
+        Assert.Equal("needs-value", portable.GetProperty("problem").GetString());
+    }
+
+    [Fact]
+    public void Nothing_found_and_nothing_missing_a_value_gives_no_hint()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+
+        var run = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu");
+
+        Assert.Contains("No install of Cemu was found on this device.", run.Err, StringComparison.Ordinal);
+        Assert.DoesNotContain("--install-dir", run.Err, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_closing_lines_say_which_mappings_to_apply_and_which_are_already_links()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        var save = Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save");
+        CliDevice.Write(save, "00050000/101c9500/game.sav", "zelda");
+
+        var first = deck.Ok("app", "add", "cemu").Out;
+        Assert.Contains("Run 'savetether apply cemu.save' to link it.", first, StringComparison.Ordinal);
+        Assert.DoesNotContain("Already a link", first, StringComparison.Ordinal);
+
+        deck.Ok("apply", "cemu.save", "--copy");
+        var again = deck.Ok("app", "add", "cemu").Out;
+
+        Assert.Contains("Already a link: cemu.save. 'savetether status' shows whether it is healthy.", again, StringComparison.Ordinal);
+        Assert.DoesNotContain("Run 'savetether apply", again, StringComparison.Ordinal);
+    }
 }

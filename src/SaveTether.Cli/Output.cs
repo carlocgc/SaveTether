@@ -248,9 +248,25 @@ internal static class OutputWriter
             stdout.WriteLine($"Note: {quirk}");
         }
 
-        stdout.WriteLine(app.Added
-            ? $"Added. No saves were touched. Run 'savetether apply <id>' for each mapping above to link it."
-            : "Dry run: nothing was changed.");
+        if (!app.Added)
+        {
+            stdout.WriteLine("Dry run: nothing was changed.");
+            return;
+        }
+
+        stdout.WriteLine("Added. No saves were touched.");
+        var toApply = plan.Roles.Where(r => !r.IsLink).Select(r => r.MappingId).ToList();
+        var linked = plan.Roles.Where(r => r.IsLink).Select(r => r.MappingId).ToList();
+        foreach (var id in toApply)
+        {
+            stdout.WriteLine($"Run 'savetether apply {id}' to link it.");
+        }
+
+        if (linked.Count > 0)
+        {
+            // A link here was already in place; whether it is SaveTether's and healthy is what status says.
+            stdout.WriteLine($"Already a link: {string.Join(", ", linked)}. 'savetether status' shows whether it is healthy.");
+        }
     }
 
     private static string FormatBytes(long bytes) => bytes switch

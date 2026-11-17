@@ -1,24 +1,32 @@
+using System.Text.Json.Serialization;
+
 namespace SaveTether.Core.Resolution;
 
 /// <summary>Why a path could not be resolved on this device.</summary>
 public enum ResolveProblem
 {
     /// <summary>The text is not a valid path template: an unknown token, a bad argument, a ".." part.</summary>
+    [JsonStringEnumMemberName("invalid")]
     Invalid,
 
     /// <summary>The token or install does not exist on this operating system, such as {flatpak:...} on Windows.</summary>
+    [JsonStringEnumMemberName("not-on-this-os")]
     NotOnThisOs,
 
     /// <summary>The path needs a value set for this device, such as {install_dir}, and none is set.</summary>
+    [JsonStringEnumMemberName("needs-value")]
     NeedsValue,
 
     /// <summary>Something the token is found from is not there: no SD card mounted, no EmuDeck settings file.</summary>
+    [JsonStringEnumMemberName("missing")]
     Missing,
 
     /// <summary>More than one candidate was found and the resolver will not guess between them.</summary>
+    [JsonStringEnumMemberName("ambiguous")]
     Ambiguous,
 
     /// <summary>A form the format allows that this build cannot resolve yet.</summary>
+    [JsonStringEnumMemberName("not-yet-supported")]
     NotYetSupported,
 }
 
