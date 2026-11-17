@@ -1,0 +1,37 @@
+// Cemu (Wii U emulator). Shipped with SaveTether: its paths were used on both of the owner's
+// devices in the M7 trial, 2026-11-12. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "cemu",
+  "name": "Cemu",
+  "kind": "emulator",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/mlc01" },
+      "base": "{install_dir}/mlc01"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/Cemu/mlc01" },
+      "base": "{xdg_data}/Cemu/mlc01"
+    }
+  ],
+  "roles": [
+    {
+      "id": "save",
+      "class": "save",
+      "default": true,
+      "path": "usr/save",
+      "target": "save",
+      // Games sit two levels down: usr/save/00050000/<title id>.
+      "entry_depth": 2
+    }
+  ],
+  "quirks": [
+    "Link usr/save, not mlc01: game updates and DLC install into mlc01/usr/title and can run to many gigabytes.",
+    "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it."
+  ]
+}

@@ -353,6 +353,17 @@ Every problem in a file is reported, each as `file(line): message`, so a mistake
 
 `definitions/definition.schema.json` is a JSON Schema of the same format, for editors that offer completion and checking. The loader is what decides; a test keeps the two agreeing on which fields and values exist.
 
+**Where definitions come from.** Decided by the owner on 2026-11-17. Definitions in the repository's `definitions/` folder are built into the binary; Cemu is the only one so far, because it is the only one whose paths were used on both devices. The owner's own go in `<sync root>/savetether/.savetether/definitions/<app-id>.jsonc`, so one written on any device reaches every device through the sync tool. A shared file replaces the built-in one with the same ID. Only the file for the app being added is read, so a mistake in another file does not stop it. `app list` shows both kinds.
+
+**Adding an app.** `app add <app>` reads only, works out a plan, and writes only when every role can be added:
+
+1. The install: the one named with `--install`; else the only one of this system's installs whose `detect` rule finds something; else, when several are found, the one this device used last time. Otherwise it asks at a terminal, and refuses with `--json` or without a terminal, naming `--install`. Detection is: `dir` and `file` exist; `flatpak` has `app/<id>` in the per-user or system Flatpak installation; `steam` has `appmanifest_<appid>.acf` in a library (Linux only for now: on Windows, name the install).
+2. The roles: those named with `--role`, else the ones marked `default` that this install has a path for.
+3. Each role's folder is resolved, measured (files and bytes, not following links inside it) and checked against what is recorded: an existing mapping with another target is a conflict, and so is a role applied here at another folder (revert first). An existing mapping keeps its entry depth and its process names; the output says when the definition's depth differs.
+4. It writes each mapping and this device's save folder for it, as `map add` does, and records in this device's file which install was used and the values given with `--install-dir`, `--sd-card` and `--wine-prefix`. Running `app add` again uses those values when the options are left out, and moves a save folder that is not applied to wherever the app is found now. Nothing is linked; `apply` does that.
+
+The device file gains `apps` for that record, and with it `schema: 2`. As with mapping files (5.13), a device file without `apps` is still written as `schema: 1`, so a device that never uses `app add` stays readable by an older SaveTether. A device file is only read by its own device, and by `init` when a name is taken over.
+
 **Cemu.** The one definition whose paths have been used on both of the owner's devices (M7 trial, 2026-11-12). Its save folder is why entry depth exists.
 
 ```jsonc
@@ -782,6 +793,7 @@ Local, `state.json`: per mapping, the resolved source and target, the link type 
 |---|---|
 | `init --sync-root <path> [--device <name>] [--create-root] [--take-over] [--backup-root <path>]` | Writes `bootstrap.json`. The backup location is created when it is the default or was named here; one read from an existing device file is not created if missing, since its drive may not be connected. Requires `savetether/.savetether/` to exist; only `--create-root` creates it, once, on the first device. Lists existing device files and offers them; taking over an existing name needs confirmation and writes this install's ID into that file. A new name creates a new device file |
 | `map add <id> --source <path> [--target <app>/<save folder>] [--process <name>...] [--entry-depth <n>]` | Creates the mapping file if it does not exist (`--target` is then required), or checks the target matches if it does, and adds this device's source path to its own device file. Changes no save data. `--entry-depth` sets, or later changes, the mapping's entry depth (5.13). `map remove <id>` removes only this device's entry; the shared mapping is left for other devices. Both are refused while the mapping is applied here and the change would orphan the link (revert first) |
+| `app add <app> [--install <id>] [--role <id>...] [--install-dir <path>] [--sd-card <path>] [--wine-prefix <path>] [--dry-run]`, `app list` | Phase 2 (plan P2.5); see "Adding an app" in 5.2. Writes the same files as `map add`, one mapping per role, plus how the app was found on this device. Changes no save data |
 | `status [id]` | Health states from 5.5 |
 | `apply <id> \| --all [--copy \| --no-copy \| --add-missing \| --replace-shared --confirm-replace] [--assume-synced]` | The transaction in 5.3, with the setup choices there. Without a choice it links only when the local folder is empty, and otherwise stops, listing the allowed choices and the comparison. `--all` runs each mapping this device has a path for, one transaction each, and stops at the first that needs a choice; choices cannot be combined with `--all` |
 | `revert <id>` | The revert flow in 5.3 |

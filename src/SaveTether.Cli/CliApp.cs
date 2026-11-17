@@ -103,6 +103,16 @@ internal static class CliApp
           savetether map remove <id>
               Remove this device's save folder for a mapping. Other devices keep theirs.
 
+          savetether app add <app> [--install <id>] [--role <id>]... [--install-dir <path>]
+                                   [--sd-card <path>] [--wine-prefix <path>] [--dry-run]
+              Add an app from its definition: find its install on this device, show its save
+              folders with their sizes, and add a mapping for each. Links nothing; run apply next.
+              --install picks the install when more than one is found. --role picks roles other
+              than the default ones. The path options give what cannot be found by looking; they
+              are remembered for this device, so running app add again later finds moved folders.
+          savetether app list
+              List the apps that have a definition: built in, or in the shared definitions folder.
+
           savetether status [<id>]
               Show each mapping's state on this device.
 
@@ -156,7 +166,8 @@ internal static class CliApp
             try
             {
                 // While an operation is unfinished, only looking and recovering are allowed.
-                var readOnly = command.Name is "status" or "backup list" or "recover";
+                var readOnly = command.Name is "status" or "backup list" or "recover" or "app list"
+                    || (command.Name == "app add" && command.Has(ArgParser.DryRun));
                 if (!readOnly && Journal.For(_local).IsOpen)
                 {
                     return Failed(ExitRecoveryNeeded, Unfinished);
@@ -167,6 +178,8 @@ internal static class CliApp
                     "init" => Init(),
                     "map add" => MapAdd(),
                     "map remove" => MapRemove(),
+                    "app add" => AppAdd(),
+                    "app list" => AppList(),
                     "status" => Status(),
                     "apply" => Apply(),
                     "revert" => Single(
@@ -271,6 +284,70 @@ internal static class CliApp
                     id, mapping?.Target ?? string.Empty, removed.Source, removed.ProcessNames, mapping?.Depth ?? 1,
                     CreatedMapping: false, EntryDepthChanged: false, Removed: true),
             };
+        }
+
+        private CliOutput AppAdd()
+        {
+            var appId = command.Positionals[0];
+            var request = new AppAddRequest(
+                appId,
+                command.Value("--install"),
+                command.Values("--role"),
+                command.Value("--install-dir"),
+                command.Value("--sd-card"),
+                command.Value("--wine-prefix"));
+            var workspace = Open();
+            var outcome = workspace.PlanAppAdd(request, environment.Resolver);
+
+            // Several installs found: a person at the terminal picks one; otherwise refuse and say how to choose.
+            if (outcome.Problem == AppAddProblem.InstallChoiceNeeded && CanAsk)
+            {
+                var found = outcome.Candidates.Where(c => c.IsDetected).ToList();
+                var question = $"{outcome.Message}\n" +
+                    string.Concat(found.Select((c, i) => $"  {i + 1}. {c.Id}  ({c.Found})\n")) +
+                    "Which install? Type its number: ";
+                if (!int.TryParse(Ask(question), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number)
+                    || number < 1 || number > found.Count)
+                {
+                    return AppFailed(appId, outcome, "No install was chosen. Nothing was changed.");
+                }
+
+                outcome = workspace.PlanAppAdd(request with { Install = found[number - 1].Id }, environment.Resolver);
+            }
+
+            if (outcome.Plan is not { } plan)
+            {
+                return AppFailed(appId, outcome, outcome.Message!);
+            }
+
+            var dryRun = command.Has(ArgParser.DryRun);
+            if (!dryRun)
+            {
+                workspace.AddApp(plan);
+            }
+
+            return new CliOutput
+            {
+                Command = command.Name, ExitCode = ExitSuccess,
+                App = new AppOutput(appId, Added: !dryRun, plan, null, outcome.Candidates),
+            };
+        }
+
+        private CliOutput AppFailed(string appId, AppAddOutcome outcome, string error) => new()
+        {
+            Command = command.Name, ExitCode = ExitRefused, Error = error,
+            App = new AppOutput(appId, Added: false, null, outcome.Problem, outcome.Candidates),
+        };
+
+        private CliOutput AppList()
+        {
+            var catalog = Open().Definitions;
+            var apps = catalog.AvailableIds().Select(id =>
+            {
+                var entry = catalog.Find(id)!;
+                return new AppListEntry(id, entry.Definition?.Name, entry.Source, entry.IsValid ? null : string.Join("; ", entry.Errors));
+            }).ToList();
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Apps = apps };
         }
 
         private CliOutput Status()

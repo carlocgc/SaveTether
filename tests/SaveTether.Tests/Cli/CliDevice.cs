@@ -1,8 +1,10 @@
 using System.Text.Json;
 using SaveTether.Cli;
+using SaveTether.Core.Definitions;
 using SaveTether.Core.Execution;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Planning;
+using SaveTether.Core.Resolution;
 using SaveTether.Tests.FileSystem;
 
 namespace SaveTether.Tests.Cli;
@@ -61,6 +63,12 @@ internal sealed class CliDevice
 
     public IFaultHook? Faults { get; set; }
 
+    /// <summary>What the path resolver sees. Null uses a Linux-shaped home under this device's folder.</summary>
+    public ResolverEnvironment? Resolver { get; set; }
+
+    /// <summary>The home folder the default <see cref="Resolver"/> uses.</summary>
+    public string Home => Path.Combine(Path.GetDirectoryName(LocalFolder)!, "home");
+
     public CliRun Run(params string[] args)
     {
         using var stdout = new StringWriter();
@@ -72,6 +80,7 @@ internal sealed class CliDevice
             Input = Typing,
             Interactive = Typing is not null,
             Faults = Faults,
+            Resolver = Resolver ?? new ResolverEnvironment { Os = TargetOs.Linux, Home = Home, UserName = Name },
         };
         var exit = CliApp.Run(args, stdout, stderr, environment);
         return new CliRun(exit, stdout.ToString(), stderr.ToString());

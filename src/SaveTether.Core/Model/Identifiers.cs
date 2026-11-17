@@ -26,6 +26,9 @@ public static class Identifiers
         return parts.Length >= 2 && parts.All(IsValidPart);
     }
 
+    /// <summary>An app ID is one part under the same rule as a mapping ID part, for example "cemu".</summary>
+    public static bool IsValidAppId(string? id) => !string.IsNullOrEmpty(id) && id.Length <= 60 && IsValidPart(id);
+
     /// <summary>The app part of a mapping ID: everything before the first dot.</summary>
     public static string AppOf(string mappingId) => mappingId[..mappingId.IndexOf('.', StringComparison.Ordinal)];
 

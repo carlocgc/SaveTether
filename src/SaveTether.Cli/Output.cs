@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SaveTether.Core.Backup;
+using SaveTether.Core.Definitions;
 using SaveTether.Core.Health;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
@@ -51,6 +52,17 @@ internal sealed record OperationOutput(
     IReadOnlyList<string> Messages,
     string? Error);
 
+/// <summary>"app add": what was, or would be, written, or why not.</summary>
+/// <param name="Added">True when the mappings and this device's entries were written.</param>
+/// <param name="Plan">Absent when there is no plan.</param>
+/// <param name="Problem">Why there is no plan.</param>
+/// <param name="Candidates">The installs of the app for this system, and whether each was found.</param>
+internal sealed record AppOutput(
+    string AppId, bool Added, AppAddPlan? Plan, AppAddProblem? Problem, IReadOnlyList<InstallCandidate> Candidates);
+
+/// <summary>"app list": one app that can be added.</summary>
+internal sealed record AppListEntry(string Id, string? Name, DefinitionSource Source, string? Error);
+
 internal sealed record MappingOutput(
     string Id, string Target, string Source, IReadOnlyList<string> ProcessNames, int EntryDepth,
     bool CreatedMapping, bool EntryDepthChanged, bool Removed);
@@ -77,6 +89,10 @@ internal sealed record CliOutput
     public InitResult? Init { get; init; }
 
     public MappingOutput? Mapping { get; init; }
+
+    public AppOutput? App { get; init; }
+
+    public IReadOnlyList<AppListEntry>? Apps { get; init; }
 
     public StatusReport? Status { get; init; }
 
@@ -112,6 +128,20 @@ internal static class OutputWriter
         if (output.Mapping is { } mapping)
         {
             WriteMapping(mapping, stdout);
+        }
+
+        if (output.App is { } app)
+        {
+            WriteApp(app, stdout, stderr);
+        }
+
+        if (output.Apps is { } apps)
+        {
+            foreach (var entry in apps)
+            {
+                var from = entry.Source == DefinitionSource.Shared ? "shared" : "built-in";
+                stdout.WriteLine(entry.Error is null ? $"  {entry.Id,-20} {entry.Name}  ({from})" : $"  {entry.Id,-20} not usable: {entry.Error}  ({from})");
+            }
         }
 
         if (output.Status is { } status)
@@ -176,6 +206,60 @@ internal static class OutputWriter
 
         stdout.WriteLine($"No saves were touched. Run 'savetether apply {mapping.Id}' to link it.");
     }
+
+    private static void WriteApp(AppOutput app, TextWriter stdout, TextWriter stderr)
+    {
+        if (app.Plan is not { } plan)
+        {
+            // The reason itself is the command's error; show what was looked at, so the owner can tell why.
+            foreach (var candidate in app.Candidates)
+            {
+                stderr.WriteLine(candidate.IsDetected
+                    ? $"  install {candidate.Id}: found ({candidate.Found})"
+                    : $"  install {candidate.Id}: not found. {candidate.Reason}");
+            }
+
+            return;
+        }
+
+        var from = plan.DefinitionSource == DefinitionSource.Shared ? $" (definition: {plan.DefinitionLocation})" : string.Empty;
+        stdout.WriteLine($"{plan.AppName}, install '{plan.Install}'{from}:");
+        foreach (var role in plan.Roles)
+        {
+            var size = !role.Exists ? "not there yet"
+                : role.IsLink ? "already a link"
+                : $"{role.Files.ToString("N0", CultureInfo.InvariantCulture)} file(s), {FormatBytes(role.Bytes)}";
+            stdout.WriteLine($"  {role.MappingId}  ({size})");
+            stdout.WriteLine($"    save folder:   {role.Source}");
+            stdout.WriteLine($"    shared folder: savetether/{role.Target}{(role.CreatesMapping ? " (new mapping)" : string.Empty)}");
+            if (role.EntryDepth > 1)
+            {
+                stdout.WriteLine($"    entry depth:   {role.EntryDepth}");
+            }
+
+            if (role.Note is { } note)
+            {
+                stdout.WriteLine($"    Note: {note}");
+            }
+        }
+
+        foreach (var quirk in plan.Quirks)
+        {
+            stdout.WriteLine($"Note: {quirk}");
+        }
+
+        stdout.WriteLine(app.Added
+            ? $"Added. No saves were touched. Run 'savetether apply <id>' for each mapping above to link it."
+            : "Dry run: nothing was changed.");
+    }
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.0} GiB",
+        >= 1L << 20 => $"{bytes / (double)(1L << 20):0.0} MiB",
+        >= 1L << 10 => $"{bytes / (double)(1L << 10):0.0} KiB",
+        _ => $"{bytes} bytes",
+    };
 
     private static void WriteStatus(StatusReport status, TextWriter stdout, TextWriter stderr)
     {

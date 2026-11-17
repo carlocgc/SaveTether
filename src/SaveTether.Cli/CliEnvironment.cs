@@ -13,6 +13,9 @@ internal sealed class CliEnvironment
 
     public IProcessLister Processes { get; init; } = new SystemProcessLister();
 
+    /// <summary>What the path resolver sees of this machine: home, special folders, mounts.</summary>
+    public SaveTether.Core.Resolution.ResolverEnvironment Resolver { get; init; } = SaveTether.Core.Resolution.ResolverEnvironment.FromSystem();
+
     public TimeProvider Time { get; init; } = TimeProvider.System;
 
     /// <summary>Where answers to prompts are read from. Only used when <see cref="Interactive"/>.</summary>

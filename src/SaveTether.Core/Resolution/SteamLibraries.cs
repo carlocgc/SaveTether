@@ -129,6 +129,15 @@ internal sealed class SteamLibraries
         return FindExistingCompatData(libraries, id, $"Steam app {id} is not installed in any Steam library on this device." + Explain(problems));
     }
 
+    /// <summary>The app manifest of an installed Steam game, in whichever library has one; null when none does.</summary>
+    public string? FindAppManifest(ulong appId)
+    {
+        var name = $"appmanifest_{appId.ToString(CultureInfo.InvariantCulture)}.acf";
+        return FindLibraries([])
+            .Select(library => Path.Combine(library.Path, "steamapps", name))
+            .FirstOrDefault(File.Exists);
+    }
+
     /// <summary>
     /// The compatdata folder of a non-Steam game added to Steam, found by its name in
     /// shortcuts.vdf. Steam makes the folder the first time the game runs with Proton.

@@ -32,7 +32,7 @@ public sealed record StatusReport(
 /// A refusal that is not a planner refusal is thrown as a <see cref="StoreException"/> or one of
 /// the other I/O exceptions, with a message meant for the owner; nothing has been changed then.
 /// </summary>
-public sealed class Workspace
+public sealed partial class Workspace
 {
     private readonly IProcessLister _processes;
     private readonly TimeProvider? _time;

@@ -159,6 +159,7 @@ public sealed class SharedStore
         RequireInitialized();
         ArgumentNullException.ThrowIfNull(device);
         RequireDeviceName(device.DeviceName);
+        device = device.Normalized();
         CheckDevice(device, device.DeviceName);
         JsonFiles.Write(DevicePathOf(device.DeviceName), device, StorageJsonContext.Default.DeviceFile, DeviceFile.CurrentSchema);
     }
@@ -291,6 +292,27 @@ public sealed class SharedStore
             if (path is null || string.IsNullOrWhiteSpace(path.Source))
             {
                 throw new StoreException(StoreProblem.Invalid, $"The device file for '{expectedName}' is not valid: '{mappingId}' has no source path.");
+            }
+        }
+
+        if (device.Apps is not null && device.Schema < 2)
+        {
+            throw new StoreException(StoreProblem.Invalid, $"The device file for '{expectedName}' is not valid: it has apps, which need \"schema\": 2.");
+        }
+
+        foreach (var (appId, app) in device.Apps ?? new Dictionary<string, DeviceApp>())
+        {
+            if (!Identifiers.IsValidAppId(appId) || app is null || string.IsNullOrWhiteSpace(app.Install))
+            {
+                throw new StoreException(StoreProblem.Invalid, $"The device file for '{expectedName}' is not valid: app '{appId}' needs a valid ID and an install.");
+            }
+
+            foreach (var value in new[] { app.InstallDir, app.SdCard, app.WinePrefix })
+            {
+                if (value is not null && !Path.IsPathFullyQualified(value))
+                {
+                    throw new StoreException(StoreProblem.Invalid, $"The device file for '{expectedName}' is not valid: app '{appId}' has a path that is not absolute: '{value}'.");
+                }
             }
         }
 

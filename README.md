@@ -25,6 +25,14 @@ savetether map add ppsspp.savedata --source /path/to/PSP/SAVEDATA
 savetether apply ppsspp.savedata
 ```
 
+For an app that has a definition, `app add` finds its save folders instead of you typing them. `savetether app list` shows which apps have one; so far only Cemu is built in, and you can add your own as `<sync root>/savetether/.savetether/definitions/<app>.jsonc` (format in the design, section 5.2):
+
+```bash
+savetether app add cemu --dry-run   # shows the save folders it found, with sizes
+savetether app add cemu
+savetether apply cemu.save
+```
+
 If that device has saves of its own, `apply` stops, shows how they differ from the shared copy, and lists the choices. A verified backup is taken before anything is changed; see `savetether backup list`. `savetether status` shows each mapping's state, `savetether revert <id>` undoes a link, and `savetether --help` lists everything. Add `--dry-run` to see what a command would do, and `--json` for machine-readable output.
 
 ## Building

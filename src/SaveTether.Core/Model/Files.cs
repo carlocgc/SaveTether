@@ -96,7 +96,8 @@ public sealed record DevicePath
 /// </summary>
 public sealed record DeviceFile
 {
-    public const int CurrentSchema = 1;
+    /// <summary>The newest format this version reads. Format 2 added <see cref="Apps"/>.</summary>
+    public const int CurrentSchema = 2;
 
     public required int Schema { get; init; }
 
@@ -109,6 +110,43 @@ public sealed record DeviceFile
 
     /// <summary>Keyed by mapping ID. A mapping with no entry is simply not applied on this device.</summary>
     public IReadOnlyDictionary<string, DevicePath> Paths { get; init; } = new Dictionary<string, DevicePath>();
+
+    /// <summary>
+    /// Keyed by app ID: how "app add" found that app's save folders on this device, so running it
+    /// again can find them after an SD card or install folder changes. Absent when no app was added.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyDictionary<string, DeviceApp>? Apps { get; init; }
+
+    /// <summary>
+    /// The form that is written to disk. A device file with no app entries is written exactly as
+    /// format 1 was, so an older SaveTether keeps reading it; only "app add" moves it to format 2.
+    /// </summary>
+    public DeviceFile Normalized() => Apps is { Count: > 0 }
+        ? this with { Schema = CurrentSchema }
+        : this with { Schema = 1, Apps = null };
+}
+
+/// <summary>
+/// How one app was found on one device: which of its definition's installs, and the values set
+/// for this device that the resolver cannot find by looking (design 5.2).
+/// </summary>
+public sealed record DeviceApp
+{
+    /// <summary>The install ID from the app's definition.</summary>
+    public required string Install { get; init; }
+
+    /// <summary>{install_dir}: the folder a portable app was unpacked into.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? InstallDir { get; init; }
+
+    /// <summary>Overrides the SD card found from the mount table.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SdCard { get; init; }
+
+    /// <summary>The Wine prefix for a winpath, overriding what the definition names.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WinePrefix { get; init; }
 }
 
 /// <summary>Local, never synced: the only file needed before the shared folder can be read.</summary>
