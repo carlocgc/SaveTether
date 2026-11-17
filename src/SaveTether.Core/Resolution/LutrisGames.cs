@@ -19,12 +19,16 @@ internal sealed class LutrisGames
         _dataHome = dataHome;
     }
 
-    /// <summary>Folders Lutris keeps game configs in: current, older, and the Flatpak's.</summary>
+    /// <summary>
+    /// Folders Lutris keeps game configs in: current and older, native and Flatpak. The Deck's
+    /// Flatpak Lutris (2026-11-17) uses ~/.var/app/net.lutris.Lutris/config/lutris/games.
+    /// </summary>
     private IEnumerable<string> GameFolders() =>
     [
         Path.Combine(_dataHome, "lutris", "games"),
         Path.Combine(_home, ".config", "lutris", "games"),
         Path.Combine(_home, ".var", "app", "net.lutris.Lutris", "data", "lutris", "games"),
+        Path.Combine(_home, ".var", "app", "net.lutris.Lutris", "config", "lutris", "games"),
     ];
 
     public ResolveResult ResolvePrefix(string slug)

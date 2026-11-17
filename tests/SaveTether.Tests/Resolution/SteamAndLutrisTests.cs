@@ -390,6 +390,23 @@ public class SteamAndLutrisTests
     }
 
     [Fact]
+    public void The_flatpak_lutris_config_folder_is_read_as_the_deck_has_it()
+    {
+        // The owner's Deck, 2026-11-17: Flatpak Lutris keeps game configs in config/lutris/games,
+        // shaped like this (prefix with a trailing slash, multi-line exe, "system: {}").
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        var prefix = LutrisPrefix(sandbox, "home", "Documents", "visualnovelengine");
+        sandbox.FileAt(
+            $"game:\n  arch: win32\n  exe: /run/media/mmcblk0p1/VisualNovels/Escu:de/Re;Lord 1 The witch of Hertfort and\n    Stuffed Animals/game.exe\n  prefix: {prefix}/\n  working_dir: /run/media/mmcblk0p1/VisualNovels\nsystem: {{}}\nwine:\n  version: lutris-7.2-x86_64\n",
+            "home", ".var", "app", "net.lutris.Lutris", "config", "lutris", "games", "sengoku-rance-1660413697.yml");
+
+        var resolved = Ok(Resolver(home).ResolveWinPath("{home}", new PrefixRule(Lutris: "sengoku-rance"), DeviceValues.None));
+
+        Assert.Equal(Path.Combine(prefix, "drive_c", "users", "deck"), resolved);
+    }
+
+    [Fact]
     public void Lutris_configs_for_other_slugs_or_without_a_prefix_do_not_count()
     {
         using var sandbox = new Sandbox();
