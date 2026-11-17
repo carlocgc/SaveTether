@@ -95,6 +95,8 @@ internal static class JsonFiles
             RequireKnownSchema(path, File.ReadAllText(path), currentSchema, tolerateBrokenJson: true);
         }
 
+        // The folder may be missing when the shared folder was set up only in part, or a sync tool skipped an empty folder.
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         SafeFs.WriteFileAtomically(path, JsonSerializer.Serialize(value, typeInfo) + "\n");
     }
 
