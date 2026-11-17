@@ -304,6 +304,21 @@ Deliver: `{home}`, `{appdata}`, `{localappdata}`, `{locallow}`, `{documents}`, `
 
 Tests: fixture directory trees and fixture `libraryfolders.vdf`, `shortcuts.vdf` and Lutris config files, including a game on a second Steam library and a missing SD card. No real Steam needed.
 
+Split on 2026-11-17 into two PRs, so each stays reviewable:
+
+- **P2.4a** tokens and winpath: every token except `{steam_compatdata}`, and winpath with a `path` prefix or a prefix set for the device.
+- **P2.4b** Steam and Lutris: `libraryfolders.vdf`, `{steam_compatdata}`, the `steam` and `steam_shortcut` prefixes (binary `shortcuts.vdf`), and the `lutris` prefix.
+
+As built, P2.4a (differences from the list above, and decisions made while building):
+- `PathResolver` in `SaveTether.Core.Resolution`, with a `ResolverEnvironment` that tests point at fixture trees. Rules are in design 5.2, "Resolving paths".
+- A result is a path or a reason, one of: invalid, not on this OS, needs a value, missing, ambiguous, not yet supported. Nothing is guessed: two SD cards or two Wine users are reported.
+- `{steam_compatdata}` and the `steam`, `steam_shortcut` and `lutris` prefixes return "not yet supported" until P2.4b. A Wine prefix set for the device works for all of them meanwhile.
+- `{documents}` and the other Windows folders are refused on Linux outside a winpath, rather than mapped to `~/Documents`. No definition needs them there yet.
+- Values set per device (`{install_dir}`, SD card, Wine prefix) are passed in; storing them is P2.5.
+- A test checks that every path in the design's example definitions is a valid template on both systems.
+- The self-test resolves a role and `{home}`, so the native binary proves the resolver on three targets.
+- `{emudeck}` reads `emulationPath` from EmuDeck's `settings.sh`; that location is an inference until seen on the Deck.
+
 ### P2.5 `app add` (M)
 
 Deliver: add an app from a definition. Resolve its install, show the roles with their sizes, write the mapping and device entries.
