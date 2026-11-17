@@ -197,7 +197,7 @@ internal static class CliApp
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 // The core's refusals outside the planner. Each says what is wrong and what to do; nothing was changed.
-                return Failed(ExitRefused, e.Message);
+                return Failed(ExitRefused, Hints.ErrorText(e));
             }
         }
 
@@ -304,7 +304,7 @@ internal static class CliApp
             if (outcome.Problem == AppAddProblem.InstallChoiceNeeded && CanAsk)
             {
                 var found = outcome.Candidates.Where(c => c.IsDetected).ToList();
-                var question = $"{outcome.Message}\n" +
+                var question = $"{outcome.Message?.Text}\n" +
                     string.Concat(found.Select((c, i) => $"  {i + 1}. {c.Id}  ({c.Found})\n")) +
                     "Which install? Type its number: ";
                 if (!int.TryParse(Ask(question), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number)
@@ -318,7 +318,7 @@ internal static class CliApp
 
             if (outcome.Plan is not { } plan)
             {
-                return AppFailed(appId, outcome, outcome.Message!);
+                return AppFailed(appId, outcome, Hints.Compose(outcome.Message!));
             }
 
             var dryRun = command.Has(ArgParser.DryRun);
@@ -463,7 +463,7 @@ internal static class CliApp
         {
             var result = Open().Recover();
             var operation = new OperationOutput(
-                result.MappingId, result.Operation, OutcomeOf(result.Status), null, null, result.BackupIds, result.Messages, result.Error);
+                result.MappingId, result.Operation, OutcomeOf(result.Status), null, null, result.BackupIds, Hints.Compose(result.Messages), Hints.ComposeOrNull(result.Error));
 
             // Undoing the unfinished operation is recovery succeeding.
             return new CliOutput
@@ -521,7 +521,7 @@ internal static class CliApp
 
                 if (outcome.Refusal is { Kind: RefusalKind.ConfirmationNeeded } unconfirmed && CanAsk)
                 {
-                    if (!Confirm(unconfirmed.Message.Replace(" Add --confirm-replace to go ahead.", string.Empty, StringComparison.Ordinal) + "\nReplace the shared saves?"))
+                    if (!Confirm(unconfirmed.Message.Text + "\nReplace the shared saves?"))
                     {
                         return Ended(OperationOutcome.Cancelled, refusal: unconfirmed);
                     }
@@ -531,7 +531,7 @@ internal static class CliApp
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                return Ended(OperationOutcome.Refused, error: e.Message);
+                return Ended(OperationOutcome.Refused, error: Hints.ErrorText(e));
             }
 
             if (outcome.Plan is not { } made)
@@ -554,7 +554,7 @@ internal static class CliApp
             var result = workspace.Run(made);
             return new OperationOutput(
                 mappingId, made.Operation, OutcomeOf(result.Status), made, null, result.BackupIds,
-                granted is null ? result.Messages : [granted, .. result.Messages], result.Error);
+                granted is null ? Hints.Compose(result.Messages) : [granted, .. Hints.Compose(result.Messages)], Hints.ComposeOrNull(result.Error));
         }
 
         private static OperationOutcome OutcomeOf(ExecutionStatus status) => status switch

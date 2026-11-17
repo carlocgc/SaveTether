@@ -220,7 +220,7 @@ public enum PrecheckKind
     RestoreDestinationUnusable,
 }
 
-public sealed record PrecheckFailure(PrecheckKind Kind, string Message);
+public sealed record PrecheckFailure(PrecheckKind Kind, Note Message);
 
 /// <summary>What the owner asked for on the command line.</summary>
 /// <param name="Choice">What to do with this device's saves; null when not given.</param>
@@ -245,7 +245,7 @@ public sealed record Plan(
     string Source,
     string Target,
     IReadOnlyList<PlanStep> Steps,
-    IReadOnlyList<string> Notes,
+    IReadOnlyList<Note> Notes,
     bool NeedsFirstSeedConfirmation,
     PlanOperation Operation = PlanOperation.Apply);
 
@@ -254,7 +254,7 @@ public sealed record Refusal(
     string MappingId,
     RefusalKind Kind,
     Classification Classification,
-    string Message,
+    Note Message,
     IReadOnlyList<PrecheckFailure> Failures,
     IReadOnlyList<SetupChoice> AllowedChoices,
     bool AssumeSyncedWouldHelp,
@@ -267,11 +267,3 @@ public sealed record PlanOutcome(Plan? Plan, Refusal? Refusal)
     [JsonIgnore]
     public bool IsPlanned => Plan is not null;
 }
-
-[JsonSourceGenerationOptions(
-    WriteIndented = true,
-    PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
-    UseStringEnumConverter = true,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
-[JsonSerializable(typeof(PlanOutcome))]
-internal sealed partial class PlanningJsonContext : JsonSerializerContext;

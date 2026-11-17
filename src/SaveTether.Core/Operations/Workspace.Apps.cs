@@ -58,7 +58,7 @@ public enum AppAddProblem
 /// <param name="Found">What showed it is there: a folder, file, Flatpak app or Steam manifest. Null when not found.</param>
 /// <param name="Reason">Why it was not found. Null when found.</param>
 /// <param name="Problem">Why it was not found, as a kind: missing, needs a value, and so on. Null when found.</param>
-public sealed record InstallCandidate(string Id, string? Found, string? Reason, ResolveProblem? Problem = null)
+public sealed record InstallCandidate(string Id, string? Found, Note? Reason, ResolveProblem? Problem = null)
 {
     public bool IsDetected => Found is not null;
 }
@@ -83,7 +83,7 @@ public sealed record AppRolePlan(
     int Files,
     bool CreatesMapping,
     int EntryDepth,
-    string? Note);
+    Note? Note);
 
 /// <summary>What "app add" will write, before it writes anything.</summary>
 public sealed record AppAddPlan(
@@ -98,9 +98,9 @@ public sealed record AppAddPlan(
 
 /// <summary>A plan, or the reason there is none. <see cref="Candidates"/> lists the installs looked at.</summary>
 public sealed record AppAddOutcome(
-    AppAddPlan? Plan, AppAddProblem? Problem, string? Message, IReadOnlyList<InstallCandidate> Candidates)
+    AppAddPlan? Plan, AppAddProblem? Problem, Note? Message, IReadOnlyList<InstallCandidate> Candidates)
 {
-    public static AppAddOutcome Refuse(AppAddProblem problem, string message, IReadOnlyList<InstallCandidate>? candidates = null) =>
+    public static AppAddOutcome Refuse(AppAddProblem problem, Note message, IReadOnlyList<InstallCandidate>? candidates = null) =>
         new(null, problem, message, candidates ?? []);
 }
 
@@ -175,17 +175,24 @@ public sealed partial class Workspace
                 // An install that could only not be looked for, because it needs a value such as its
                 // install folder, is the likely one: say how to give that value.
                 var needValues = candidates.Where(c => c.Problem == ResolveProblem.NeedsValue).Select(c => $"'{c.Id}'").ToList();
-                var hint = needValues.Count == 0
-                    ? string.Empty
-                    : $" {(needValues.Count == 1 ? "Install" : "Installs")} {string.Join(", ", needValues)} can only be looked for once you say where:{HintFor(ResolveProblem.NeedsValue)}";
+                var text = $"No install of {definition.Name} was found on this device.";
+                var next = new List<NextStep>();
+                if (needValues.Count > 0)
+                {
+                    text += $" {(needValues.Count == 1 ? "Install" : "Installs")} {string.Join(", ", needValues)} can only be looked for once you say where.";
+                    next.Add(new NextStep(NextStepKind.GiveLocation));
+                }
 
                 // Looked for where it was last time and not found there: it has probably moved.
-                hint += MovedHint(definition.Name, request, stored);
+                if (MovedHint(definition.Name, request, stored) is { } moved)
+                {
+                    text += moved;
+                    next.Add(new NextStep(NextStepKind.GiveNewLocation));
+                }
+
                 return AppAddOutcome.Refuse(
                     AppAddProblem.NotInstalled,
-                    forThisOs.Count == 0
-                        ? $"'{definition.Id}' has no install for this system."
-                        : $"No install of {definition.Name} was found on this device.{hint}",
+                    forThisOs.Count == 0 ? $"'{definition.Id}' has no install for this system." : new Note(text, next),
                     candidates);
             }
 
@@ -195,7 +202,9 @@ public sealed partial class Workspace
             {
                 return AppAddOutcome.Refuse(
                     AppAddProblem.InstallChoiceNeeded,
-                    $"{definition.Name} was found more than once on this device ({Join(detected.Select(c => c.Id))}). Choose one with --install <id>.",
+                    new Note(
+                        $"{definition.Name} was found more than once on this device ({Join(detected.Select(c => c.Id))}).",
+                        new NextStep(NextStepKind.ChooseInstall)),
                     candidates);
             }
 
@@ -228,7 +237,9 @@ public sealed partial class Workspace
             {
                 return AppAddOutcome.Refuse(
                     AppAddProblem.UnknownRole,
-                    $"Install '{chosen.Id}' of '{definition.Id}' has no role that is on by default. Name the roles with --role <id>.",
+                    new Note(
+                        $"Install '{chosen.Id}' of '{definition.Id}' has no role that is on by default.",
+                        new NextStep(NextStepKind.NameRoles)),
                     candidates);
             }
         }
@@ -241,7 +252,9 @@ public sealed partial class Workspace
             {
                 return AppAddOutcome.Refuse(
                     AppAddProblem.Unresolved,
-                    $"The folder for role '{role.Id}' could not be found: {resolved.Message}" + HintFor(resolved.Problem),
+                    new Note(
+                        $"The folder for role '{role.Id}' could not be found: {resolved.Message?.Text}",
+                        [.. resolved.Message?.Next ?? [], .. NextFor(resolved.Problem)]),
                     candidates);
             }
 
@@ -261,8 +274,10 @@ public sealed partial class Workspace
             {
                 return AppAddOutcome.Refuse(
                     AppAddProblem.Conflict,
-                    $"'{mappingId}' is applied on this device at '{current.Source}', but the definition now finds '{source}'. " +
-                    $"Run 'savetether revert {mappingId}' first, then add the app again.",
+                    new Note(
+                        $"'{mappingId}' is applied on this device at '{current.Source}', but the definition now finds '{source}'. " +
+                        "It has to be reverted before the app is added again.",
+                        new NextStep(NextStepKind.Revert, mappingId)),
                     candidates);
             }
 
@@ -274,7 +289,9 @@ public sealed partial class Workspace
             }
 
             var note = mapping is not null && mapping.Depth != role.EntryDepth
-                ? $"The existing mapping's entry depth ({mapping.Depth}) is kept; the definition says {role.EntryDepth}. Change it with 'savetether map add {mappingId} --source <path> --entry-depth <n>'."
+                ? new Note(
+                    $"The existing mapping's entry depth ({mapping.Depth}) is kept; the definition says {role.EntryDepth}.",
+                    new NextStep(NextStepKind.ChangeEntryDepth, mappingId))
                 : null;
             var (exists, isLink, bytes, files) = Measure(source);
             planned.Add(new AppRolePlan(
@@ -318,38 +335,39 @@ public sealed partial class Workspace
 
     private static string Join(IEnumerable<string> ids) => ids.Any() ? string.Join(", ", ids) : "none";
 
-    private static string HintFor(ResolveProblem? problem) => problem switch
+    private static NextStep[] NextFor(ResolveProblem? problem) => problem switch
     {
-        ResolveProblem.NeedsValue => " Give it with --install-dir, --sd-card or --wine-prefix.",
-        ResolveProblem.Ambiguous => " Give the one to use with --sd-card or --wine-prefix.",
-        _ => string.Empty,
+        ResolveProblem.NeedsValue => [new NextStep(NextStepKind.GiveLocation)],
+        ResolveProblem.Ambiguous => [new NextStep(NextStepKind.ChooseLocation)],
+        _ => [],
     };
 
     /// <summary>
     /// When nothing was found and a remembered location was used in place of one given now, says
     /// so: the app has most likely moved, and giving its new location is the fix.
     /// </summary>
-    private static string MovedHint(string appName, AppAddRequest request, DeviceApp? stored)
+    /// <returns>The sentences to add, starting with a space, or null when nothing remembered was used.</returns>
+    private static string? MovedHint(string appName, AppAddRequest request, DeviceApp? stored)
     {
         var remembered = new List<string>();
         if (request.InstallDir is null && stored?.InstallDir is { } dir)
         {
-            remembered.Add($"install folder '{dir}' (--install-dir)");
+            remembered.Add($"install folder '{dir}'");
         }
 
         if (request.SdCard is null && stored?.SdCard is { } card)
         {
-            remembered.Add($"SD card '{card}' (--sd-card)");
+            remembered.Add($"SD card '{card}'");
         }
 
         if (request.WinePrefix is null && stored?.WinePrefix is { } prefix)
         {
-            remembered.Add($"Wine prefix '{prefix}' (--wine-prefix)");
+            remembered.Add($"Wine prefix '{prefix}'");
         }
 
         return remembered.Count == 0
-            ? string.Empty
-            : $" It was looked for at the {string.Join(" and the ", remembered)} remembered from last time. If {appName} has moved, run app add again with its new location.";
+            ? null
+            : $" It was looked for at the {string.Join(" and the ", remembered)} remembered from last time, so {appName} may have moved.";
     }
 
     /// <summary>Whether a folder is there, whether it is a link, and the size of what is in it, not following links inside.</summary>

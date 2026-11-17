@@ -31,7 +31,7 @@ public class SteamAndLutrisTests
     {
         Assert.False(result.IsResolved, $"Expected {problem} but resolved to {result.Path}");
         Assert.Equal(problem, result.Problem);
-        Assert.Contains(messagePart, result.Message, StringComparison.Ordinal);
+        Assert.Contains(messagePart, result.Message?.Text, StringComparison.Ordinal);
     }
 
     /// <summary>A path as Steam writes it inside a text VDF: backslashes escaped.</summary>

@@ -1,3 +1,4 @@
+using SaveTether.Cli;
 using SaveTether.Core.Backup;
 using SaveTether.Core.Execution;
 using SaveTether.Core.FileSystem;
@@ -190,7 +191,7 @@ public class ExecutorTests
         var stale = ExecWorld.Planned(Planner.Plan(world.Read(journalOpen: false), new ApplyRequest(SetupChoice.Copy)));
         var refused = world.Executor().Run(stale);
         Assert.Equal(ExecutionStatus.Refused, refused.Status);
-        Assert.Contains("recover", refused.Error, StringComparison.Ordinal);
+        Assert.Contains(refused.Error!.Next, n => n.Kind == NextStepKind.Recover);
         Assert.Equal(EntryKind.Directory, SafeFs.Probe(world.Source));
 
         Assert.Equal(ExecutionStatus.RolledBack, world.Executor().Recover().Status);
@@ -208,7 +209,7 @@ public class ExecutorTests
         var result = world.Executor(new FailAt(StepKind.CreateLink, FaultPoint.AfterStep)).Run(plan);
 
         Assert.Equal(ExecutionStatus.RolledBack, result.Status);
-        Assert.Contains("injected failure", result.Error, StringComparison.Ordinal);
+        Assert.Contains("injected failure", result.Error?.Text, StringComparison.Ordinal);
         Assert.Equal(EntryKind.Directory, SafeFs.Probe(world.Source));
         Assert.Equal(before, ExecWorld.Files(world.Source));
         Assert.Equal(EntryKind.Missing, SafeFs.Probe(world.Aside));
@@ -217,7 +218,7 @@ public class ExecutorTests
 
         // Invariant 2: what was already copied into the shared folder stays, and is reported.
         Assert.Equal(before, ExecWorld.Files(world.Target));
-        Assert.Contains(result.Messages, m => m.Contains(world.Target, StringComparison.Ordinal));
+        Assert.Contains(result.Messages, m => m.Text.Contains(world.Target, StringComparison.Ordinal));
         Assert.Single(result.BackupIds);
     }
 
@@ -253,7 +254,7 @@ public class ExecutorTests
         var result = world.Apply(new ApplyRequest(SetupChoice.Copy));
 
         Assert.Equal(ExecutionStatus.Refused, result.Status);
-        Assert.Contains(world.Aside, result.Error, StringComparison.Ordinal);
+        Assert.Contains(world.Aside, result.Error?.Text, StringComparison.Ordinal);
         Assert.Equal(EntryKind.Directory, SafeFs.Probe(world.Source));
         Assert.Equal(EntryKind.Missing, SafeFs.Probe(world.Target));
         Assert.Empty(world.Backups.List());
@@ -298,7 +299,7 @@ public class ExecutorTests
         Assert.Equal(ExecutionStatus.RolledBack, result.Status);
         Assert.Equal("new", ExecWorld.Files(world.Source)["GAME7/save.bin"]);
         Assert.Equal("one", ExecWorld.Files(world.Aside)["GAME1/save.bin"]);
-        Assert.Contains(result.Messages, m => m.Contains(world.Aside, StringComparison.Ordinal));
+        Assert.Contains(result.Messages, m => m.Text.Contains(world.Aside, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -334,7 +335,7 @@ public class ExecutorTests
 
         Assert.Equal(ExecutionStatus.Completed, result.Status);
         Assert.Equal(["GAME1", "GAME1/save.bin"], SafeFs.EnumerateTree(world.Target).Select(e => e.RelativePath));
-        Assert.Contains(result.Messages, m => m.Contains("link-to-canary", StringComparison.Ordinal));
+        Assert.Contains(result.Messages, m => m.Text.Contains("link-to-canary", StringComparison.Ordinal));
         Assert.Equal("link-to-canary", Assert.Single(world.Backups.LinksOf(Assert.Single(result.BackupIds))).Path);
         Assert.Equal(EntryKind.Missing, SafeFs.Probe(world.Aside));
         world.Sandbox.AssertCanaryIntact();

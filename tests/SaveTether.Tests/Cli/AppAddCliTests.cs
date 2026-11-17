@@ -350,8 +350,9 @@ public class AppAddCliTests
         Assert.Contains("nothing at the save folder", deck.Ok("status").Out, StringComparison.Ordinal);
 
         var notFound = deck.Expect(CliApp.ExitRefused, "app", "add", "testapp").Err;
-        Assert.Contains($"install folder '{first}' (--install-dir) remembered from last time", notFound, StringComparison.Ordinal);
-        Assert.Contains("If Test App has moved", notFound, StringComparison.Ordinal);
+        Assert.Contains($"install folder '{first}' remembered from last time", notFound, StringComparison.Ordinal);
+        Assert.Contains("Give the new location with --install-dir", notFound, StringComparison.Ordinal);
+        Assert.Contains("Test App may have moved", notFound, StringComparison.Ordinal);
 
         deck.Ok("app", "add", "testapp", "--install-dir", second);
         deck.Ok("apply", "--all");
@@ -540,7 +541,7 @@ public class AppAddCliTests
         var json = deck.Expect(CliApp.ExitRefused, "app", "add", "testapp", "--json").Json();
 
         Assert.Equal("not-installed", json.GetProperty("app").GetProperty("problem").GetString());
-        Assert.Contains("Install 'portable' can only be looked for once you say where: Give it with --install-dir", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Install 'portable' can only be looked for once you say where. Give it with --install-dir", json.GetProperty("error").GetString(), StringComparison.Ordinal);
         var portable = json.GetProperty("app").GetProperty("candidates").EnumerateArray().Single(c => c.GetProperty("id").GetString() == "portable");
         Assert.Equal("needs-value", portable.GetProperty("problem").GetString());
     }

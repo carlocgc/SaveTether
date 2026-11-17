@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using SaveTether.Core.FileSystem;
+using SaveTether.Core.Model;
 
 namespace SaveTether.Core.Storage;
 
@@ -49,7 +50,19 @@ public sealed class StoreException : IOException
         Problem = problem;
     }
 
+    /// <param name="message">What is wrong, in words for any front end; <see cref="Exception.Message"/> is its text.</param>
+    public StoreException(StoreProblem problem, Note message, Exception? innerException = null)
+        : base(message?.Text, innerException)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        Problem = problem;
+        Next = message.Next;
+    }
+
     public StoreProblem Problem { get; } = StoreProblem.Invalid;
+
+    /// <summary>What the owner can do about it. Each front end words it itself.</summary>
+    public IReadOnlyList<NextStep> Next { get; } = [];
 }
 
 /// <summary>

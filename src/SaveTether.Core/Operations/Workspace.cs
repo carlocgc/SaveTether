@@ -17,7 +17,7 @@ public sealed record InitRequest(
 /// <param name="Devices">Every device that has a file in the sync root now, including this one.</param>
 public sealed record InitResult(
     string SyncRoot, string DeviceName, string BackupRoot, bool CreatedRoot, bool NewDevice, bool TookOver,
-    IReadOnlyList<string> Devices, IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Devices, IReadOnlyList<Note> Notes);
 
 /// <param name="CreatedMapping">False when the shared mapping already existed and only this device's path was set.</param>
 /// <param name="EntryDepthChanged">True when an existing mapping's entry depth was changed by this call.</param>
@@ -81,7 +81,7 @@ public sealed partial class Workspace
         var bootstrap = local.TryReadBootstrap()
             ?? throw new StoreException(
                 StoreProblem.NotFound,
-                "This device is not set up yet. Run 'savetether init --sync-root <path>' first.");
+                new Note("This device is not set up yet.", new NextStep(NextStepKind.SetUp)));
         return new Workspace(local, bootstrap, processes, time, faults, flatpak);
     }
 
@@ -117,9 +117,11 @@ public sealed partial class Workspace
             {
                 throw new StoreException(
                     StoreProblem.NotInitialized,
-                    $"'{shared.SyncRoot}' is not set up for SaveTether: the folder '{Path.Combine(SharedStore.ToolFolderName, SharedStore.MetaFolderName)}' is missing. " +
-                    "On the first device, add --create-root. On any other device, wait for the sync tool to deliver that folder; " +
-                    "if the sync root is on a removable drive, check that it is connected.");
+                    new Note(
+                        $"'{shared.SyncRoot}' is not set up for SaveTether: the folder '{Path.Combine(SharedStore.ToolFolderName, SharedStore.MetaFolderName)}' is missing. " +
+                        "On any device but the first, wait for the sync tool to deliver that folder; " +
+                        "if the sync root is on a removable drive, check that it is connected.",
+                        new NextStep(NextStepKind.CreateRoot)));
             }
 
             shared.CreateRoot();
@@ -140,7 +142,7 @@ public sealed partial class Workspace
             shared.WriteDevice(device);
         }
 
-        var notes = new List<string>();
+        var notes = new List<Note>();
         if (SafeFs.Probe(PathRules.ResolveAll(backupRoot)) != EntryKind.Directory)
         {
             // A location the owner did not name here may be on a drive that is not connected.
@@ -152,9 +154,10 @@ public sealed partial class Workspace
             }
             else
             {
-                notes.Add(
+                notes.Add(new Note(
                     $"The backup location '{backupRoot}' from this device's file does not exist. " +
-                    "Connect its drive, or run init again with --backup-root <path>.");
+                    "Connect its drive.",
+                    new NextStep(NextStepKind.ChooseBackupLocation)));
             }
         }
 
@@ -197,7 +200,9 @@ public sealed partial class Workspace
         {
             throw new StoreException(
                 StoreProblem.Conflict,
-                $"'{mappingId}' is applied on this device at '{current.Source}'. Run 'savetether revert {mappingId}' before changing its save folder.");
+                new Note(
+                    $"'{mappingId}' is applied on this device at '{current.Source}', so its save folder cannot be changed.",
+                    new NextStep(NextStepKind.Revert, mappingId)));
         }
 
         var mapping = Shared.TryReadMapping(mappingId);
@@ -208,7 +213,9 @@ public sealed partial class Workspace
             {
                 throw new StoreException(
                     StoreProblem.Invalid,
-                    $"There is no mapping '{mappingId}' yet, so it needs --target <app>/<save folder>, for example --target {Identifiers.AppOf(mappingId)}/saves.");
+                    new Note(
+                        $"There is no mapping '{mappingId}' yet, so its shared folder has to be named, in the form <app>/<save folder>.",
+                        new NextStep(NextStepKind.GiveTarget, mappingId)));
             }
 
             mapping = new MappingFile
@@ -250,7 +257,9 @@ public sealed partial class Workspace
         {
             throw new StoreException(
                 StoreProblem.Conflict,
-                $"'{mappingId}' is applied on this device: '{path.Source}' is a link. Run 'savetether revert {mappingId}' first.");
+                new Note(
+                    $"'{mappingId}' is applied on this device: '{path.Source}' is a link.",
+                    new NextStep(NextStepKind.Revert, mappingId)));
         }
 
         var paths = new Dictionary<string, DevicePath>(device.Paths);
@@ -288,7 +297,7 @@ public sealed partial class Workspace
         var device = Shared.TryReadDevice(DeviceName)
             ?? throw new StoreException(
                 StoreProblem.NotFound,
-                $"The sync root has no file for this device ('{DeviceName}'). Run 'savetether init' again.");
+                new Note($"The sync root has no file for this device ('{DeviceName}').", new NextStep(NextStepKind.SetUpAgain)));
         var state = Local.ReadState();
         var mappings = mappingId is null ? Shared.ListMappings() : [ReadMapping(mappingId)];
         return new StatusReport(
@@ -392,7 +401,7 @@ public sealed partial class Workspace
         {
             throw new StoreException(
                 StoreProblem.NotFound,
-                $"This device has no save folder set for '{mappingId}'. Set one with 'savetether map add {mappingId} --source <path>'.");
+                new Note($"This device has no save folder set for '{mappingId}'.", new NextStep(NextStepKind.SetSaveFolder, mappingId)));
         }
 
         return SnapshotReader.Read(Shared, mapping, DeviceName, path, device.BackupRoot, _processes, Journal.IsOpen);
@@ -402,7 +411,7 @@ public sealed partial class Workspace
         Shared.TryReadMapping(mappingId)
         ?? throw new StoreException(
             StoreProblem.NotFound,
-            $"There is no mapping '{mappingId}'. Add it with 'savetether map add {mappingId} --target <app>/<save folder> --source <path>'.");
+            new Note($"There is no mapping '{mappingId}'.", new NextStep(NextStepKind.AddMapping, mappingId)));
 
     /// <summary>
     /// This device's shared file, refused when another install owns the name now: acting on it
@@ -413,13 +422,14 @@ public sealed partial class Workspace
         var device = Shared.TryReadDevice(DeviceName)
             ?? throw new StoreException(
                 StoreProblem.NotFound,
-                $"The sync root has no file for this device ('{DeviceName}'). Run 'savetether init' again.");
+                new Note($"The sync root has no file for this device ('{DeviceName}').", new NextStep(NextStepKind.SetUpAgain)));
         if (!DeviceIdentity.Matches(Bootstrap, device))
         {
             throw new StoreException(
                 StoreProblem.NameInUse,
-                $"The device name '{DeviceName}' now belongs to another install: another machine may be using it, or took it over. " +
-                "If this machine should have the name, run 'savetether init' again with --take-over; otherwise choose another name.");
+                new Note(
+                    $"The device name '{DeviceName}' now belongs to another install: another machine may be using it, or took it over.",
+                    new NextStep(NextStepKind.TakeOverName)));
         }
 
         return device;
@@ -449,7 +459,7 @@ public sealed partial class Workspace
     /// folder reached two ways is still one folder; the save folder itself is not, since it is often a link.
     /// </summary>
     /// <param name="others">The other mappings' save folders, by mapping ID.</param>
-    internal static string? SourceOverlap(string mappingId, string source, IEnumerable<KeyValuePair<string, string>> others)
+    internal static Note? SourceOverlap(string mappingId, string source, IEnumerable<KeyValuePair<string, string>> others)
     {
         var mine = PathRules.ResolveParents(source);
         foreach (var (otherId, otherSource) in others)
@@ -466,8 +476,9 @@ public sealed partial class Workspace
                 : null;
             if (how is not null)
             {
-                return $"'{source}' {how} '{otherId}' on this device ('{otherSource}'). A folder can be shared through one mapping only. " +
-                    $"Use '{otherId}', or remove it with 'savetether map remove {otherId}' (after 'savetether revert {otherId}' if it is applied).";
+                return new Note(
+                    $"'{source}' {how} '{otherId}' on this device ('{otherSource}'). A folder can be shared through one mapping only.",
+                    new NextStep(NextStepKind.RemoveMapping, otherId));
             }
         }
 

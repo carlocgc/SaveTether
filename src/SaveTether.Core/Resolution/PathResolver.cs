@@ -1,4 +1,5 @@
 using SaveTether.Core.Definitions;
+using SaveTether.Core.Model;
 
 namespace SaveTether.Core.Resolution;
 
@@ -172,7 +173,7 @@ public sealed class PathResolver
             {
                 return ResolveResult.Fail(
                     ResolveProblem.NotYetSupported,
-                    "Finding Steam games on Windows is not supported yet. Choose the install with --install.");
+                    new Note("Finding Steam games on Windows is not supported yet.", new NextStep(NextStepKind.ChooseInstall)));
             }
 
             return appId > 0 && Steam().FindAppManifest((ulong)appId) is { } manifest

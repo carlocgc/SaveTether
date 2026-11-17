@@ -105,8 +105,10 @@ internal sealed record CliOutput
     WriteIndented = true,
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
     UseStringEnumConverter = true,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    Converters = [typeof(NoteJsonConverter)])]
 [JsonSerializable(typeof(CliOutput))]
+[JsonSerializable(typeof(PlanOutcome))]
 internal sealed partial class CliJsonContext : JsonSerializerContext;
 
 /// <summary>Prints a <see cref="CliOutput"/>: one JSON object on stdout, or text with problems on stderr.</summary>
@@ -179,7 +181,7 @@ internal static class OutputWriter
         stdout.WriteLine($"  devices:   {string.Join(", ", init.Devices)}");
         foreach (var note in init.Notes)
         {
-            stdout.WriteLine($"Note: {note}");
+            stdout.WriteLine($"Note: {Hints.Compose(note)}");
         }
     }
 
@@ -216,7 +218,7 @@ internal static class OutputWriter
             {
                 stderr.WriteLine(candidate.IsDetected
                     ? $"  install {candidate.Id}: found ({candidate.Found})"
-                    : $"  install {candidate.Id}: not found. {candidate.Reason}");
+                    : $"  install {candidate.Id}: not found. {Hints.ComposeOrNull(candidate.Reason)}");
             }
 
             return;
@@ -239,7 +241,7 @@ internal static class OutputWriter
 
             if (role.Note is { } note)
             {
-                stdout.WriteLine($"    Note: {note}");
+                stdout.WriteLine($"    Note: {Hints.Compose(note)}");
             }
         }
 
@@ -296,7 +298,7 @@ internal static class OutputWriter
         var width = status.Mappings.Select(m => m.MappingId.Length).DefaultIfEmpty(0).Max();
         foreach (var mapping in status.Mappings)
         {
-            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-12}  {mapping.Detail}");
+            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-12}  {Hints.Compose(mapping.Detail)}");
         }
 
         if (status.DeviceFileMismatch)
@@ -343,7 +345,7 @@ internal static class OutputWriter
                     stdout.WriteLine(headline);
                     foreach (var note in plan.Notes)
                     {
-                        stdout.WriteLine($"Note: {note}");
+                        stdout.WriteLine($"Note: {Hints.Compose(note)}");
                     }
                 }
 

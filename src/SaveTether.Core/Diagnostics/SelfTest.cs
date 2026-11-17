@@ -136,7 +136,8 @@ public static class SelfTest
             Require(store.List(mappingId).Single().Reason == BackupReason.PreApply, "backup was not listed");
         });
 
-        yield return ("plan and render", () =>
+        // Rendering a plan as text or JSON is the CLI's job; the journal written below covers the plan's JSON.
+        yield return ("plan", () =>
         {
             var device = shared.ReadDevice("selftest-device");
             var snapshot = SnapshotReader.Read(
@@ -144,8 +145,6 @@ public static class SelfTest
                 new SystemProcessLister(), journalOpen: false);
             var outcome = Planner.Plan(snapshot, new ApplyRequest(SetupChoice.Copy, AssumeSynced: true));
             Require(outcome.Plan is { Classification: Classification.FirstDevice }, "the planner did not see a first device");
-            Require(PlanRenderer.ToJson(outcome).Contains("\"first-device\"", StringComparison.Ordinal), "the plan did not render as JSON");
-            Require(PlanRenderer.ToText(outcome).Contains("1. Back up", StringComparison.Ordinal), "the plan did not render as text");
         });
 
         yield return ("apply, recover and revert", () =>
