@@ -46,11 +46,11 @@ Labels used throughout: **[V]** verified by a source I checked today, **[K]** fr
 
 | # | Question | Answer | Effect on the design |
 |---|---|---|---|
-| 1 | Is file versioning on at the sync host? | That is the user's choice. Redirection is the main feature; backups are an option | The design no longer relies on host versioning. The tool's own local backup store is the only safety net it can count on. Optional scheduled local snapshots of the shared targets are added to phase 2 |
+| 1 | Is file versioning on at the sync host? | That is the user's choice. Redirection is the main feature; backups are an option | The design no longer relies on host versioning. The tool's own local backup store is the only safety net it can count on. Optional scheduled local snapshots of the shared targets were added to phase 2, then dropped by the owner on 2026-11-17 before they were merged: SaveTether is a redirection tool, not a backup solution. The verified backup taken before each apply, revert and restore stays (5.12) |
 | 2 | Does Steam Cloud cover FF IX? | Yes. Games with platform cloud saves are out of scope. Targets are standalone apps and games without cloud support | The tool warns before managing a game that has platform cloud saves. FF IX stays only as a format example |
 | 3 | How many apps? | 10 to 20: about half emulators, the rest old Flash games and visual novels, on Windows and via Lutris on the Deck | Phases 1 and 2 are clearly worth it for personal use. Phases 3 and 4 are justified by the open-source aim, not by personal need. Lutris and non-Steam prefixes become first-class (5.2) |
 | 4 | Save states? | Yes: saves and states. Screenshots optional, space permitting | State roles default to on. Media roles stay off, and the tool shows each role's size before enabling |
-| 5 | Is Decky acceptable? | Yes, but the panel is compact | The Deck UI is a Decky plugin (5.11). The desktop GUI is deferred |
+| 5 | Is Decky acceptable? | Yes, but the panel is compact | The Deck UI is a Decky plugin (5.11). The desktop GUI is deferred. Revised by the owner on 2026-11-17: the desktop app (GUI with a tray icon) comes first, and the Decky plugin shows status first (5.14) |
 | 6 | Eden's path on the Deck? | Not installed at the moment; it is a yuzu derivative | Both candidate paths stay in the definition, marked untested |
 | 7 | Suspend and switch? | No. Save, shut down, resume elsewhere. Redirection is the firm preference; reacting to app start and exit is not wanted | The copy-around-launch mechanism is dropped from the plan, not just deferred. Mechanisms are `link` and `config` only |
 
@@ -97,7 +97,7 @@ Behaviours that need handling whatever the choice:
 
 **Apply/revert.** A journaled transaction, section 5.3.
 
-**UX.** Windows: CLI first, desktop GUI later. Deck: CLI over SSH or Konsole first; later a Decky plugin that calls the CLI (5.11).
+**UX.** Windows: CLI first, desktop GUI later. Deck: CLI over SSH or Konsole first; later a Decky plugin that calls the CLI (5.11). Revised 2026-11-17: once phase 2 is done, the desktop app is the front end most people use, and the CLI is the core for scripts, SSH and LLM agents (5.14).
 
 **Effort.** Core transaction engine and safe filesystem layer M. CLI S. Resolver and definitions format M. Detection M. Desktop GUI M to L. Decky plugin M. CI, packaging and signing M.
 
@@ -196,6 +196,8 @@ Controller use without Decky: a desktop GUI added as a non-Steam shortcut runs i
 
 **UI shape: CLI core, thin UIs.** The CLI is also the test harness and the Decky backend's only dependency.
 
+Revised 2026-11-17 (5.14): **UI first for people, CLI as the core.** The desktop app is what most users start and keep running; the CLI stays the cross-platform core and the entry point for scripts, SSH and LLM agents. Both sit on the same core library, so the safety rules live in one place.
+
 ## 4. Recommendation
 
 Build **design A** in **C#/.NET**, phase 1 as a link-only CLI with mappings entered by hand through `map add`, creating redirections into a fresh `<sync root>/savetether/` tree.
@@ -219,10 +221,11 @@ What would change my mind:
 flowchart TB
   subgraph UI["Front ends (thin)"]
     CLI["CLI (text or JSON)"]
-    GUI["Desktop GUI (later)"]
-    DECKY["Decky plugin (later)"]
+    GUI["Desktop app: window and tray icon (phase 3)"]
+    DECKY["Decky plugin (phase 4)"]
   end
-  GUI --> CLI
+  GUI --> PLAN
+  GUI --> HEALTH
   DECKY --> CLI
 
   subgraph CORE["Core library"]
@@ -643,7 +646,7 @@ A step that fails during a normal run (as opposed to a crash) is handled the sam
 - **Typical setup.** Windows first: `apply ppsspp.savedata --copy`, so Windows' saves become the shared copy. After Syncthing has delivered them, on the Deck: `apply ppsspp.savedata`. The Deck has saves of its own, so the guard stops and shows the comparison; choose `--no-copy` (Windows wins, Deck's saves kept in the local backup) or `--add-missing` (Deck-only games are added too). Trying `--copy` on the Deck is refused.
 - **Restoring a wiped device.** Reinstall the apps, and let the sync tool deliver `savetether/` again (setting up the sync tool itself is outside SaveTether, and is the one step it cannot remove). Then `savetether init --sync-root ~/Sync`, pick this device's name from the list `init` shows, confirm taking it over, and `savetether apply --all`. The fresh app folders are empty and the shared copies hold the saves, so every mapping takes row 4 of the classification and links without a question. A path that changed with the reinstall (a new SD card ID, a different install folder) fails the precondition that S's parent exists; fix that one line in the device file, from any device. Phase 2 tokens such as `{sd_card}` and `{flatpak:<id>}` remove most of those.
 - **Comparison.** Shown whenever the guard stops. Grouped by top-level entry, then by file (relative path, size, hash): entries only local, only shared, and present on both with differences, with the newest modification time on each side ("local newest: 10 Nov 21:14; shared newest: 3 Nov 18:02"). Both sides are backed up locally first whichever you pick. There is no file-level merge inside an entry; for multi-file saves it produces incoherent states.
-- **Ongoing conflicts.** If two devices change the same file while apart, how that is resolved is the sync tool's business; Syncthing, for example, keeps one and renames the other to `*.sync-conflict-<date>-<time>-<device>`. The core does not recognise any tool's conflict naming. Listing and resolving those files is part of a later sync-tool integration (5.10). The core's recovery path is its local backup store. Because versioning at the sync host is the user's choice, the tool offers its own optional snapshots: a scheduled or on-demand copy of each shared target into the local backup store, with a retention count. It is off by default and costs disk space on the device, which the UI shows.
+- **Ongoing conflicts.** If two devices change the same file while apart, how that is resolved is the sync tool's business; Syncthing, for example, keeps one and renames the other to `*.sync-conflict-<date>-<time>-<device>`. The core does not recognise any tool's conflict naming. Listing and resolving those files is part of a later sync-tool integration (5.10). The core's recovery path is its local backup store. Versioning at the sync host is the user's choice. Optional snapshots of the shared targets were planned here and dropped on 2026-11-17 (section 1, question 1): the backup taken before each operation is the safety net, and anything more is the sync host's job.
 
 ### 5.5 Health
 
@@ -659,6 +662,8 @@ A step that fails during a normal run (as opposed to a crash) is handled the sam
 | Foreign link | S is a link the tool did not create, for example one left by the old scripts. Apply refuses; the owner removes it by hand |
 
 Cost is one `lstat` and one read-link per mapping, plus a directory walk of small save folders for conflicts: milliseconds. So no daemon. Run it on tool start, on demand, and optionally at login (Task Scheduler on Windows; a systemd *user* timer on SteamOS, which needs no root and lives in `/home`). A later option is a launch guard, `savetether guard <app> -- %command%`, that checks one mapping before the game starts.
+
+Revised 2026-11-17: the login-time check is not a scheduled job. A scheduled `status` was built and dropped before it was merged, because the desktop app's tray icon does the same job better: it starts with the session and shows health all day (5.14). In Game Mode the Decky plugin shows it (5.11), and over SSH or for an agent, `status --json` answers on demand.
 
 ### 5.6 Shared versus local
 
@@ -714,12 +719,15 @@ If step 2 is skipped, `apply` finds a foreign link at S and refuses, so a leftov
 |---|---|---|
 | 0 | Settle the open decisions in section 7 (done 2026-11-12) | decisions recorded |
 | 1 | CLI: `init`, `map add/remove`, `status`, `apply` (including `--all`), `revert`, `backup list/restore`, `recover`. Link mechanism only. Journal, backups, the setup choices and guard with the comparison (5.3, 5.4), shared per-device config (5.6), all six invariants, the test suite in 5.8. Absolute paths, entered with `map add`. No definitions, no detection, no config redirects, no adoption of old links. Specified in 5.12 | one real mapping seeded on Windows, joined on the Deck, reverted and re-applied; a wiped device (simulated by deleting the local folder and the links) restored with `init` and `apply --all`; status clean on both |
-| 2 | Entry depth (5.13). Definition format and tokens, path resolver including Lutris and non-Steam prefixes, optional snapshots, login-time check | a device restored after its SD card ID or install folder changed, with no hand edits |
-| 3 | Decky plugin (5.11). Detection, with the Ludusavi manifest as an optional hint source | apply and revert from Game Mode |
-| 4 | Public release: CI matrix, signing, package manifests, definitions repo split, contributor docs | first outside definition merged |
-| Later | Desktop GUI for Windows; Steam Frame support; optional sync-tool integrations, each a separate opt-in module the core never depends on (for Syncthing: folder-idle check before apply, listing and resolving conflict files, generated ignore patterns) | |
+| 2 | Entry depth (5.13). Definition format and tokens, path resolver including Lutris and non-Steam prefixes, `app add`, Flatpak precheck, retention of the backups taken before each operation. (Optional snapshots and a scheduled login check were dropped on 2026-11-17) | a device restored after its SD card ID or install folder changed, with no hand edits |
+| 3 | Desktop app for Windows and Linux: a window for managing apps and links, and a tray icon showing health (5.14). JSON contract freeze for the CLI | a new user sets up a device, adds an app and applies it without the CLI, on both systems; the tray turns amber when a link breaks |
+| 4 | Decky plugin, status first (5.11). Detection, with the Ludusavi manifest as an optional hint source | status of every mapping readable in Game Mode; Recover and a choice-free Apply work from the controller |
+| 5 | Public release: CI matrix, signing, package manifests, definitions repo split, contributor docs | first outside definition merged |
+| Later | Steam Frame support; optional sync-tool integrations, each a separate opt-in module the core never depends on (for Syncthing: folder-idle check before apply, listing and resolving conflict files, generated ignore patterns) | |
 
 ### 5.11 Decky plugin shape
+
+Revised by the owner on 2026-11-17: **status first.** Typing in Game Mode is fiddly and error-prone, and choosing between setup options needs reading, so the plugin shows health and offers only actions that need no input: Recover, and Apply when the planner needs no choice. Everything else is left to the desktop app in Desktop Mode. The outline below was the earlier, larger plan; the full-screen pages and "adding an app" are dropped from the plugin.
 
 The Quick Access panel is a narrow column, so it shows only what fits a list:
 
@@ -841,6 +849,46 @@ When to revisit: an app that matters keeps showing as Replaced after being linke
 - The app must be closed, with a process name required and not optional, because some apps rewrite their config on exit and would undo the edit.
 - Revert must not blindly restore the old setting. The old folder still holds the saves from the day of applying, so when it differs from the shared folder the owner has to choose which the app should see.
 
+### 5.14 Desktop app: window and tray icon (phase 3)
+
+Status: direction agreed with the owner on 2026-11-17. Not yet specified to the level of 5.12; phase 3 starts by doing that. The toolkit is not decided (see the end of this section).
+
+**Why.** SaveTether is a redirection tool. Most people will start it from a desktop, not a terminal, and what they want day to day is reassurance that their links are still healthy. So the desktop app is the front end most people use, and the CLI stays the cross-platform core: the test harness, the Decky backend, and the entry point for scripts, SSH sessions and LLM agents.
+
+**One app.** `savetether-gui` is a window and a tray icon in one process:
+
+- **Tray icon.** Green when every mapping on this device is OK or not applied here; amber for anything else: Broken, Replaced, Retargeted, Foreign link, Double seed, a device file that belongs to another install, or an unfinished operation. These are the states of 5.5. The icon's menu has the overall state, "Open SaveTether" and Quit. The app re-checks health every few minutes, when the window or menu opens, and after each operation; a check is milliseconds (5.5). A desktop notification is shown when the state turns amber, not on every check.
+- **Main window.**
+  - *First-run setup*: choose the sync folder, name this device, create the shared folder on the first device only (`init`). Probably the biggest ease-of-use gain, since this is where a new user gives up today.
+  - *Apps*: each app and its roles with their health, and the fix that fits each state: Apply, Revert, Recover, "check the sync root is there", open the folder, list backups.
+  - *Add app*: a guided `app add`: the installs found, each role with its size, the roles to add, and fields only for what cannot be found by looking (install folder, SD card, Wine prefix).
+  - *Apply with a choice*: when the planner stops, the window shows the comparison (5.4) and offers only the allowed choices, each with a plain sentence about what it does. `--replace-shared` needs a separate, deliberate confirmation, as on the CLI. The Flatpak grant (P2.6) is offered the same way the CLI offers it.
+  - *Backups*: list and restore.
+  - *Settings*: start with the session, and where backups go.
+- **Keyboard first.** It must work with keyboard focus alone, so it is usable in Game Mode as a non-Steam shortcut with Steam Input mapping the controller to keys (3.3).
+
+**How it is built.**
+
+- The app references the core library directly, as the CLI does. It ships in the same release as the CLI, so there is no version skew to guard against, and it can use the core's types instead of parsing JSON. The Decky plugin, which is Python, uses the CLI's JSON.
+- **Operation lock.** The app and the CLI are separate processes, and a person, a script or the Decky plugin may run the CLI while the app is open. The journal records an unfinished operation but does not stop two from starting at once. Phase 3 adds a lock file in the local folder, held for the length of an operation; a second process is refused with "another SaveTether operation is running". Only one copy of the app runs at a time.
+- **Start with the session.** Opt-in from Settings, per user, no admin rights: an XDG autostart `.desktop` file on Linux, an `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` entry on Windows. Turning it off removes the entry.
+- **No scheduler.** The tray icon replaces a scheduled login check, and there are no scheduled snapshots (section 1, question 1; 5.5).
+
+**Distribution.** No installer at first.
+
+- Each release archive holds both binaries: `savetether` and `savetether-gui` (`.exe` on Windows), for win-x64, linux-x64 and linux-arm64. The CLI stays a small Native AOT binary with no UI code; the app carries the UI toolkit.
+- The expected place is per user and needs no admin rights: `~/.local/bin` on Linux and SteamOS (on `PATH` on Mint and SteamOS), `%LOCALAPPDATA%\Programs\SaveTether` on Windows. On first run the app offers to move both binaries there and to set up starting with the session.
+- Anything that records the app's path (the autostart entry) stops working if the binaries are moved or deleted, and it fails silently because the binary that would report it is the one that is gone. So the app re-writes the autostart entry with its current path whenever it starts with the setting on, and `status` warns when the autostart entry points to a missing binary.
+- Updating is replacing the files in place. On Windows the running app locks its `.exe`, so the app must be quit first; the app should say so if an update is attempted while it runs.
+- An installer, code signing (SmartScreen warns on unsigned Windows binaries), winget or Scoop manifests, and an AppImage belong to phase 5, when other people use it. Flatpak stays ruled out (3.3).
+
+**Toolkit: to be decided by the owner.** .NET has no built-in cross-platform tray icon or windowing.
+
+- **Avalonia** (MIT) has a tray icon on Windows and on Linux (StatusNotifierItem over D-Bus), real windows, keyboard focus handling, and Native AOT support. It was the GUI choice in 3.2. It is a large dependency: it brings native Skia and HarfBuzz libraries, so the app is tens of MB. Under the project rules it needs the owner's approval.
+- **Hand-written per platform**: the Win32 tray and window APIs on Windows, and the StatusNotifierItem protocol on Linux, which needs a D-Bus library or a hand-written client, plus a separate window layer on each. Far more code to write and maintain.
+- On Linux the tray icon shows on KDE (the Deck's Desktop Mode) and Cinnamon (Mint); stock GNOME needs an extension. The window works everywhere.
+- Section 6 already lists the check to make first: a hello-world Avalonia AppImage running under gamescope in Game Mode with Steam Input keyboard mapping.
+
 ## 6. Open questions and unknowns
 
 ### Verified today
@@ -889,9 +937,9 @@ When to revisit: an app that matters keeps showing as Replaced after being linke
 | Mechanisms | `link` (junction on Windows, symlink on Linux) and `config`. No copy-around-launch, no bind mounts |
 | Scope | Apps and games without platform cloud saves: emulators, visual novels, Flash games, including Lutris on the Deck |
 | Sync tool | The user's choice. The core has no sync-tool code; Syncthing integration is a possible later opt-in module. Decided 2026-11-12 |
-| Backups | Tool's own local store is the safety net. Host versioning is the user's business. Optional local snapshots |
+| Backups | Tool's own local store is the safety net: a verified backup before each apply, revert and restore, with retention. Host versioning is the user's business. Optional local snapshots dropped 2026-11-17 |
 | Defaults | Saves and save states on. Screenshots and other media off |
-| Deck UI | Decky plugin over the CLI. Windows desktop GUI deferred |
+| Deck UI | Decky plugin over the CLI, status first. Windows desktop GUI deferred; revised 2026-11-17: a desktop app for Windows and Linux is phase 3 (5.14) |
 | Order of work | Phase 1 CLI first, before any definitions or detection |
 | Layout | The tool owns `<sync root>/savetether/` only: targets at `savetether/<app>/<save folder>`, metadata at `savetether/.savetether/`. The rest of the sync root is ignored. Decided 2026-11-12 |
 | Migration | None. No `scan` or `adopt`; old script links and data are moved by hand (5.7). Decided 2026-11-12 |
