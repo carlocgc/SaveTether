@@ -393,7 +393,7 @@ Added on 2026-11-17 (design 5.14). Goal: a person who has never used a terminal 
 
 Starts with two steps before any app code:
 1. **Toolkit decision** by the owner. *Done 2026-11-17: Avalonia approved after the trial below.* The open part is the Game Mode check, which needs the owner at the Deck; it is now the first item of step 2.
-2. **Specification** of the app's screens and states to the level of design 5.12, including every refusal the CLI can give and how the window shows it.
+2. **Specification** of the app's screens and states to the level of design 5.12, including every refusal the CLI can give and how the window shows it. *Drafted 2026-11-17 in `docs/design/desktop-app-spec.md`; its section 15 lists eleven decisions for the owner. Its section 13 adds six small core and CLI changes to come before or with the app, the first being core messages without CLI wording. The Game Mode check is still open.*
 
 Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/avalonia-tray` (`spikes/AvaloniaTray`, not in the solution; its README has the details). Avalonia 12.1.5, .NET 10, Native AOT:
 

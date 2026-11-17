@@ -865,7 +865,7 @@ When to revisit: an app that matters keeps showing as Replaced after being linke
 
 ### 5.14 Desktop app: window and tray icon (phase 3)
 
-Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approved the same day. Not yet specified to the level of 5.12; phase 3 starts by doing that.
+Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approved the same day. Specified to the level of 5.12 in `desktop-app-spec.md`, drafted 2026-11-17 and awaiting the owner's review; that document lists the decisions still open.
 
 **Why.** SaveTether is a redirection tool. Most people will start it from a desktop, not a terminal, and what they want day to day is reassurance that their links are still healthy. So the desktop app is the front end most people use, and the CLI stays the cross-platform core: the test harness, the Decky backend, and the entry point for scripts, SSH sessions and LLM agents.
 
