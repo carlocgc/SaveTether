@@ -11,13 +11,14 @@ The design (`save-redirection-design.md`) says *what* SaveTether does and *why*.
 3. **The app speaks in its own words.** The core's messages are written for the CLI and name its flags (about 70 strings name a command or a flag today). The app writes its own sentence for each refusal *kind* and fills in the facts (paths, names, sizes) from the core's structured fields. The core's message is still shown, under "Details", so nothing the core knows is hidden. Section 13 lists the core change this needs.
 4. **One operation at a time.** Within the app, and across processes, through the operation lock (section 9.1).
 5. **Safe by default, with the keyboard alone.** Every dialog opens with focus on the choice that changes nothing. Escape always cancels or goes back. Nothing needs a mouse, a hover or a drag (section 12).
-6. **Everything in one window.** Dialogs are overlays inside the main window, not separate OS windows. Under gamescope in Game Mode a second top-level window may open behind the game view or steal no focus at all (inference, to be checked with the Game Mode trial); an overlay avoids that question, and it is no worse on a desktop.
+6. **Everything in one window.** Dialogs are overlays inside the main window, not separate OS windows. A dialog then cannot open behind the window or on another screen, and keyboard focus never has to move between windows.
+7. **Desktop only.** The app runs on the Windows and Linux desktops, which on the Deck means Desktop Mode. It is not built or supported for Game Mode (decided by the owner on 2026-11-17). A Decky plugin with limited functions may cover Game Mode later (5.11, phase 4).
 
 ## 2. The process
 
 - **One process, one copy.** `savetether-gui` holds a single-instance lock in the local folder (5.12, "Local files"). A second start sends "show the window" to the first copy and exits. Windows: a named mutex plus a named pipe. Linux: a lock file plus a Unix socket in the same folder. The operation lock (9.1) is separate: the app holds it only while an operation runs.
 - **Start.** With `--minimized` (used by the autostart entry, section 11) the app starts with the tray icon only. Without it the window opens. Either way it runs a health check at once.
-- **Closing the window** hides it and leaves the tray icon running. The first time this happens, a notification says: "SaveTether is still running in the tray. Quit it from the tray icon's menu." Where there is no tray host (stock GNOME, gamescope), closing the window quits. **[owner]**: detecting "no tray host" is not reliable on Linux (plan section 5, trial notes). Proposed rule: on Linux, the app checks for a `org.kde.StatusNotifierWatcher` owner on the session bus at start; if none, closing the window quits.
+- **Closing the window** hides it and leaves the tray icon running. The first time this happens, a notification says: "SaveTether is still running in the tray. Quit it from the tray icon's menu." Where there is no tray host (stock GNOME), closing the window quits. **[owner]**: detecting "no tray host" is not reliable on Linux (plan section 5, trial notes). Proposed rule: on Linux, the app checks for a `org.kde.StatusNotifierWatcher` owner on the session bus at start; if none, closing the window quits.
 - **Quit** (tray menu, or Ctrl+Q in the window) is refused while an operation runs: "Wait for the current operation to finish." Operations are journalled transactions; stopping one half way is what `recover` exists for, not something to offer.
 - **Log.** The app appends one line per operation, refusal and unexpected error to `gui.log` in the local folder, and keeps the last 1 MB. No paths beyond those already in the local files, no content of save files.
 
@@ -107,7 +108,7 @@ Shown instead of the pages when there is no `bootstrap.json`, and reachable late
 
 ### 6.1 Sync folder
 
-A path field and a "Choose folder" button. The folder picker is the OS dialog; under gamescope it may not work **[owner, Game Mode trial]**, so the field accepts a typed path too.
+A path field and a "Choose folder" button. The folder picker is the OS dialog. The field accepts a typed path too, for a folder the picker does not show, such as a network share that is not mounted in the file manager.
 
 On Next the app checks the folder and shows one of:
 
@@ -230,7 +231,7 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 - When `AssumeSyncedWouldHelp`, `add-missing` and `replace-shared` are shown disabled with: "The shared copy may still be arriving: it lacks files a device shared. Wait for the sync tool, or confirm it has finished." and a checkbox "It has finished syncing", which re-plans with `AssumeSynced`.
 - `replace-shared` leads to the replace confirmation.
 
-**The replace confirmation.** Its own dialog, never combined with the choice: "Replace the shared saves for <role> on every device?" then: "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. The deletion reaches every device through the sync tool." Buttons: Cancel (focused), **Replace on every device**. **[owner]**: the CLI needs a typed "yes"; the window could ask for the app's name to be typed as well. Proposed: no typing, because typing is fiddly in Game Mode and the separate dialog with Cancel focused already makes it deliberate.
+**The replace confirmation.** Its own dialog, never combined with the choice: "Replace the shared saves for <role> on every device?" then: "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. The deletion reaches every device through the sync tool." Buttons: Cancel (focused), **Replace on every device**. **[owner]**: the CLI needs a typed "yes"; the window could ask for the app's name to be typed as well. Proposed: no typing, because the separate dialog with Cancel focused already makes it deliberate, and on the Deck's Desktop Mode typing usually means the on-screen keyboard.
 
 **Double seed.** "Use this device's copy" runs `PlanApply` with `replace-shared`. On a device where the folder is already the link (classification row 1) the confirmation instead says: "Make this device's copy the one every device keeps? No files change; the other devices' claims are marked as replaced." Where the sync tool kept the other device's files and this device's should win, the route is revert, restore and replace (5.3); the dialog says so and links to Backups.
 
@@ -286,14 +287,16 @@ After a revert, when the core says a Flatpak grant is no longer needed (`Sandbox
 
 **Autostart pointing to a missing binary.** The CLI's `status` reads the entry and warns when its path is missing (`autostart_missing: <path>` in `--json`); the app shows banner B5. Neither changes the entry without being asked.
 
-## 12. Keyboard, focus and Game Mode
+## 12. Keyboard and focus
+
+The app works with the keyboard alone, for accessibility and for the Deck in Desktop Mode, where a controller's Steam Input desktop layout usually stands in for a mouse.
+
 
 - Everything is reachable with Tab, Shift+Tab, the arrow keys, Enter and Escape, and focus is always visible (a 2 px outline in the accent colour).
 - Lists move with the arrow keys; Enter opens a row's main action, and the Menu key or Shift+F10 opens its other actions as a list, never a hover menu.
 - Every dialog opens with focus on its safe button. Escape is Cancel or Back everywhere. Enter never confirms a destructive choice from a text field.
 - No tooltip carries information that is not also on screen.
 - Text fields only where a value cannot be picked (device name, a path the picker cannot reach, search). Every path field has "Choose folder".
-- **Game Mode.** The app is added as a non-Steam shortcut, with Steam Input mapping the controller to keys: d-pad to arrows, A to Enter, B to Escape, shoulder buttons to Tab and Shift+Tab. There is no tray there, so the app is just its window. The Game Mode trial (plan section 5) must confirm the window gets focus and the keys arrive; if it fails, the app is supported in Desktop Mode only on the Deck and the Decky plugin (phase 4) covers Game Mode.
 - Screen readers: every control has an accessible name (Avalonia's `AutomationProperties.Name`). Not tested beyond that in phase 3.
 
 ## 13. Changes needed in the core and the CLI
@@ -321,7 +324,7 @@ The JSON contract freeze (plan section 5) should come after items 1, 2 and 6, si
   - Notifications fire once per change, not per check, and not while another process holds the lock.
   - Each flow of sections 6 to 9 driven through its view model against fixture devices, including each refusal.
   - Autostart entries compared with expected text.
-- **Not testable in CI**: the tray icon, notifications, the folder picker, Game Mode. These are the phase 3 lines of the hardware checklist (plan section 8).
+- **Not testable in CI**: the tray icon, notifications, the folder picker. These are the phase 3 lines of the hardware checklist (plan section 8).
 
 ## 15. Decisions for the owner
 

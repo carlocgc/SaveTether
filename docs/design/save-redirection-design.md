@@ -192,7 +192,7 @@ I would switch to **Rust** if: you want the project to sit close to Ludusavi and
 | Decky plugin | Later, as the Game Mode UI | A thin shell over the CLI's JSON output. Store submission needs open source, review, and declared binaries |
 | winget / Scoop | Later | Both are a manifest with a URL and hash. Neither requires signing |
 
-Controller use without Decky: a desktop GUI added as a non-Steam shortcut runs in Game Mode, and Steam Input can map the D-pad and buttons to arrow keys, Enter and Escape. So the GUI needs good keyboard focus navigation, not gamepad code.
+Controller use without Decky: a desktop GUI added as a non-Steam shortcut runs in Game Mode, and Steam Input can map the D-pad and buttons to arrow keys, Enter and Escape. So the GUI needs good keyboard focus navigation, not gamepad code. (Superseded 2026-11-17: the desktop app is for the desktop only, which on the Deck means Desktop Mode; see 5.14.)
 
 **UI shape: CLI core, thin UIs.** The CLI is also the test harness and the Decky backend's only dependency.
 
@@ -879,7 +879,7 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
   - *Apply with a choice*: when the planner stops, the window shows the comparison (5.4) and offers only the allowed choices, each with a plain sentence about what it does. `--replace-shared` needs a separate, deliberate confirmation, as on the CLI. The Flatpak grant (P2.6) is offered the same way the CLI offers it.
   - *Backups*: list and restore.
   - *Settings*: start with the session, and where backups go.
-- **Keyboard first.** It must work with keyboard focus alone, so it is usable in Game Mode as a non-Steam shortcut with Steam Input mapping the controller to keys (3.3).
+- **Desktop only, keyboard friendly.** The app is for the Windows and Linux desktops; on the Deck that means Desktop Mode. Game Mode is not a target: decided by the owner on 2026-11-17, replacing the earlier plan to run the app there as a non-Steam shortcut (3.3). A Decky plugin with limited functions may cover Game Mode later (5.11). The app still works with keyboard focus alone, for accessibility and for a controller's desktop layout in Desktop Mode.
 
 **How it is built.**
 
@@ -901,7 +901,6 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 - **Avalonia** (MIT) has a tray icon on Windows and on Linux (StatusNotifierItem over D-Bus), real windows, keyboard focus handling, and Native AOT support. It was the GUI choice in 3.2. It is a large dependency: it brings native Skia and HarfBuzz libraries, so the app is about 33 MB in four files. It draws its own controls, so the window's styling is unrestricted; the tray icon's own menu is a plain system menu.
 - **Hand-written per platform**: the Win32 tray and window APIs on Windows, and the StatusNotifierItem protocol on Linux, which needs a D-Bus library or a hand-written client, plus a separate window layer on each. Far more code to write and maintain.
 - On Linux the tray icon shows on KDE (the Deck's Desktop Mode) and Cinnamon (Mint); stock GNOME needs an extension. The window works everywhere.
-- Section 6 already lists the check to make first: a hello-world Avalonia AppImage running under gamescope in Game Mode with Steam Input keyboard mapping.
 
 ## 6. Open questions and unknowns
 
@@ -927,7 +926,6 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 | Eden under EmuDeck uses `storage/eden` or still `storage/yuzu` | `ls` on the Deck |
 | Yuzu-family save paths embed a profile ID stored under `nand/system`, which is why that folder must be synced | inspect `nand/user/save` on both devices |
 | .NET's recursive directory delete does not descend junctions | irrelevant by design (invariant 1 bans it), but the canary test proves the tool's own routine |
-| Avalonia runs acceptably under gamescope in Game Mode with Steam Input keyboard mapping | the trial binary at `~/sttest-spike` on the Deck, added as a non-Steam game (plan section 5). Desktop Mode was checked on 2026-11-17 |
 | Run-time download of the Ludusavi manifest by a free tool is within PCGamingWiki's terms | ask Ludusavi's maintainer; read the licence deed for the version PCGamingWiki uses |
 | Signing prices and eligibility | each provider's current pricing page |
 | Flash games store saves under a `#SharedObjects` folder whose first subfolder has a random name per install, so the same game has a different path on each device. The resolver would need a wildcard step, and Ruffle or a standalone projector may store them elsewhere again | look at where two of your Flash games save on both devices |
