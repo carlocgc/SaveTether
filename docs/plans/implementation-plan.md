@@ -1,8 +1,8 @@
 # SaveTether: implementation and test plan
 
-Status: phase 1 (M0 to M7) is built and trialled on both devices; phase 2 is planned and not started. Written 2026-11-12, after the design in [save-redirection-design.md](../design/save-redirection-design.md) was merged. The design says *what* and *why*; this says *in what order*, *in which files*, and *how each piece is proven*. Section numbers such as "design 5.3" refer to the design document.
+Status 2026-11-17: phase 1 (M0 to M7) is built and trialled on both devices. Phase 2 is built except for its hardware checks and exit test (section 4). Phases 3 to 5 were reordered on 2026-11-17: the desktop app is phase 3, the Decky plugin phase 4, the public release phase 5. Earlier: phase 1 was built and phase 2 planned and not started. Written 2026-11-12, after the design in [save-redirection-design.md](../design/save-redirection-design.md) was merged. The design says *what* and *why*; this says *in what order*, *in which files*, and *how each piece is proven*. Section numbers such as "design 5.3" refer to the design document.
 
-Detail falls off on purpose. Phase 1 was planned to the level of types and test cases and is built. Phase 2 is now planned to milestone level (section 4). Phases 3 and 4 are still planned to the level of work items and exit tests, and each starts with a short step that turns its outline into the same level of detail.
+Detail falls off on purpose. Phase 1 was planned to the level of types and test cases and is built. Phase 2 was planned to milestone level (section 4). Phases 3 to 5 are planned to the level of work items and exit tests, and each starts with a short step that turns its outline into the same level of detail.
 
 ## 1. Decisions this plan rests on
 
@@ -16,6 +16,10 @@ Settled on 2026-11-12, in addition to the design's section 7.
 | Branch flow | Feature branches, PRs straight to `main` | A `development` branch is introduced in phase 4, when releases are tagged |
 | JSON | `System.Text.Json` with source generation | Built in. Reflection-based serialisation does not work under Native AOT |
 | CI | GitHub Actions from the first PR | The repository is public, so hosted Linux ARM64 runners are available **[K, confirm in M0]** |
+| Product direction | UI first for people, CLI as the core | Decided by the owner 2026-11-17. The desktop app (window and tray icon) is phase 3; the CLI stays the core for scripts, SSH and LLM agents. Design 5.14 |
+| Snapshots and scheduled jobs | Dropped | Decided by the owner 2026-11-17: SaveTether is a redirection tool, not a backup solution. Built in PR #20 and closed unmerged. The backups taken before each operation stay, with retention |
+| Decky plugin | Status first | Decided by the owner 2026-11-17: typing in Game Mode is fiddly, so only status and actions that need no input. Design 5.11 |
+| GUI toolkit (phase 3) | **Open** | Avalonia is the candidate (design 5.14); it is a large dependency and needs the owner's approval before phase 3 starts |
 
 Still open, and not blocking:
 
@@ -53,7 +57,7 @@ docs/design/  docs/plans/
 | Fault injection | Abort after each journal step, then recover | every CI run |
 | End to end | The CLI entry point run in-process against temporary directories, including two simulated devices | every CI run |
 | AOT smoke | The published native binary runs `--version` and one `status --json` | every CI run |
-| Hardware | Manual checklist on the Windows PC and the Deck (section 7) | before each phase exit |
+| Hardware | Manual checklist on the Windows PC and the Deck (section 8) | before each phase exit |
 
 **Global test rule.** Every test that creates links also creates a canary directory outside its tree and asserts at the end that the canary is intact.
 
@@ -216,7 +220,7 @@ As built (differences from the list above, and decisions made while building):
 
 ### M7. Real-device trial (S, manual)
 
-1. Windows PC, non-admin terminal: full test suite, then a throwaway folder mapping: apply, status, revert. *Done 2026-11-12; see the Windows entries in section 7.*
+1. Windows PC, non-admin terminal: full test suite, then a throwaway folder mapping: apply, status, revert. *Done 2026-11-12; see the Windows entries in section 8.*
 2. Run the two Deck checks. Copy the Linux binary from the CI artifact to `~/.local/bin`. *Done 2026-11-12, binary from the CI run of `a3cbf74`.*
 3. One real, low-stakes mapping: `init --create-root` and `apply --copy` on Windows; after the sync tool delivers, `init` and `apply` on the Deck. *Done 2026-11-12 with `cemu.save`: `E:\LaunchBox\Emulators\CEMU\Cemu\mlc01\usr\save` with sync root `E:\CloudSaveEmulation` on Windows, `~/.local/share/Cemu/mlc01/usr/save` with sync root `~/Sync` on the Deck.*
 4. Play on each device once and confirm the save crosses over. *Done 2026-11-12, both directions.*
@@ -229,9 +233,9 @@ Found during the trial, for phase 2:
 - **`--add-missing` does not merge per game for Cemu.** It works on the top-level entries of the save folder (design 5.3), and Cemu's are `00050000`, `00050010` and `system`, with the games one level down. Both devices have all three, so nothing would be added. Mapping `usr/save/00050000` would give one entry per game. App definitions need a way to say at which depth an app's per-game entries sit.
 - The design's Windows inventory (appendix B) lists Cemu's `settings.xml` as holding the sync folder path. On 2026-11-12 its `mlc_path` was empty and Cemu was using its own `mlc01`.
 
-**Phase 1 exit:** all of the above done, `status` clean on both devices, and the hardware checklist (section 7) ticked.
+**Phase 1 exit:** all of the above done, `status` clean on both devices, and the hardware checklist (section 8) ticked.
 
-Status 2026-11-12: M0 to M7 are done and `status` was clean on both devices. Four Deck checklist items in section 7 are not ticked (running over SSH, a link inside a Flatpak app's folder, a source on the SD card, and the sync root unmounted), so the exit condition as written is not fully met.
+Status 2026-11-12: M0 to M7 are done and `status` was clean on both devices. Four Deck checklist items in section 8 are not ticked (running over SSH, a link inside a Flatpak app's folder, a source on the SD card, and the sync root unmounted), so the exit condition as written is not fully met.
 
 ## 4. Phase 2: entry depth, definitions, resolver
 
@@ -245,14 +249,14 @@ Two things were part of this phase and were dropped: config redirects on 2026-11
 
 ### P2.0 Close out phase 1 on hardware (S, manual)
 
-The four Deck items section 7 still has open. None needs new code.
+The four Deck items section 8 still has open. None needs new code.
 
 1. Run the binary over SSH.
 2. One mapping for a Flatpak emulator, so a link sits inside `~/.var/app/<id>/` and the app is seen to load a save through it.
 3. One mapping whose save folder is on the SD card, with the sync root on internal storage.
 4. Rename the sync root, run `status` and `apply`, and confirm both refuse; rename it back.
 
-Done when: section 7 is ticked for phase 1 and dated. Item 2 should come before any Flatpak emulator is mapped for real.
+Done when: section 8 is ticked for phase 1 and dated. Item 2 should come before any Flatpak emulator is mapped for real.
 
 ### P2.1 Specify entry depth; settle config redirects (S, design)
 
@@ -362,31 +366,50 @@ As built (differences from the list above, and decisions made while building):
 - Covered entry forms: `host` (except the folders the sandbox keeps its own), `home`, `~/...`, absolute paths, `xdg-config`, `xdg-data`, `xdg-cache` and the user folders (`xdg-documents` and so on, read from `user-dirs.dirs`), each with `:ro`, `:rw` or `:create`, and `!entry` removing an entry. Anything else is treated as not covering T, which can only refuse, never wrongly allow.
 - Live check on Mint (2026-11-17) with the installed Discord Flatpak: apply refused and printed the override command; nothing was changed. Not yet checked on the Deck.
 
-### P2.7 Snapshots and the login-time check (M)
+### P2.7 Backup retention (S)
 
-Deliver:
-- On-demand and scheduled copy of T to the backup store, with retention.
-- An opt-in Task Scheduler entry on Windows and a systemd user timer on Linux that run `status`.
+Originally "Snapshots and the login-time check": on-demand and scheduled copies of T to the backup store, and a Task Scheduler entry and systemd user timer running `status`. Built in PR #20, verified on real systemd (Mint) and Task Scheduler (Windows), and closed unmerged on 2026-11-17 by the owner's decision: SaveTether is a redirection tool, so there are no snapshots, and the desktop app's tray icon (phase 3) replaces a scheduled check. The branch `feat/p2-snapshots` is kept for reference.
 
-Tests: retention and space reporting; a snapshot never runs while a journal entry is open; generated unit and task files compared with expected text; install and remove on real hardware.
+What remains, built in PR #21: the backups taken before each apply, revert and restore had no retention. The rule in design 5.12 (keep a mapping's first backup and the newest five) existed in `BackupStore.Prune` but was never called. It now runs after each completed operation. Found while testing it on Linux and fixed: a new backup could take the ID of one pruning had just removed.
 
 **Phase 2 exit:** a device restored after its SD card ID or install folder changed, with no hand edits, and the phase 2 lines of the hardware checklist ticked.
 
-## 5. Phase 3: Decky plugin and detection
+## 5. Phase 3: desktop app
 
-Goal: apply and revert from Game Mode. Starts with a short design step for the plugin's screens against the then-current Decky API (the design's claim that plugins can register full-screen pages is unverified).
+Added on 2026-11-17 (design 5.14). Goal: a person who has never used a terminal can set up a device, add an app, apply it and see at a glance that it stays healthy, on Windows and Linux.
+
+Starts with two steps before any app code:
+1. **Toolkit decision** by the owner. Avalonia is the candidate; the check from design section 6 comes first: a hello-world Avalonia build with a tray icon, run on Windows, on Mint (Cinnamon), and on the Deck in Desktop Mode and under gamescope in Game Mode.
+2. **Specification** of the app's screens and states to the level of design 5.12, including every refusal the CLI can give and how the window shows it.
 
 | Item | Deliver | Tests |
 |---|---|---|
-| JSON contract freeze | Document every `--json` output and input flag as version 1; additive changes only after this | The stored-shape tests from M6 become the contract tests |
+| JSON contract freeze | Document every `--json` output and input flag as version 1; additive changes only after this. Moved here from the Decky phase, because scripts and agents use the CLI now | The stored-shape tests from M6 become the contract tests |
+| Operation lock | A lock file in the local folder held for the length of an operation; a second process is refused. Used by the CLI and the app | Two processes started together: one runs, one is refused, nothing is half done; a lock left by a killed process does not block forever |
+| App shell | One process, one copy at a time; tray icon green or amber from the 5.5 states; health re-checked every few minutes, on open and after each operation; a notification when the state turns amber | State-to-colour table tests; the notification fires once per change, not per check |
+| First-run setup | Choose the sync folder, name the device, create the shared folder on the first device only | Same refusals as `init`; scripted against fixture folders |
+| Apps and actions | Each app's roles with health and the matching action; Apply with the comparison and only the allowed choices; Revert; Recover; the Flatpak grant | View-model tests against fixture devices; each planner refusal kind is shown |
+| Add app | A guided `app add`: installs found, roles with sizes, fields only for values that cannot be found | The `app add` test cases, driven through the view model |
+| Backups | List and restore | Restore of a shared-folder backup asks for the deliberate confirmation |
+| Start with the session | Opt-in autostart entry (XDG `.desktop`, `HKCU\...\Run`), re-written with the current path at each start; `status` warns when it points to a missing binary | Generated entries compared with expected text; install and remove on real hardware |
+| Release archives | Both binaries in each platform's archive; the app offers to move them to the per-user location | Archive contents checked in CI |
+
+Exit test: on Windows and on Linux, a new user sets up a device, adds an app and applies it without the CLI; the tray icon turns amber when the sync root is unmounted and green again when it returns.
+
+## 6. Phase 4: Decky plugin and detection
+
+Goal, revised 2026-11-17: status in Game Mode, with only the actions that need no input (design 5.11). Starts with a short design step against the then-current Decky API.
+
+| Item | Deliver | Tests |
+|---|---|---|
 | Plugin backend | Python: runs the CLI, passes JSON through. No logic | Unit tests with a fake CLI executable: success, each exit code, timeout, binary missing |
-| Plugin frontend | List, row actions, full-screen pages for comparison, restore and add-app | Component tests against recorded JSON; manual Game Mode checklist |
-| Detection | Scan for installed apps that have a definition | Fixture trees per install variant; nothing is changed by a scan (asserted by hashing the tree before and after) |
+| Plugin frontend | Health list sorted with problems first; Recover; Apply only when the planner needs no choice. No full-screen pages, no text entry | Component tests against recorded JSON; manual Game Mode checklist |
+| Detection | Scan for installed apps that have a definition, for the desktop app's Add app and for `app add` | Fixture trees per install variant; nothing is changed by a scan (asserted by hashing the tree before and after) |
 | Ludusavi hints | Optional run-time download of the manifest, as a hint source only | Parser tests on a small fixture manifest. Not started until its maintainer has been contacted (design 5.2) |
 
-Exit test: a mapping applied and reverted using only the controller, in Game Mode.
+Exit test: every mapping's status readable in Game Mode with the controller; Recover and a choice-free Apply work from there.
 
-## 6. Phase 4: public release
+## 7. Phase 5: public release
 
 | Item | Deliver | Tests |
 |---|---|---|
@@ -400,7 +423,7 @@ Exit test: a mapping applied and reverted using only the controller, in Game Mod
 
 Exit test: first outside definition merged.
 
-## 7. Hardware checklist
+## 8. Hardware checklist
 
 Run before each phase exit. Record the date and tool version in the PR that closes the phase.
 
@@ -415,13 +438,14 @@ Run before each phase exit. Record the date and tool version in the PR that clos
 - [ ] Source on the SD card, sync root on internal storage.
 - [ ] Sync root unmounted or renamed: every command refuses.
 - [ ] From phase 2: a Proton prefix mapping; a Lutris mapping.
-- [ ] From phase 3: everything above from Game Mode.
+- [ ] From phase 3: the desktop app on Windows, Mint and the Deck in Desktop Mode; the tray icon on KDE and Cinnamon; the app under gamescope in Game Mode.
+- [ ] From phase 4: status, Recover and a choice-free Apply from the Decky plugin in Game Mode.
 
 **Both**
 - [x] A save made on one device loads on the other. *2026-11-12, Cemu, both directions.*
 - [x] Simulated wipe restores with `init` and `apply --all`. *2026-11-12, on the Deck.*
 
-## 8. Risks to watch
+## 9. Risks to watch
 
 | Risk | Where it bites | Mitigation |
 |---|---|---|
