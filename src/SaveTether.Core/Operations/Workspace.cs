@@ -187,6 +187,11 @@ public sealed partial class Workspace
         }
 
         var newSource = PathRules.Normalize(source);
+        if (SourceOverlap(mappingId, newSource, SourcesOf(device)) is { } overlap)
+        {
+            throw new StoreException(StoreProblem.Conflict, overlap);
+        }
+
         if (device.Paths.TryGetValue(mappingId, out var current)
             && !PathRules.AreSame(current.Source, newSource) && IsLink(current.Source))
         {
@@ -435,6 +440,42 @@ public sealed partial class Workspace
                 $"The backup location '{backupRoot}' must be separate from the sync root: backups inside it would be deleted along with the saves they protect.");
         }
     }
+
+    /// <summary>
+    /// Why a save folder cannot be used for a mapping because another mapping on this device already
+    /// has it, has a folder inside it, or has one containing it; null when none does. One folder can be
+    /// linked to only one shared folder, and a link inside another mapping's folder would be inside
+    /// that mapping's shared copy. Links in the folders leading to each path are followed, so one
+    /// folder reached two ways is still one folder; the save folder itself is not, since it is often a link.
+    /// </summary>
+    /// <param name="others">The other mappings' save folders, by mapping ID.</param>
+    internal static string? SourceOverlap(string mappingId, string source, IEnumerable<KeyValuePair<string, string>> others)
+    {
+        var mine = PathRules.ResolveParents(source);
+        foreach (var (otherId, otherSource) in others)
+        {
+            if (otherId == mappingId || !Path.IsPathFullyQualified(otherSource))
+            {
+                continue;
+            }
+
+            var theirs = PathRules.ResolveParents(otherSource);
+            var how = PathRules.AreSame(mine, theirs) ? "is already the save folder of"
+                : PathRules.IsSameOrInside(mine, theirs) ? "is inside the save folder of"
+                : PathRules.IsSameOrInside(theirs, mine) ? "contains the save folder of"
+                : null;
+            if (how is not null)
+            {
+                return $"'{source}' {how} '{otherId}' on this device ('{otherSource}'). A folder can be shared through one mapping only. " +
+                    $"Use '{otherId}', or remove it with 'savetether map remove {otherId}' (after 'savetether revert {otherId}' if it is applied).";
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<KeyValuePair<string, string>> SourcesOf(DeviceFile device) =>
+        device.Paths.Select(p => new KeyValuePair<string, string>(p.Key, p.Value.Source));
 
     private static bool IsLink(string path) =>
         Path.IsPathFullyQualified(path) && SafeFs.Probe(path) is EntryKind.Symlink or EntryKind.Junction;

@@ -266,6 +266,13 @@ public sealed partial class Workspace
                     candidates);
             }
 
+            // Against this device's other mappings, and the roles planned before this one.
+            var others = SourcesOf(device).Concat(planned.Select(p => new KeyValuePair<string, string>(p.MappingId, p.Source)));
+            if (SourceOverlap(mappingId, source, others) is { } overlap)
+            {
+                return AppAddOutcome.Refuse(AppAddProblem.Conflict, overlap, candidates);
+            }
+
             var note = mapping is not null && mapping.Depth != role.EntryDepth
                 ? $"The existing mapping's entry depth ({mapping.Depth}) is kept; the definition says {role.EntryDepth}. Change it with 'savetether map add {mappingId} --source <path> --entry-depth <n>'."
                 : null;
