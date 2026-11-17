@@ -443,7 +443,7 @@ Exit test: every mapping's status readable in Game Mode with the controller; Rec
 | Item | Deliver | Tests |
 |---|---|---|
 | Name check | GitHub, NuGet, Scoop, winget, trademark search | Recorded in the design before anything is published under the name |
-| Release workflow | Tag-triggered build of three targets, checksums, release notes. `development` branch introduced | A prerelease tag produces installable artifacts; checksums verify |
+| Release workflow | Tag-triggered build of three targets, checksums, release notes. `development` branch introduced. Brought forward by the owner on 2026-11-17, for a v0.1.0 of the CLI after phase 2 (`docs/releasing.md`) | A prerelease tag produces installable artifacts; checksums verify |
 | Signing | Apply to SignPath Foundation; sign Windows binaries | Signature verifies on a clean Windows machine |
 | Packages | Scoop and winget manifests | Install, run, upgrade and uninstall on a clean Windows machine |
 | Definitions repository | Split out, schema check in its CI, "tested on" line required | A deliberately broken definition fails its CI |

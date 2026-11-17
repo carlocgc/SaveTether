@@ -6,6 +6,7 @@ Redirects app and game save folders into one synced folder, so saves follow you 
 
 - Design: [docs/design/save-redirection-design.md](docs/design/save-redirection-design.md)
 - Implementation and test plan: [docs/plans/implementation-plan.md](docs/plans/implementation-plan.md)
+- Branches and releases: [docs/releasing.md](docs/releasing.md). Work lands on `development`; releases are tags on `main`.
 
 ## Using it
 
