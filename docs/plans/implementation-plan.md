@@ -392,10 +392,10 @@ Met 2026-11-17 on the install folder side (section 8, Windows PC), which also fo
 Added on 2026-11-17 (design 5.14). Goal: a person who has never used a terminal can set up a device, add an app, apply it and see at a glance that it stays healthy, on Windows and Linux.
 
 Starts with two steps before any app code:
-1. **Toolkit decision** by the owner. *Done 2026-11-17: Avalonia approved after the trial below.* The open part is the Game Mode check, which needs the owner at the Deck; it is now the first item of step 2.
-2. **Specification** of the app's screens and states to the level of design 5.12, including every refusal the CLI can give and how the window shows it.
+1. **Toolkit decision** by the owner. *Done 2026-11-17: Avalonia approved after the trial below.* A Game Mode check was planned here and dropped the same day: the owner decided the app is for the desktop only, which on the Deck means Desktop Mode (design 5.14).
+2. **Specification** of the app's screens and states to the level of design 5.12, including every refusal the CLI can give and how the window shows it. *Done 2026-11-17 in `docs/design/desktop-app-spec.md`; the owner accepted all eleven proposed decisions (its section 15). Its section 13 adds seven small core and CLI changes to come before or with the app, the first being core messages without CLI wording.*
 
-Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/avalonia-tray` (`spikes/AvaloniaTray`, not in the solution; its README has the details). Avalonia 12.1.5, .NET 10, Native AOT:
+Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/avalonia-tray` (`spikes/AvaloniaTray`, not in the solution; removed since, and its README's findings are below). Avalonia 12.1.5, .NET 10, Native AOT:
 
 | | Windows 11 | Linux Mint 22.3, Cinnamon, X11 | Steam Deck, Desktop Mode, KDE Plasma, Wayland |
 |---|---|---|---|
@@ -407,7 +407,7 @@ Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/
 
 - The app is four files, not one: the executable plus native Skia and HarfBuzz (and ANGLE on Windows). Acceptable in the release archive; the CLI is unaffected at about 6 MB.
 - On the Deck's Wayland desktop Avalonia runs through XWayland. Over SSH it needs the session's `XAUTHORITY`; started from the desktop or by autostart it has it.
-- Checked by the runs: the window was created and shown, and the tray item registered with each desktop's tray host. Not yet checked: how it looks on each screen, and the window under gamescope in Game Mode with the controller (design section 6). The trial binary is left at `~/sttest-spike` on the Deck for that check, and logs each key press; both it and the branch are removed once the check is done.
+- Checked by the runs: the window was created and shown, and the tray item registered with each desktop's tray host. Not yet checked: how it looks on each screen. Game Mode is not a target (design 5.14), so the Game Mode check planned here was dropped. The trial binary at `~/sttest-spike` on the Deck and the branch `spike/avalonia-tray` (last commit `e1da00b`) were removed on 2026-11-17; the findings above are what they recorded.
 - Known limits taken into account in design 5.14: the tray icon's own menu is a plain system menu (text, separators, ticks), so anything richer is our own window; where the tray icon is on screen is not reliably known on Linux, so a click opens the main window rather than a panel beside the icon; desktop notifications need the small per-platform code (`notify-send`, a PowerShell toast); bindings must be compiled bindings for Native AOT.
 - Alternatives considered: Tauri (small and web-styled, but a second language and toolchain, all actions through the CLI's JSON, and WebKitGTK unconfirmed on SteamOS), Eto.Forms (native widgets, less styling freedom, GTK and AOT on SteamOS unproven), Uno Platform (heavier for a small app), Photino (no tray), Electron (too large). .NET MAUI has no Linux desktop and WPF and WinForms are Windows only.
 
@@ -470,7 +470,7 @@ Run before each phase exit. Record the date and tool version in the PR that clos
 - [x] From phase 2: a Lutris mapping. *2026-11-17: Rondo Duo, a Flash projector game run by the Lutris Flatpak in the Wine prefix `~/Documents/visualnovelengine`, with a shared definition whose base is a winpath with a `lutris` prefix. `app add` read the prefix from Lutris's game config and chose `drive_c/users/deck` (the prefix also has `Public` and `steamuser`). The Deck's `Flash Player` folder became the shared copy; Windows joined with `--no-copy`, loaded that progress and saved. Flash on Windows wrote into the Deck's folder (`#SharedObjects/XDPPBU44`) rather than its own (`662PUZJB`), because the Flash settings that name that folder are shared too; the save reached the Deck about four minutes later.*
 - [x] From phase 2: a Proton prefix is found. *2026-11-17, read-only: `app add --dry-run` with throwaway definitions for Persona 5 Royal (1687950), once as a winpath with a `steam` prefix and once with `{steam_compatdata:1687950}`. Both found `compatdata/1687950/pfx/drive_c/users/steamuser/AppData/Roaming/SEGA` in the internal library; a game that is not installed was refused, naming its app ID. The path was reported through `~/.steam/steam`, a link to `~/.local/share/Steam`. Not tried: a `steam_shortcut` prefix (no non-Steam shortcut on the Deck runs under Proton), a library on the SD card (it holds no games).*
 - [ ] From phase 2, deferred: a game under Proton reads and writes through a link out of its prefix. *Deferred by the owner on 2026-11-17: Steam games keep saves in Steam Cloud, so the first real use is likely a mod or texture folder. Test it with that folder; the open question is whether Steam's runtime container shows the link's target, which matters most for a sync root outside the home folder.*
-- [ ] From phase 3: the desktop app on Windows, Mint and the Deck in Desktop Mode; the tray icon on KDE and Cinnamon; the app under gamescope in Game Mode.
+- [ ] From phase 3: the desktop app on Windows, Mint and the Deck in Desktop Mode; the tray icon on KDE and Cinnamon.
 - [ ] From phase 4: status, Recover and a choice-free Apply from the Decky plugin in Game Mode.
 
 **Both**
