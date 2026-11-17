@@ -80,18 +80,20 @@ Page actions: **Add app** (section 8), **Apply all** (section 9.4, shown when at
 
 ### 5.1 States
 
-The core's `HealthState` has seven values. Replaced and Not applied each cover situations that need different words and actions, so the app needs the core to say which (section 13, item 2).
+The core's `HealthState` has seven values. Not applied, Replaced and Broken each cover situations that need different words and actions, so the core says which with a `HealthReason` (section 13, item 2), shown below in the Situation column.
 
-| Core state | Situation | Word | Colour | Sentence | Main action | Other actions |
+| Core state | Situation (reason) | Word | Colour | Sentence | Main action | Other actions |
 |---|---|---|---|---|---|---|
 | OK | | Linked | green | "Saves here are the shared copy." | none | Open folder, Open shared folder, Backups, Revert |
-| Not applied | no folder set on this device | Not on this device | grey | "Set up on <devices>, not here." | Add (opens Add app at this app) | none |
-| Not applied | folder set, not linked | Ready to link | grey | "Not linked yet." | **Apply** | Open folder, Stop using here |
-| Not applied | the folder in the device file is not an absolute path | Folder setting is wrong | amber | "This device's file has '<value>' as the folder." | Add again | Details |
-| Replaced | the folder holds files | Not linked | amber | "The link was replaced by a real folder. Saves made here are not shared." | **Apply** (stops at the choice, section 9.2) | Open folder, Backups |
-| Replaced | the folder is empty | Link missing | amber | "The link is gone and the folder is empty." | **Apply** | Open folder |
-| Replaced | nothing at the folder | Folder gone | amber | "Nothing is at <path>. If the app has moved, find it again." | **Find the app again** (Add app, section 8) | Apply |
-| Broken | | Shared folder missing | amber | "The link is in place, but the shared folder is missing. It may not have synced yet." | Check again | Open folder, Open shared folder's parent |
+| Not applied | no folder set on this device (`no-save-folder`) | Not on this device | grey | "Set up on <devices>, not here." | Add (opens Add app at this app) | none |
+| Not applied | folder set, not linked (`not-linked-yet`) | Ready to link | grey | "Not linked yet." | **Apply** | Open folder, Stop using here |
+| Not applied | the folder in the device file is not an absolute path (`save-folder-not-absolute`) | Folder setting is wrong | amber | "This device's file has '<value>' as the folder." | Add again | Details |
+| Replaced | the folder holds files (`folder-holds-files`) | Not linked | amber | "The link was replaced by a real folder. Saves made here are not shared." | **Apply** (stops at the choice, section 9.2) | Open folder, Backups |
+| Replaced | the folder is empty (`folder-empty`) | Link missing | amber | "The link is gone and the folder is empty." | **Apply** | Open folder |
+| Replaced | nothing at the folder (`folder-missing`) | Folder gone | amber | "Nothing is at <path>. If the app has moved, find it again." | **Find the app again** (Add app, section 8) | Apply |
+| Replaced | a file or something else is where the folder was (`not-a-folder`) | Not a folder | amber | "Something other than a folder is at <path>. Move it away by hand, then apply." | Open folder's parent | Details |
+| Broken | the shared folder is missing (`shared-folder-missing`) | Shared folder missing | amber | "The link is in place, but the shared folder is missing. It may not have synced yet." | Check again | Open folder, Open shared folder's parent |
+| Broken | the sync root cannot be used (`sync-root-unavailable`) | Shared folder missing | amber | Covered by banner B3; the row repeats only "The sync folder is not available." | Check again | Open folder |
 | Retargeted | | Linked elsewhere | amber | "The folder now links to <path> instead of the shared folder. Remove that link by hand, then apply." | Open folder | Details |
 | Double seed | | Two shared copies | amber | "More than one device made its saves the shared copy: <devices>." | **Use this device's copy** (section 9.2, Double seed) | Backups |
 | Foreign link | | Not SaveTether's link | amber | "The folder is a link SaveTether did not make, to <path>. Remove it by hand, then apply." | Open folder | Details |
@@ -307,6 +309,8 @@ These come before or with the app, each its own small PR.
 
    *Built 2026-11-17.* A refusal kind alone was not enough to choose the hint (a store error's `Conflict` covers several situations), so each message is a `Note`: its text, and the `NextStep`s that can follow it (an action such as Recover, or Revert with the mapping's ID). The CLI words each step in `Hints`; the app will word the same steps as buttons. `--json` keeps its shape: notes are written as one string, text then hint. The journal keeps plan notes as plain strings, so its format is unchanged. Every command and flag the CLI named is still named, but some sentences read differently, because the hint now follows the facts instead of sitting inside them. A test fails if a core source file names a CLI command or flag.
 2. **Health reason.** `MappingHealth` gains a reason for the cases one state covers: Replaced (has files, empty, missing) and Not applied (no folder set, folder set, folder not absolute). Additive in `status --json`.
+
+   *Built 2026-11-17* as `HealthReason`, `reason` in `status --json`, present only for Not applied, Replaced and Broken. Two situations were added while building it: Replaced by something that is not a folder (`not-a-folder`), and Broken because the whole sync root cannot be used (`sync-root-unavailable`) rather than one shared folder missing (`shared-folder-missing`). The Replaced details now give Apply as a next step, instead of naming apply in their text.
 3. **Progress.** `Workspace.Run` and `Recover` take an optional `IProgress<PlanStep>`, reported after each step is journalled done. The CLI passes none.
 4. **Operation lock** (9.1), in the core, used by the CLI and the app.
 5. **Autostart check** in `status` (section 11), once the app writes entries.
