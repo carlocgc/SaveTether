@@ -370,6 +370,16 @@ Deliver:
 
 Tests: retention and space reporting; a snapshot never runs while a journal entry is open; generated unit and task files compared with expected text; install and remove on real hardware.
 
+Decided by the owner on 2026-11-17 before building: the login check notifies only when something is wrong and logs every run; snapshots are daily and opt-in (`schedule install --snapshots`), keeping 5 per mapping by default; a device snapshots only the mappings applied on it.
+
+As built (differences from the list above, and decisions made while building):
+- Commands `snapshot`, `schedule install|remove|show`, and `--notify` and `--log` on `status` and `snapshot`. Design 5.5, "Snapshots and the login-time check", has the rules.
+- Found: `BackupStore.Prune` existed but was never called, and it ignores why a backup was taken, so using it for snapshots would have deleted pre-apply backups. Snapshots have their own retention, which only ever removes snapshots. `Prune` is left as it was, still unused.
+- A snapshot equal to the newest one is discarded, so "keep 5" means five distinct states rather than five days.
+- The jobs run the binary `schedule install` was run from, so it refuses when that is not `savetether` (for example `dotnet` running a build).
+- `SAVETETHER_HOME`, when set, is written into the systemd units. Windows tasks cannot carry it; the command says it must then be set for the user account.
+- Notifications and system commands are behind interfaces, so tests never show a notification or touch the real systemd or Task Scheduler.
+
 **Phase 2 exit:** a device restored after its SD card ID or install folder changed, with no hand edits, and the phase 2 lines of the hardware checklist ticked.
 
 ## 5. Phase 3: Decky plugin and detection

@@ -33,6 +33,13 @@ savetether app add cemu
 savetether apply cemu.save
 ```
 
+To be told when something breaks, and optionally keep daily copies of the shared saves on this device:
+
+```bash
+savetether schedule install --snapshots   # status check after login; daily snapshot, newest 5 kept
+savetether schedule remove                # take it away again
+```
+
 If that device has saves of its own, `apply` stops, shows how they differ from the shared copy, and lists the choices. A verified backup is taken before anything is changed; see `savetether backup list`. `savetether status` shows each mapping's state, `savetether revert <id>` undoes a link, and `savetether --help` lists everything. Add `--dry-run` to see what a command would do, and `--json` for machine-readable output.
 
 ## Building

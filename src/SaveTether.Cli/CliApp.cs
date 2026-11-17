@@ -1,9 +1,11 @@
 using SaveTether.Core;
 using SaveTether.Core.Diagnostics;
 using SaveTether.Core.Execution;
+using SaveTether.Core.Health;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
+using SaveTether.Core.Scheduling;
 using SaveTether.Core.Storage;
 
 namespace SaveTether.Cli;
@@ -113,8 +115,22 @@ internal static class CliApp
           savetether app list
               List the apps that have a definition: built in, or in the shared definitions folder.
 
-          savetether status [<id>]
-              Show each mapping's state on this device.
+          savetether status [<id>] [--notify] [--log]
+              Show each mapping's state on this device. --notify shows a desktop notification
+              when something is wrong; --log adds the result to savetether.log. The scheduled
+              check uses both.
+
+          savetether snapshot [<id>] [--keep <n>] [--notify] [--log] [--dry-run]
+              Copy the shared folder of each mapping applied on this device into the backup
+              location, keeping the newest <n> snapshots per mapping (default 5). A snapshot equal
+              to the newest one is not kept twice. Other backups are never removed by this.
+
+          savetether schedule install [--snapshots] [--keep <n>]
+              Run 'status --notify --log' two minutes after each login, and with --snapshots a
+              daily 'snapshot'. Linux: systemd user units, no root needed. Windows: Task Scheduler
+              tasks for this user. Run it again to change what is scheduled.
+          savetether schedule remove
+          savetether schedule show
 
           savetether apply <id> [--copy | --no-copy | --add-missing | --replace-shared --confirm-replace]
                            [--assume-synced] [--assume-closed] [--grant-sandbox] [--dry-run]
@@ -165,10 +181,18 @@ internal static class CliApp
 
         public CliOutput Run()
         {
+            var output = Dispatch();
+            Report(output);
+            return output;
+        }
+
+        private CliOutput Dispatch()
+        {
             try
             {
                 // While an operation is unfinished, only looking and recovering are allowed.
-                var readOnly = command.Name is "status" or "backup list" or "recover" or "app list"
+                // Snapshots are not: they read the shared folders an unfinished operation may be changing.
+                var readOnly = command.Name is "status" or "backup list" or "recover" or "app list" or "schedule show" or "schedule remove"
                     || (command.Name == "app add" && command.Has(ArgParser.DryRun));
                 if (!readOnly && Journal.For(_local).IsOpen)
                 {
@@ -183,6 +207,10 @@ internal static class CliApp
                     "app add" => AppAdd(),
                     "app list" => AppList(),
                     "status" => Status(),
+                    "snapshot" => Snapshot(),
+                    "schedule install" => ScheduleInstall(),
+                    "schedule remove" => ScheduleChange(Schedule.Remove(environment.Schedule)),
+                    "schedule show" => ScheduleChange([]),
                     "apply" => Apply(),
                     "revert" => Revert(),
                     "backup list" => new CliOutput
@@ -358,6 +386,138 @@ internal static class CliApp
             {
                 Command = command.Name, ExitCode = report.JournalOpen ? ExitRecoveryNeeded : ExitSuccess, Status = report,
             };
+        }
+
+        private CliOutput Snapshot()
+        {
+            var keep = Keep();
+            var report = Open().Snapshot(command.FirstPositional, keep, command.Has(ArgParser.DryRun));
+            var failed = report.Mappings.Any(m => m.Status is SnapshotStatus.Failed or SnapshotStatus.Skipped);
+            return new CliOutput { Command = command.Name, ExitCode = failed ? ExitRefused : ExitSuccess, Snapshots = report };
+        }
+
+        private int Keep()
+        {
+            if (command.Value("--keep") is not { } given)
+            {
+                return Workspace.DefaultSnapshotKeep;
+            }
+
+            return int.TryParse(given, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var keep) && keep is >= 1 and <= 100
+                ? keep
+                : throw new UsageException("'--keep' needs a whole number from 1 to 100");
+        }
+
+        private CliOutput ScheduleInstall()
+        {
+            // The jobs run this very binary, so it must be the installed one, not "dotnet" running a build.
+            var executable = environment.Executable;
+            if (executable is null || !Path.GetFileNameWithoutExtension(executable).Equals("savetether", StringComparison.OrdinalIgnoreCase))
+            {
+                return Failed(ExitRefused, $"'schedule install' must be run from the installed savetether binary, so the jobs can run it later; this is '{executable}'.");
+            }
+
+            Open(); // Refuses on a device that is not set up, which the jobs could not run on either.
+            var home = Environment.GetEnvironmentVariable(CliEnvironment.HomeVariable);
+            var request = new ScheduleRequest(executable, command.Has("--snapshots"), Keep(), home is { Length: > 0 } ? environment.LocalFolder : null);
+            return ScheduleChange(Schedule.Install(request, environment.Schedule), home is { Length: > 0 });
+        }
+
+        private CliOutput ScheduleChange(IReadOnlyList<string> done, bool homeOverridden = false)
+        {
+            var state = Schedule.Installed(environment.Schedule);
+            var notes = new List<string>();
+            if (state.Jobs.Count > 0)
+            {
+                notes.Add($"Problems are written to {RunLog.PathIn(environment.LocalFolder)} and shown as a desktop notification; when all is well nothing is shown.");
+                if (!environment.Schedule.IsWindows)
+                {
+                    notes.Add("On a Steam Deck notifications appear in Desktop Mode, not in Game Mode; check the log or run 'savetether status' there.");
+                }
+                else if (homeOverridden)
+                {
+                    notes.Add($"{CliEnvironment.HomeVariable} is set: the tasks only see it if it is set for your user account, not just in this window.");
+                }
+            }
+
+            return new CliOutput
+            {
+                Command = command.Name, ExitCode = ExitSuccess,
+                Schedule = new ScheduleOutput(done, state.Jobs, state.Where, notes),
+            };
+        }
+
+        /// <summary>
+        /// For the scheduled jobs: with --log, one line per run (and per problem) in the run log; with
+        /// --notify, a desktop notification when something is wrong. Silent when all is well.
+        /// </summary>
+        private void Report(CliOutput output)
+        {
+            if (command.Name is not ("status" or "snapshot") || !(command.Has("--log") || command.Has("--notify")))
+            {
+                return;
+            }
+
+            var problems = ProblemsIn(output);
+            var lines = new List<string> { $"{command.Name}: {(problems.Count == 0 ? "all well" : $"{problems.Count} problem(s)")}" };
+            lines.AddRange(problems.Select(p => "  " + p));
+
+            if (command.Has("--notify") && problems.Count > 0)
+            {
+                var title = problems.Count == 1 ? "SaveTether: 1 problem" : $"SaveTether: {problems.Count} problems";
+                var body = string.Join("\n", problems.Take(4)) + (problems.Count > 4 ? $"\n...and {problems.Count - 4} more. Run 'savetether {command.Name}'." : string.Empty);
+                if (!environment.Notifier.Notify(title, body))
+                {
+                    lines.Add("  (the desktop notification could not be shown)");
+                }
+            }
+
+            if (command.Has("--log"))
+            {
+                try
+                {
+                    RunLog.Append(environment.LocalFolder, environment.Time.GetUtcNow(), lines);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    // The log is a convenience; the command's own result stands.
+                }
+            }
+        }
+
+        private static List<string> ProblemsIn(CliOutput output)
+        {
+            var problems = new List<string>();
+            if (output.Error is { } error)
+            {
+                problems.Add(error);
+            }
+
+            if (output.Status is { } status)
+            {
+                if (status.DeviceFileMismatch)
+                {
+                    problems.Add($"The device name '{status.DeviceName}' now belongs to another install.");
+                }
+
+                if (status.JournalOpen)
+                {
+                    problems.Add("An earlier operation did not finish. Run 'savetether recover'.");
+                }
+
+                problems.AddRange(status.Mappings
+                    .Where(m => m.State is not (HealthState.Ok or HealthState.NotApplied))
+                    .Select(m => $"{m.MappingId}: {m.State}. {m.Detail}"));
+            }
+
+            if (output.Snapshots is { } snapshots)
+            {
+                problems.AddRange(snapshots.Mappings
+                    .Where(m => m.Status is SnapshotStatus.Failed or SnapshotStatus.Skipped)
+                    .Select(m => $"{m.MappingId}: snapshot {(m.Status == SnapshotStatus.Failed ? "failed" : "skipped")}. {m.Message}"));
+            }
+
+            return problems;
         }
 
         private CliOutput Apply()

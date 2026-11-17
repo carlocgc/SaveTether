@@ -60,6 +60,13 @@ internal sealed record OperationOutput(
 internal sealed record AppOutput(
     string AppId, bool Added, AppAddPlan? Plan, AppAddProblem? Problem, IReadOnlyList<InstallCandidate> Candidates);
 
+/// <summary>"schedule install", "remove" and "show".</summary>
+/// <param name="Done">What was changed, one line each. Empty for "show".</param>
+/// <param name="Jobs">The jobs installed now.</param>
+/// <param name="Where">Where they live: the unit folder, or the Task Scheduler folder.</param>
+/// <param name="Notes">What the owner should know about how the jobs run here.</param>
+internal sealed record ScheduleOutput(IReadOnlyList<string> Done, IReadOnlyList<string> Jobs, string Where, IReadOnlyList<string> Notes);
+
 /// <summary>"app list": one app that can be added.</summary>
 internal sealed record AppListEntry(string Id, string? Name, DefinitionSource Source, string? Error);
 
@@ -93,6 +100,10 @@ internal sealed record CliOutput
     public AppOutput? App { get; init; }
 
     public IReadOnlyList<AppListEntry>? Apps { get; init; }
+
+    public SnapshotReport? Snapshots { get; init; }
+
+    public ScheduleOutput? Schedule { get; init; }
 
     public StatusReport? Status { get; init; }
 
@@ -147,6 +158,27 @@ internal static class OutputWriter
         if (output.Status is { } status)
         {
             WriteStatus(status, stdout, stderr);
+        }
+
+        if (output.Snapshots is { } snapshots)
+        {
+            WriteSnapshots(snapshots, stdout, stderr);
+        }
+
+        if (output.Schedule is { } schedule)
+        {
+            foreach (var line in schedule.Done)
+            {
+                stdout.WriteLine(line);
+            }
+
+            stdout.WriteLine(schedule.Jobs.Count == 0
+                ? "Nothing is scheduled."
+                : $"Scheduled: {string.Join(", ", schedule.Jobs)} ({schedule.Where}).");
+            foreach (var note in schedule.Notes)
+            {
+                stdout.WriteLine($"Note: {note}");
+            }
         }
 
         foreach (var operation in output.Operations ?? [])
@@ -251,6 +283,45 @@ internal static class OutputWriter
         stdout.WriteLine(app.Added
             ? $"Added. No saves were touched. Run 'savetether apply <id>' for each mapping above to link it."
             : "Dry run: nothing was changed.");
+    }
+
+    private static void WriteSnapshots(SnapshotReport report, TextWriter stdout, TextWriter stderr)
+    {
+        if (report.Mappings.Count == 0)
+        {
+            stdout.WriteLine("No mapping has a save folder on this device, so there is nothing to snapshot.");
+        }
+
+        foreach (var m in report.Mappings)
+        {
+            var kept = $"{m.KeptCount} snapshot(s) kept, {FormatBytes(m.KeptBytes)}";
+            switch (m.Status)
+            {
+                case SnapshotStatus.Taken:
+                    stdout.WriteLine($"  {m.MappingId}: snapshot {m.BackupId} ({m.Files} file(s), {FormatBytes(m.Bytes)}). {kept}.");
+                    break;
+                case SnapshotStatus.Unchanged:
+                    stdout.WriteLine($"  {m.MappingId}: unchanged since {m.BackupId}. {kept}.");
+                    break;
+                case SnapshotStatus.Planned:
+                    stdout.WriteLine($"  {m.MappingId}: would snapshot {m.Files} file(s), {FormatBytes(m.Bytes)}. {kept}.");
+                    break;
+                case SnapshotStatus.NotApplied:
+                    stdout.WriteLine($"  {m.MappingId}: not applied here.");
+                    break;
+                default:
+                    stderr.WriteLine($"  {m.MappingId}: {(m.Status == SnapshotStatus.Failed ? "failed" : "skipped")}. {m.Message}");
+                    break;
+            }
+
+            foreach (var pruned in m.Pruned)
+            {
+                stdout.WriteLine($"    removed the older snapshot {pruned}");
+            }
+        }
+
+        var free = report.FreeBytes is { } bytes ? $"{FormatBytes(bytes)} free" : "free space unknown";
+        stdout.WriteLine($"Snapshots are kept in {report.BackupRoot}, the newest {report.Keep} per mapping ({free}).");
     }
 
     private static string FormatBytes(long bytes) => bytes switch

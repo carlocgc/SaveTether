@@ -199,6 +199,61 @@ public sealed class BackupStore
         return deleted;
     }
 
+    /// <summary>
+    /// Takes a snapshot of a shared folder (design 5.4). When nothing changed since the newest
+    /// snapshot of this mapping, the new copy is discarded and that one is returned with
+    /// <c>Unchanged</c> set, so the retained snapshots are distinct states, not repeats.
+    /// </summary>
+    public (BackupInfo Snapshot, bool Unchanged) CreateSnapshot(string mappingId, string sharedFolder)
+    {
+        var previous = List(mappingId).LastOrDefault(b => b.Reason == BackupReason.Snapshot);
+        var created = Create(mappingId, sharedFolder, BackupReason.Snapshot);
+        if (previous is not null && SameContent(previous.Location, created.Location))
+        {
+            _fs.DeleteTree(created.Location);
+            return (previous, true);
+        }
+
+        return (created, false);
+    }
+
+    /// <summary>
+    /// Deletes the oldest snapshots of one mapping, keeping the newest <paramref name="keep"/>.
+    /// Backups taken for any other reason (before apply, revert or restore) are never touched here.
+    /// Returns the IDs it deleted.
+    /// </summary>
+    public IReadOnlyList<string> PruneSnapshots(string mappingId, int keep)
+    {
+        RequireMappingId(mappingId);
+        ArgumentOutOfRangeException.ThrowIfLessThan(keep, 1);
+
+        var deleted = new List<string>();
+        foreach (var snapshot in List(mappingId).Where(b => b.Reason == BackupReason.Snapshot).SkipLast(keep))
+        {
+            _fs.DeleteTree(snapshot.Location);
+            deleted.Add(snapshot.Id);
+        }
+
+        return deleted;
+    }
+
+    /// <summary>True when two backups hold the same files with the same content, and the same links.</summary>
+    private static bool SameContent(string firstFolder, string secondFolder)
+    {
+        if (TryReadManifest(firstFolder) is not { } first || TryReadManifest(secondFolder) is not { } second)
+        {
+            return false;
+        }
+
+        static IEnumerable<string> Keys(BackupManifest m) =>
+            m.Files.Select(f => $"f|{f.Path}|{f.Size}|{f.Sha256}")
+                .Concat(m.Links.Select(l => $"l|{l.Path}|{l.Kind}|{l.Target}"))
+                .Concat(m.Directories.Select(d => $"d|{d}"))
+                .Order(StringComparer.Ordinal);
+
+        return Keys(first).SequenceEqual(Keys(second), StringComparer.Ordinal);
+    }
+
     /// <summary>The folder holding the plain copy of the files for <paramref name="backupId"/>.</summary>
     public string DataPathOf(string backupId) => Path.Combine(FolderOf(backupId), DataName);
 

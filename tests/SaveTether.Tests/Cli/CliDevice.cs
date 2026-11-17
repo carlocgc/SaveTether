@@ -5,6 +5,7 @@ using SaveTether.Core.Execution;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Planning;
 using SaveTether.Core.Resolution;
+using SaveTether.Core.Scheduling;
 using SaveTether.Tests.FileSystem;
 
 namespace SaveTether.Tests.Cli;
@@ -69,6 +70,21 @@ internal sealed class CliDevice
     /// <summary>The Flatpak precheck. Null, the default, runs none.</summary>
     public FlatpakCheck? Flatpak { get; set; }
 
+    /// <summary>Desktop notifications shown, as (title, body).</summary>
+    public List<(string Title, string Body)> Notifications { get; } = [];
+
+    /// <summary>System commands run by "schedule", as "file arg arg ...". None really runs.</summary>
+    public RecordingRunner Commands { get; } = new();
+
+    /// <summary>Run "schedule" as on Windows rather than Linux.</summary>
+    public bool ScheduleAsWindows { get; set; }
+
+    /// <summary>The systemd user unit folder "schedule" writes to, inside the sandbox.</summary>
+    public string UnitFolder => Path.Combine(Path.GetDirectoryName(LocalFolder)!, "units");
+
+    /// <summary>The binary the scheduled jobs would run.</summary>
+    public string? Executable { get; set; } = "/opt/savetether/savetether";
+
     /// <summary>The home folder the default <see cref="Resolver"/> uses.</summary>
     public string Home => Path.Combine(Path.GetDirectoryName(LocalFolder)!, "home");
 
@@ -84,6 +100,9 @@ internal sealed class CliDevice
             Interactive = Typing is not null,
             Faults = Faults,
             Flatpak = Flatpak,
+            Notifier = new RecordingNotifier(Notifications),
+            Schedule = new ScheduleContext(ScheduleAsWindows, UnitFolder, @"PC\owner", Commands),
+            Executable = Executable,
             Resolver = Resolver ?? new ResolverEnvironment { Os = TargetOs.Linux, Home = Home, UserName = Name },
         };
         var exit = CliApp.Run(args, stdout, stderr, environment);
@@ -178,5 +197,31 @@ internal sealed class CliDevice
     private sealed class FakeProcesses(List<string> names) : IProcessLister
     {
         public IReadOnlyList<string> RunningProcessNames() => names;
+    }
+}
+
+/// <summary>Records notifications instead of showing them.</summary>
+internal sealed class RecordingNotifier(List<(string Title, string Body)> shown) : INotifier
+{
+    public bool Notify(string title, string body)
+    {
+        shown.Add((title, body));
+        return true;
+    }
+}
+
+/// <summary>Records system commands instead of running them. Each answers with <see cref="Answer"/>.</summary>
+internal sealed class RecordingRunner : ICommandRunner
+{
+    public List<string> Calls { get; } = [];
+
+    /// <summary>The reply to a command line, by its start; anything else succeeds with no output.</summary>
+    public Func<string, (int ExitCode, string Output)> Answer { get; set; } = _ => (0, string.Empty);
+
+    public (int ExitCode, string Output) Run(string file, IReadOnlyList<string> arguments)
+    {
+        var line = string.Join(" ", [file, .. arguments]);
+        Calls.Add(line);
+        return Answer(line);
     }
 }

@@ -65,7 +65,11 @@ internal static class ArgParser
         new("map remove", 1, 1, None, None, None),
         new("app add", 1, 1, [DryRun], ["--install", "--install-dir", "--sd-card", "--wine-prefix"], ["--role"]),
         new("app list", 0, 0, None, None, None),
-        new("status", 0, 1, None, None, None),
+        new("status", 0, 1, ["--notify", "--log"], None, None),
+        new("snapshot", 0, 1, [DryRun, "--notify", "--log"], ["--keep"], None),
+        new("schedule install", 0, 0, ["--snapshots"], ["--keep"], None),
+        new("schedule remove", 0, 0, None, None, None),
+        new("schedule show", 0, 0, None, None, None),
         new(
             "apply", 0, 1,
             [

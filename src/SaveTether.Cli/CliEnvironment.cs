@@ -13,6 +13,15 @@ internal sealed class CliEnvironment
 
     public IProcessLister Processes { get; init; } = new SystemProcessLister();
 
+    /// <summary>Desktop notifications for the scheduled jobs.</summary>
+    public INotifier Notifier { get; init; } = new SystemNotifier();
+
+    /// <summary>Where and how "schedule" installs its jobs.</summary>
+    public SaveTether.Core.Scheduling.ScheduleContext Schedule { get; init; } = SaveTether.Core.Scheduling.ScheduleContext.ForSystem();
+
+    /// <summary>The running SaveTether binary, which the scheduled jobs will run.</summary>
+    public string? Executable { get; init; } = Environment.ProcessPath;
+
     /// <summary>The Flatpak precheck for apply. Null where there are no Flatpaks.</summary>
     public FlatpakCheck? Flatpak { get; init; } = FlatpakCheck.ForSystem();
 
