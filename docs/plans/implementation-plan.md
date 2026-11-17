@@ -395,7 +395,7 @@ Starts with two steps before any app code:
 1. **Toolkit decision** by the owner. *Done 2026-11-17: Avalonia approved after the trial below.* A Game Mode check was planned here and dropped the same day: the owner decided the app is for the desktop only, which on the Deck means Desktop Mode (design 5.14).
 2. **Specification** of the app's screens and states to the level of design 5.12, including every refusal the CLI can give and how the window shows it. *Drafted 2026-11-17 in `docs/design/desktop-app-spec.md`; its section 15 lists eleven decisions for the owner. Its section 13 adds six small core and CLI changes to come before or with the app, the first being core messages without CLI wording.*
 
-Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/avalonia-tray` (`spikes/AvaloniaTray`, not in the solution; its README has the details). Avalonia 12.1.5, .NET 10, Native AOT:
+Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/avalonia-tray` (`spikes/AvaloniaTray`, not in the solution; removed since, and its README's findings are below). Avalonia 12.1.5, .NET 10, Native AOT:
 
 | | Windows 11 | Linux Mint 22.3, Cinnamon, X11 | Steam Deck, Desktop Mode, KDE Plasma, Wayland |
 |---|---|---|---|
@@ -407,7 +407,7 @@ Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/
 
 - The app is four files, not one: the executable plus native Skia and HarfBuzz (and ANGLE on Windows). Acceptable in the release archive; the CLI is unaffected at about 6 MB.
 - On the Deck's Wayland desktop Avalonia runs through XWayland. Over SSH it needs the session's `XAUTHORITY`; started from the desktop or by autostart it has it.
-- Checked by the runs: the window was created and shown, and the tray item registered with each desktop's tray host. Not yet checked: how it looks on each screen. Game Mode is not a target (design 5.14), so the Game Mode check planned here was dropped. The trial binary at `~/sttest-spike` on the Deck, which logs each key press, and the branch are no longer needed.
+- Checked by the runs: the window was created and shown, and the tray item registered with each desktop's tray host. Not yet checked: how it looks on each screen. Game Mode is not a target (design 5.14), so the Game Mode check planned here was dropped. The trial binary at `~/sttest-spike` on the Deck and the branch `spike/avalonia-tray` (last commit `e1da00b`) were removed on 2026-11-17; the findings above are what they recorded.
 - Known limits taken into account in design 5.14: the tray icon's own menu is a plain system menu (text, separators, ticks), so anything richer is our own window; where the tray icon is on screen is not reliably known on Linux, so a click opens the main window rather than a panel beside the icon; desktop notifications need the small per-platform code (`notify-send`, a PowerShell toast); bindings must be compiled bindings for Native AOT.
 - Alternatives considered: Tauri (small and web-styled, but a second language and toolchain, all actions through the CLI's JSON, and WebKitGTK unconfirmed on SteamOS), Eto.Forms (native widgets, less styling freedom, GTK and AOT on SteamOS unproven), Uno Platform (heavier for a small app), Photino (no tray), Electron (too large). .NET MAUI has no Linux desktop and WPF and WinForms are Windows only.
 
