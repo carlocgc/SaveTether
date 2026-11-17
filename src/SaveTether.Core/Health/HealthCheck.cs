@@ -105,8 +105,8 @@ public static class HealthCheck
     /// the sync root cannot be read, so neither the shared list nor this device's file is there.
     /// A link still pointing where it was made is Broken then, since the sync root it leads into is unusable.
     /// </summary>
-    /// <param name="rootProblem">Why the sync root cannot be used, as one or two sentences.</param>
-    public static MappingHealth CheckRecorded(string mappingId, AppliedMapping recorded, string rootProblem)
+    /// <remarks>Why the sync root cannot be used is said once, in the report, not on every mapping.</remarks>
+    public static MappingHealth CheckRecorded(string mappingId, AppliedMapping recorded)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mappingId);
         ArgumentNullException.ThrowIfNull(recorded);
@@ -118,7 +118,7 @@ public static class HealthCheck
         {
             var linkTarget = PathRules.ResolveAll(SafeFs.ReadLinkTarget(recorded.Source));
             return PathRules.AreSame(linkTarget, PathRules.ResolveAll(recorded.Target))
-                ? Is(HealthState.Broken, $"The link is in place, but the sync root is not available. {rootProblem}")
+                ? Is(HealthState.Broken, "The link is in place, but the sync root is not available.")
                 : Is(HealthState.Retargeted, $"The save folder now links to '{linkTarget}' instead of the shared folder.");
         }
 

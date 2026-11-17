@@ -275,7 +275,7 @@ public sealed partial class Workspace
                 recorded
                     .Where(r => mappingId is null || r.Key == mappingId)
                     .OrderBy(r => r.Key, StringComparer.Ordinal)
-                    .Select(r => HealthCheck.CheckRecorded(r.Key, r.Value, problem))
+                    .Select(r => HealthCheck.CheckRecorded(r.Key, r.Value))
                     .ToList(),
                 problem);
         }
