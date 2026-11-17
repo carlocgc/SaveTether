@@ -342,13 +342,20 @@ internal static class CliApp
 
         private CliOutput AppList()
         {
-            var catalog = Open().Definitions;
+            var workspace = Open();
+            var catalog = workspace.Definitions;
             var apps = catalog.AvailableIds().Select(id =>
             {
                 var entry = catalog.Find(id)!;
                 return new AppListEntry(id, entry.Definition?.Name, entry.Source, entry.IsValid ? null : string.Join("; ", entry.Errors));
             }).ToList();
-            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Apps = apps };
+            return new CliOutput
+            {
+                Command = command.Name, ExitCode = ExitSuccess, Apps = apps,
+                Message = workspace.Shared.IsInitialized
+                    ? null
+                    : $"Only the built-in definitions are listed: the shared ones could not be read. {workspace.Shared.NotAvailableMessage}",
+            };
         }
 
         private CliOutput Status()

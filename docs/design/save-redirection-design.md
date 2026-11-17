@@ -796,6 +796,7 @@ Local, `state.json`: per mapping, the resolved source and target, the link type 
 - **Device name owned by another install.** `status` warns (5.6). Every command that would act on the device file refuses until `init --take-over` is run, since it would be applying another machine's paths.
 - **Local files** live in `%LOCALAPPDATA%\SaveTether` on Windows and `$XDG_DATA_HOME/savetether` (default `~/.local/share/savetether`) on Linux; `SAVETETHER_HOME` overrides both. Backups default to `backups` inside that folder.
 - **`status` only reads.** A lost `state.json` is rebuilt by the next `apply`, not by `status`; a correct link is reported as OK either way.
+- **Sync root unavailable.** When the sync root is missing, or has no marker folder (an unmounted drive leaves an empty mount point), every command that reads or writes shared files refuses with exit 1 and says which of the two it is. `status` still reports, and exits 0: the shared list and this device's file are out of reach, so it lists the mappings `state.json` says were applied here, and a link still pointing where it was made is Broken. Its JSON has `sync_root_available: false` and `sync_root_problem`, which the tray icon uses to turn amber (5.14). `status <id>` for a mapping not applied here is refused. `app list` lists the built-in definitions only, and says the shared ones could not be read. Added 2026-11-17 after the Deck test in plan section 8.
 
 | Command | Does |
 |---|---|

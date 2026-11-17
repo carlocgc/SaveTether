@@ -308,6 +308,7 @@ $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
 $.status.sync_root: string
+$.status.sync_root_available: boolean
 $.status: object
 $: object
 

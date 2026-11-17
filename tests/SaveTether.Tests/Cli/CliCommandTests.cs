@@ -182,6 +182,67 @@ public class CliCommandTests
     }
 
     [Fact]
+    public void Status_reports_broken_links_when_the_sync_root_is_missing_or_empty_and_everything_else_refuses()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", Id, "--copy");
+        var away = pc.SyncRoot + ".away";
+
+        void AssertUnavailable(string problem)
+        {
+            var status = pc.Ok("status", "--json").Json().GetProperty("status");
+            Assert.False(status.GetProperty("sync_root_available").GetBoolean());
+            Assert.Contains(problem, status.GetProperty("sync_root_problem").GetString(), StringComparison.Ordinal);
+            var mapping = Assert.Single(status.GetProperty("mappings").EnumerateArray());
+            Assert.Equal(Id, mapping.GetProperty("mapping_id").GetString());
+            Assert.Equal("broken", mapping.GetProperty("state").GetString());
+
+            var text = pc.Ok("status");
+            Assert.Contains("from its own record", text.Out, StringComparison.Ordinal);
+            Assert.Contains("Broken", text.Out, StringComparison.Ordinal);
+            Assert.StartsWith("Warning: ", text.Err, StringComparison.Ordinal);
+            Assert.Contains(problem, text.Err, StringComparison.Ordinal);
+            Assert.Equal("broken", pc.Ok("status", Id, "--json").Json().GetProperty("status").GetProperty("mappings")[0].GetProperty("state").GetString());
+
+            // Status of a mapping this device never applied cannot be known without the shared list.
+            Assert.Contains(problem, pc.Expect(CliApp.ExitRefused, "status", "other.saves").Err, StringComparison.Ordinal);
+            Assert.Contains("shared ones could not be read", pc.Ok("app", "list").Out, StringComparison.Ordinal);
+
+            foreach (var args in new string[][]
+            {
+                ["apply", Id], ["apply", "--all"], ["revert", Id], ["backup", "list"],
+                ["map", "add", Id, "--source", pc.Source], ["map", "remove", Id], ["app", "add", "cemu", "--dry-run"],
+            })
+            {
+                Assert.Contains(problem, pc.Expect(CliApp.ExitRefused, args).Err, StringComparison.Ordinal);
+            }
+
+            Assert.True(pc.IsLinked);
+        }
+
+        Directory.Move(pc.SyncRoot, away);
+        AssertUnavailable($"The sync root '{pc.SyncRoot}' does not exist.");
+        Assert.Equal(EntryKind.Missing, SafeFs.Probe(pc.SyncRoot));
+
+        // An unmounted drive leaves an empty mount point.
+        Directory.CreateDirectory(pc.SyncRoot);
+        AssertUnavailable("is not set up for SaveTether");
+        Assert.Empty(Directory.EnumerateFileSystemEntries(pc.SyncRoot));
+
+        Directory.Delete(pc.SyncRoot);
+        Directory.Move(away, pc.SyncRoot);
+        var back = pc.Ok("status", "--json").Json().GetProperty("status");
+        Assert.True(back.GetProperty("sync_root_available").GetBoolean());
+        Assert.False(back.TryGetProperty("sync_root_problem", out _));
+        Assert.Equal("ok", back.GetProperty("mappings")[0].GetProperty("state").GetString());
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void Exit_codes_tell_success_refusal_rollback_and_recovery_apart()
     {
         using var sandbox = new Sandbox();
