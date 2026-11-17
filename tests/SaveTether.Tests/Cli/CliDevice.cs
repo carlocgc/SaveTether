@@ -66,6 +66,9 @@ internal sealed class CliDevice
     /// <summary>What the path resolver sees. Null uses a Linux-shaped home under this device's folder.</summary>
     public ResolverEnvironment? Resolver { get; set; }
 
+    /// <summary>The Flatpak precheck. Null, the default, runs none.</summary>
+    public FlatpakCheck? Flatpak { get; set; }
+
     /// <summary>The home folder the default <see cref="Resolver"/> uses.</summary>
     public string Home => Path.Combine(Path.GetDirectoryName(LocalFolder)!, "home");
 
@@ -80,6 +83,7 @@ internal sealed class CliDevice
             Input = Typing,
             Interactive = Typing is not null,
             Faults = Faults,
+            Flatpak = Flatpak,
             Resolver = Resolver ?? new ResolverEnvironment { Os = TargetOs.Linux, Home = Home, UserName = Name },
         };
         var exit = CliApp.Run(args, stdout, stderr, environment);

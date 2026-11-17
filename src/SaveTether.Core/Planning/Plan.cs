@@ -203,6 +203,10 @@ public enum PrecheckKind
     [JsonStringEnumMemberName("not-enough-space")]
     NotEnoughSpace,
 
+    /// <summary>S is inside a Flatpak app's folder and that app's sandbox cannot write T.</summary>
+    [JsonStringEnumMemberName("sandbox-cannot-reach")]
+    SandboxCannotReach,
+
     /// <summary>Revert: S is not a link to this mapping's shared folder.</summary>
     [JsonStringEnumMemberName("not-applied")]
     NotApplied,

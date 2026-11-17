@@ -37,8 +37,10 @@ public sealed partial class Workspace
     private readonly IProcessLister _processes;
     private readonly TimeProvider? _time;
     private readonly IFaultHook? _faults;
+    private readonly FlatpakCheck? _flatpak;
 
-    private Workspace(LocalStore local, BootstrapFile bootstrap, IProcessLister processes, TimeProvider? time, IFaultHook? faults)
+    private Workspace(
+        LocalStore local, BootstrapFile bootstrap, IProcessLister processes, TimeProvider? time, IFaultHook? faults, FlatpakCheck? flatpak)
     {
         Local = local;
         Bootstrap = bootstrap;
@@ -47,6 +49,7 @@ public sealed partial class Workspace
         _processes = processes;
         _time = time;
         _faults = faults;
+        _flatpak = flatpak;
     }
 
     public LocalStore Local { get; }
@@ -61,7 +64,9 @@ public sealed partial class Workspace
 
     /// <summary>Opens this device's setup. Fails when "init" has not been run here.</summary>
     /// <param name="faults">Test seam, passed to the executor.</param>
-    public static Workspace Open(LocalStore local, IProcessLister processes, TimeProvider? time = null, IFaultHook? faults = null)
+    /// <param name="flatpak">The Flatpak precheck for apply; null where there are no Flatpaks.</param>
+    public static Workspace Open(
+        LocalStore local, IProcessLister processes, TimeProvider? time = null, IFaultHook? faults = null, FlatpakCheck? flatpak = null)
     {
         ArgumentNullException.ThrowIfNull(local);
         ArgumentNullException.ThrowIfNull(processes);
@@ -69,7 +74,7 @@ public sealed partial class Workspace
             ?? throw new StoreException(
                 StoreProblem.NotFound,
                 "This device is not set up yet. Run 'savetether init --sync-root <path>' first.");
-        return new Workspace(local, bootstrap, processes, time, faults);
+        return new Workspace(local, bootstrap, processes, time, faults, flatpak);
     }
 
     /// <summary>The device names that have a file in the sync root, for "init" to offer.</summary>
@@ -260,7 +265,45 @@ public sealed partial class Workspace
     /// <summary>The mappings this device has a save folder for, in order: what "apply --all" runs.</summary>
     public IReadOnlyList<string> MappingsWithPaths() => ReadOwnDevice().Paths.Keys.Order(StringComparer.Ordinal).ToList();
 
-    public PlanOutcome PlanApply(string mappingId, ApplyRequest request) => Planner.Plan(ReadSnapshot(mappingId), request);
+    public PlanOutcome PlanApply(string mappingId, ApplyRequest request) => Planner.Plan(WithSandbox(ReadSnapshot(mappingId)), request);
+
+    /// <summary>Adds the Flatpak precheck: only apply makes a link the app must follow.</summary>
+    private Snapshot WithSandbox(Snapshot s) =>
+        _flatpak is null ? s : s with { Sandbox = _flatpak.Check(s.Source, s.Target, s.ResolvedTarget, Shared.DataRoot, s.DataRoot) };
+
+    /// <summary>The Flatpak precheck for one mapping on its own; null when its save folder is not in a Flatpak app.</summary>
+    public SandboxReach? CheckSandbox(string mappingId) => _flatpak is null ? null : WithSandbox(ReadSnapshot(mappingId)).Sandbox;
+
+    /// <summary>
+    /// Grants a Flatpak app write access to the savetether folder ("flatpak override --user"). It
+    /// changes that app's settings: call it only once the owner has agreed. True when it succeeded.
+    /// </summary>
+    public bool GrantSandbox(SandboxReach reach) => _flatpak?.Grant(reach) ?? false;
+
+    /// <summary>
+    /// After a revert: SaveTether's grant to the Flatpak app holding this mapping's save folder,
+    /// when no other mapping applied on this device still links from inside that app. Null otherwise.
+    /// </summary>
+    public SandboxGrant? SandboxGrantNoLongerNeeded(string mappingId)
+    {
+        if (_flatpak is null)
+        {
+            return null;
+        }
+
+        var device = ReadOwnDevice();
+        if (!device.Paths.TryGetValue(mappingId, out var path) || _flatpak.AppOwning(path.Source) is not { } appId)
+        {
+            return null;
+        }
+
+        var stillUsed = device.Paths.Any(other =>
+            other.Key != mappingId && _flatpak.AppOwning(other.Value.Source) == appId && IsLink(other.Value.Source));
+        return stillUsed ? null : _flatpak.FindGrant(path.Source, Shared.DataRoot, PathRules.ResolveAll(Shared.DataRoot));
+    }
+
+    /// <summary>Takes back SaveTether's grant to a Flatpak app. Call it only once the owner has agreed. True when it succeeded.</summary>
+    public bool RevokeSandbox(SandboxGrant grant) => _flatpak?.Revoke(grant) ?? false;
 
     public PlanOutcome PlanRevert(string mappingId, bool assumeClosed) => Planner.PlanRevert(ReadSnapshot(mappingId), assumeClosed);
 

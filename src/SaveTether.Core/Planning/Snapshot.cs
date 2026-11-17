@@ -165,4 +165,10 @@ public sealed record Snapshot
 
     /// <summary>False on Windows when T is on a network drive, where a junction cannot point.</summary>
     public bool TargetOnLocalVolume { get; init; } = true;
+
+    /// <summary>
+    /// When S is inside a Flatpak app's folder: whether that app's sandbox can write T. Null when S
+    /// is not, or when the check was not run (revert does not need it).
+    /// </summary>
+    public SandboxReach? Sandbox { get; init; }
 }
