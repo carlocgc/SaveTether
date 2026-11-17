@@ -1,0 +1,195 @@
+name: Release
+
+# A tag vX.Y.Z on a commit in main publishes a release. A tag vX.Y.Z-<suffix> (for example
+# v0.2.0-rc.1) publishes a prerelease from any branch. A manual run builds and uploads the
+# packages as workflow artifacts only, for checking before tagging. docs/releasing.md has the steps.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, in vX.Y.Z or vX.Y.Z-suffix form. Nothing is published.'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Check version
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+      publish: ${{ steps.check.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read and check the version
+        id: check
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="$GITHUB_REF_NAME"; publish=true
+          else
+            tag="$INPUT_VERSION"; publish=false
+          fi
+
+          if [[ ! "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::The version must be vX.Y.Z or vX.Y.Z-suffix, but got '$tag'."
+            exit 1
+          fi
+          version="${tag#v}"
+          prerelease=false
+          [[ -n "${BASH_REMATCH[2]}" ]] && prerelease=true
+
+          # A full release must come from main, so what is published is what was merged there.
+          if [[ "$publish" == true && "$prerelease" == false ]]; then
+            git fetch --quiet origin main
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "::error::$tag is not on main. Tag a commit on main, or use a prerelease tag such as $tag-rc.1."
+              exit 1
+            fi
+          fi
+
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "prerelease=$prerelease"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+          echo "Building $tag (version $version, prerelease $prerelease, publish $publish)."
+
+  build:
+    name: ${{ matrix.rid }}
+    needs: version
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            exe: savetether.exe
+          - os: ubuntu-24.04
+            rid: linux-x64
+            exe: savetether
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            exe: savetether
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      PACKAGE: savetether-${{ needs.version.outputs.tag }}-${{ matrix.rid }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install Native AOT prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev
+
+      - name: Restore
+        run: dotnet restore SaveTether.slnx
+
+      - name: Build
+        run: dotnet build SaveTether.slnx -c Release --no-restore -p:Version=${{ env.VERSION }}
+
+      - name: Test
+        run: dotnet test SaveTether.slnx -c Release --no-build
+
+      - name: Publish native binary
+        run: dotnet publish src/SaveTether.Cli/SaveTether.Cli.csproj -c Release -r ${{ matrix.rid }} -o publish -p:Version=${{ env.VERSION }}
+
+      - name: Check the binary
+        shell: bash
+        run: |
+          out="$(./publish/${{ matrix.exe }} --version)"
+          echo "$out"
+          if [[ "$out" != "savetether $VERSION" ]]; then
+            echo "::error::Expected 'savetether $VERSION', got '$out'."
+            exit 1
+          fi
+          ./publish/${{ matrix.exe }} --self-test
+          bash tests/e2e/scenario1.sh "$PWD/publish/${{ matrix.exe }}"
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p "stage/$PACKAGE" dist
+          cp "publish/${{ matrix.exe }}" README.md LICENSE "stage/$PACKAGE/"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            (cd stage && 7z a -tzip "../dist/$PACKAGE.zip" "$PACKAGE" > /dev/null)
+          else
+            chmod +x "stage/$PACKAGE/${{ matrix.exe }}"
+            tar -C stage -czf "dist/$PACKAGE.tar.gz" "$PACKAGE"
+          fi
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.rid }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Collect debug symbols
+        shell: bash
+        run: |
+          mkdir -p symbols
+          find publish -maxdepth 1 \( -name '*.pdb' -o -name '*.dbg' \) -exec cp {} symbols/ \;
+          ls -l symbols
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: symbols-${{ matrix.rid }}
+          path: symbols/*
+          if-no-files-found: warn
+          retention-days: 30
+
+  release:
+    name: Publish release
+    needs: [version, build]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: true
+
+      - name: Write checksums
+        working-directory: dist
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          flags=(--repo "$GITHUB_REPOSITORY" --title "SaveTether $TAG" --generate-notes --verify-tag)
+          [[ "$PRERELEASE" == true ]] && flags+=(--prerelease)
+          gh release create "$TAG" dist/* "${flags[@]}"
