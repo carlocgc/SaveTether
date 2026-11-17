@@ -330,6 +330,73 @@ public class AppAddCliTests
     }
 
     [Fact]
+    public void An_applied_install_that_moved_is_followed_and_one_emptied_through_its_link_is_recoverable()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        ShareDefinition(deck, "testapp", TestApp);
+        var first = Path.Combine(deck.Home, "first");
+        CliDevice.Write(first, "app.cfg", "config");
+        CliDevice.Write(first, "saves/slot1.sav", "save");
+        deck.Ok("app", "add", "testapp", "--install-dir", first);
+        deck.Ok("apply", "testapp.saves", "--copy");
+        var shared = Path.Combine(deck.SyncRoot, "savetether", "testapp", "saves");
+        string State() => deck.Ok("status", "testapp.saves", "--json").Json().GetProperty("status").GetProperty("mappings")[0].GetProperty("state").GetString()!;
+
+        // A move on one drive is a rename: the link goes along with the folder.
+        var second = Path.Combine(deck.Home, "second");
+        Directory.Move(first, second);
+        Assert.Equal("replaced", State());
+        Assert.Contains("nothing at the save folder", deck.Ok("status").Out, StringComparison.Ordinal);
+
+        var notFound = deck.Expect(CliApp.ExitRefused, "app", "add", "testapp").Err;
+        Assert.Contains($"install folder '{first}' (--install-dir) remembered from last time", notFound, StringComparison.Ordinal);
+        Assert.Contains("If Test App has moved", notFound, StringComparison.Ordinal);
+
+        deck.Ok("app", "add", "testapp", "--install-dir", second);
+        deck.Ok("apply", "--all");
+        Assert.Equal("ok", State());
+
+        // A move to another drive by a tool that follows links (PowerShell Move-Item, robocopy
+        // /MOVE): the shared saves are copied into a real folder, then deleted through the link.
+        var third = Path.Combine(deck.Home, "third");
+        CliDevice.Write(third, "app.cfg", "config");
+        CliDevice.Write(third, "saves/slot1.sav", "save");
+        new SaveTether.Core.FileSystem.SafeFs().RemoveLink(Path.Combine(second, "saves"));
+        Directory.Delete(second, recursive: true);
+        File.Delete(Path.Combine(shared, "slot1.sav"));
+
+        deck.Ok("app", "add", "testapp", "--install-dir", third);
+        var refused = deck.Expect(CliApp.ExitRefused, "apply", "testapp.saves").Err;
+        Assert.Contains("Move-Item", refused, StringComparison.Ordinal);
+        Assert.Contains("savetether apply testapp.saves --copy --assume-synced", refused, StringComparison.Ordinal);
+
+        deck.Ok("apply", "testapp.saves", "--copy", "--assume-synced");
+        Assert.Equal("ok", State());
+        Assert.Equal(new Dictionary<string, string> { ["slot1.sav"] = "save" }, CliDevice.FilesIn(shared));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void Waiting_for_another_devices_shared_copy_gives_no_moved_folder_hint()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        var deck = new CliDevice(sandbox, "deck");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", CliDevice.MappingId, "--copy");
+        pc.DeliverTo(deck, metadataOnly: true);
+        deck.Ok("init", "--sync-root", deck.SyncRoot, "--device", "deck");
+        deck.Ok("map", "add", CliDevice.MappingId, "--source", deck.Source);
+        deck.Save("GAME2/save.bin", "two");
+
+        var refused = deck.Expect(CliApp.ExitRefused, "apply", CliDevice.MappingId).Err;
+        Assert.Contains("has probably not finished", refused, StringComparison.Ordinal);
+        Assert.DoesNotContain("Move-Item", refused, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_role_that_is_applied_elsewhere_must_be_reverted_before_it_moves()
     {
         using var sandbox = new Sandbox();

@@ -178,6 +178,9 @@ public sealed partial class Workspace
                 var hint = needValues.Count == 0
                     ? string.Empty
                     : $" {(needValues.Count == 1 ? "Install" : "Installs")} {string.Join(", ", needValues)} can only be looked for once you say where:{HintFor(ResolveProblem.NeedsValue)}";
+
+                // Looked for where it was last time and not found there: it has probably moved.
+                hint += MovedHint(definition.Name, request, stored);
                 return AppAddOutcome.Refuse(
                     AppAddProblem.NotInstalled,
                     forThisOs.Count == 0
@@ -314,6 +317,33 @@ public sealed partial class Workspace
         ResolveProblem.Ambiguous => " Give the one to use with --sd-card or --wine-prefix.",
         _ => string.Empty,
     };
+
+    /// <summary>
+    /// When nothing was found and a remembered location was used in place of one given now, says
+    /// so: the app has most likely moved, and giving its new location is the fix.
+    /// </summary>
+    private static string MovedHint(string appName, AppAddRequest request, DeviceApp? stored)
+    {
+        var remembered = new List<string>();
+        if (request.InstallDir is null && stored?.InstallDir is { } dir)
+        {
+            remembered.Add($"install folder '{dir}' (--install-dir)");
+        }
+
+        if (request.SdCard is null && stored?.SdCard is { } card)
+        {
+            remembered.Add($"SD card '{card}' (--sd-card)");
+        }
+
+        if (request.WinePrefix is null && stored?.WinePrefix is { } prefix)
+        {
+            remembered.Add($"Wine prefix '{prefix}' (--wine-prefix)");
+        }
+
+        return remembered.Count == 0
+            ? string.Empty
+            : $" It was looked for at the {string.Join(" and the ", remembered)} remembered from last time. If {appName} has moved, run app add again with its new location.";
+    }
 
     /// <summary>Whether a folder is there, whether it is a link, and the size of what is in it, not following links inside.</summary>
     private static (bool Exists, bool IsLink, long Bytes, int Files) Measure(string folder)
