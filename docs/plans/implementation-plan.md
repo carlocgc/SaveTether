@@ -258,6 +258,8 @@ The four Deck items section 8 still has open. None needs new code.
 
 Done when: section 8 is ticked for phase 1 and dated. Item 2 should come before any Flatpak emulator is mapped for real.
 
+Done 2026-11-17: all four ticked in section 8. Item 4 led to a change: `status` now reports instead of refusing when the sync root is unavailable (PR #25).
+
 ### P2.1 Specify entry depth; settle config redirects (S, design)
 
 Design 5.13. Entry depth is specified there. Config redirects, which this plan first scheduled for phase 2, are deferred: the owner decided on 2026-11-12 that links cover the apps in question and that editing app config files is not worth its cost and risk yet. 5.13 records the reasons, what to do by hand for apps whose setting was changed by hand, and when to revisit.
@@ -374,6 +376,17 @@ What remains, built in PR #21: the backups taken before each apply, revert and r
 
 **Phase 2 exit:** a device restored after its SD card ID or install folder changed, with no hand edits, and the phase 2 lines of the hardware checklist ticked.
 
+Met 2026-11-17 on the install folder side (section 8, Windows PC), which also found a way to lose shared saves on Windows and led to PR #26. An SD card ID change was not tried on hardware; it takes the same `app add` path, with `--sd-card` in place of `--install-dir`, and is covered by the resolver tests. The phase 2 checklist lines are ticked except one, deferred by the owner: a game under Proton using a link (section 8).
+
+**Gaps found on hardware, 2026-11-17.** None blocks a first CLI release; each is a later change.
+
+- A definition cannot detect one Lutris game, only the Lutris app (`detect: { "flatpak": "net.lutris.Lutris" }`). A detect rule for a Lutris game would let `app add` say "not installed" before resolving the prefix.
+- There is no token for a Steam game's install folder (`steamapps/common/<installdir>`), where mods and textures usually live. Only the Proton prefix can be named. Until then, such a folder needs `--install-dir`.
+- Definitions carry no process names, so `app add` sets none; `map add <id> --process <name>` was needed for each mapping (`eden`, `Ron2.exe`, `Ron2`). A per-install `processes` field would fix it.
+- Eden keeps a `cache/` folder inside `nand/user/save`, which syncs with the saves and is written by every device. The definition should leave it out, which needs either a narrower role or the sync-tool ignore list (design 5.2, `ignore`).
+- No command deletes a shared mapping. `map remove` drops only this device's entry, so a mapping no device uses stays in every `status` as "Not applied". Renaming `rondo2.flash` to `flashplayer.data` on 2026-11-17 needed the mapping file, its seed marker, its shared folder and the definition deleted by hand; the `apps` record for `rondo2` stays in each device file, since only a hand edit could remove it.
+- A Windows save took about four minutes to reach the Deck, through the Unraid server. That is the sync tool's pace, not SaveTether's, but it is why `apply` checks for an unfinished sync.
+
 ## 5. Phase 3: desktop app
 
 Added on 2026-11-17 (design 5.14). Goal: a person who has never used a terminal can set up a device, add an app, apply it and see at a glance that it stays healthy, on Windows and Linux.
@@ -454,12 +467,14 @@ Run before each phase exit. Record the date and tool version in the PR that clos
 - [x] Flatpak app: link inside `~/.var/app/<id>/` resolves inside the sandbox. *2026-11-17: every emulator's permissions were read on the Deck; all but RPCS3 can write `~/Sync` (P2.6). PPSSPP (Flatpak) applied with a shared definition: `SAVEDATA` and `PPSSPP_STATE` linked inside `~/.var/app/org.ppsspp.PPSSPP/`; an in-game save and a save state both landed in `~/Sync`.*
 - [x] Source on the SD card, sync root on internal storage. *2026-11-17: Eden from EmuDeck, save folders under `Emulation/storage/eden/nand` on the SD card. `app add eden --install emudeck-eden`, then both roles applied with `--no-copy`; the Deck then loaded and saved under the Windows profile, and the save reached Windows. Note: Eden keeps a `cache/` folder inside `nand/user/save`, so it syncs too; the definition should leave it out.*
 - [x] Sync root unmounted or renamed: every command that touches shared files refuses, and `status` reports the links as Broken. *2026-11-17: `~/Sync` renamed away, and then an empty `~/Sync` in its place. Every command refused with exit 1, nothing was created in or at the sync root, and the links were untouched. `status` refused too then; it now reports instead (design 5.12, "Sync root unavailable"). Rerun on the Deck with that build the same day: all five applied mappings Broken, `sync_root_available: false`, OK again once restored.*
-- [ ] From phase 2: a Proton prefix mapping; a Lutris mapping.
+- [x] From phase 2: a Lutris mapping. *2026-11-17: Rondo Duo, a Flash projector game run by the Lutris Flatpak in the Wine prefix `~/Documents/visualnovelengine`, with a shared definition whose base is a winpath with a `lutris` prefix. `app add` read the prefix from Lutris's game config and chose `drive_c/users/deck` (the prefix also has `Public` and `steamuser`). The Deck's `Flash Player` folder became the shared copy; Windows joined with `--no-copy`, loaded that progress and saved. Flash on Windows wrote into the Deck's folder (`#SharedObjects/XDPPBU44`) rather than its own (`662PUZJB`), because the Flash settings that name that folder are shared too; the save reached the Deck about four minutes later.*
+- [x] From phase 2: a Proton prefix is found. *2026-11-17, read-only: `app add --dry-run` with throwaway definitions for Persona 5 Royal (1687950), once as a winpath with a `steam` prefix and once with `{steam_compatdata:1687950}`. Both found `compatdata/1687950/pfx/drive_c/users/steamuser/AppData/Roaming/SEGA` in the internal library; a game that is not installed was refused, naming its app ID. The path was reported through `~/.steam/steam`, a link to `~/.local/share/Steam`. Not tried: a `steam_shortcut` prefix (no non-Steam shortcut on the Deck runs under Proton), a library on the SD card (it holds no games).*
+- [ ] From phase 2, deferred: a game under Proton reads and writes through a link out of its prefix. *Deferred by the owner on 2026-11-17: Steam games keep saves in Steam Cloud, so the first real use is likely a mod or texture folder. Test it with that folder; the open question is whether Steam's runtime container shows the link's target, which matters most for a sync root outside the home folder.*
 - [ ] From phase 3: the desktop app on Windows, Mint and the Deck in Desktop Mode; the tray icon on KDE and Cinnamon; the app under gamescope in Game Mode.
 - [ ] From phase 4: status, Recover and a choice-free Apply from the Decky plugin in Game Mode.
 
 **Both**
-- [x] A save made on one device loads on the other. *2026-11-12, Cemu, both directions.*
+- [x] A save made on one device loads on the other. *2026-11-12, Cemu, both directions. 2026-11-17: Eden (Windows portable and the Deck's EmuDeck install, sharing the Windows profile) and Rondo Duo (Windows and the Deck's Lutris prefix), each saved on one device and loaded on the other.*
 - [x] Simulated wipe restores with `init` and `apply --all`. *2026-11-12, on the Deck.*
 
 ## 9. Risks to watch

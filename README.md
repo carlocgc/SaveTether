@@ -2,7 +2,7 @@
 
 Redirects app and game save folders into one synced folder, so saves follow you between devices (for example a Windows PC and a Steam Deck). SaveTether makes the links and keeps verified backups; a sync tool of your choice, such as Syncthing, moves the folder between devices.
 
-**Status: early development.** The command line works and is tested, but it has not yet been tried on real devices. Do not point it at saves you care about.
+**Status: early development.** The command line works and is tested, and has been used on the author's own Windows PC and Steam Deck (Cemu, Eden, PPSSPP and a Lutris game). It has not been used by anyone else yet. Keep your own backup of saves you care about.
 
 - Design: [docs/design/save-redirection-design.md](docs/design/save-redirection-design.md)
 - Implementation and test plan: [docs/plans/implementation-plan.md](docs/plans/implementation-plan.md)
