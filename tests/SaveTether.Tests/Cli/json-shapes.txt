@@ -303,6 +303,7 @@ $.status.journal_open: boolean
 $.status.mappings: array
 $.status.mappings[].detail: string
 $.status.mappings[].mapping_id: string
+$.status.mappings[].reason: string
 $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
