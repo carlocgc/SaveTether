@@ -167,6 +167,11 @@ internal static class CliApp
         {
             try
             {
+                // One operation at a time on this device, across processes. Taken before the journal is
+                // looked at: while another process runs an operation its journal is open, and that is
+                // not an unfinished operation to recover.
+                using var held = Writes ? OperationLock.Acquire(_local, "cli", command.Name) : null;
+
                 // While an operation is unfinished, only looking and recovering are allowed.
                 var readOnly = command.Name is "status" or "backup list" or "recover" or "app list"
                     || (command.Name == "app add" && command.Has(ArgParser.DryRun));
@@ -197,9 +202,24 @@ internal static class CliApp
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 // The core's refusals outside the planner. Each says what is wrong and what to do; nothing was changed.
-                return Failed(ExitRefused, Hints.ErrorText(e));
+                return Failed(ExitRefused, Hints.ErrorText(e)) with { Problem = (e as StoreException)?.Problem };
             }
         }
+
+        /// <summary>
+        /// Whether the command changes anything, and so takes the operation lock: everything but looking,
+        /// and a dry run. Recovery writes, so it takes the lock too.
+        /// </summary>
+        /// <remarks>
+        /// <c>init</c> on a device never set up has no local folder yet, and so no journal or state to
+        /// protect. Taking the lock there would create the folder, and a refused <c>init</c> must leave
+        /// nothing behind, so it goes without. Two first-time <c>init</c>s at the same instant are not
+        /// guarded against.
+        /// </remarks>
+        private bool Writes =>
+            command.Name is not ("status" or "backup list" or "app list")
+            && !command.Has(ArgParser.DryRun)
+            && (command.Name != "init" || Directory.Exists(_local.Folder));
 
         private CliOutput Init()
         {

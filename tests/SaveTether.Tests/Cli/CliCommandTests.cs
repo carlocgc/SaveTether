@@ -520,6 +520,11 @@ public class CliCommandTests
         Record("recover", 0, "recover");
         Record("map-remove", 0, "map", "remove", Id);
         Record("refused", 1, "revert", Id);
+        using (Core.Storage.OperationLock.Acquire(new Core.Storage.LocalStore(pc.LocalFolder), "gui", "apply"))
+        {
+            Record("operation-running", 1, "apply", Id);
+        }
+
         Record("usage-error", 64, "apply");
 
         JsonShape.AssertStored(shapes);
