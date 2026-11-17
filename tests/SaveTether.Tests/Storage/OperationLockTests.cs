@@ -96,10 +96,38 @@ public class OperationLockTests
         Assert.Equal("apply", taken.Holder.Command);
     }
 
+    [Fact]
+    public void A_process_started_while_the_lock_is_held_does_not_keep_it()
+    {
+        // SaveTether starts other programs while holding the lock, such as flatpak during apply. Had they
+        // inherited the locked file, the lock would outlive the operation for as long as they ran.
+        using var sandbox = new Sandbox();
+        var local = new LocalStore(sandbox.Dir("local"));
+
+        Process child;
+        using (OperationLock.Acquire(local, "cli", "apply"))
+        {
+            var start = OperatingSystem.IsWindows()
+                ? new ProcessStartInfo("powershell.exe") { ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep 120" } }
+                : new ProcessStartInfo("sleep") { ArgumentList = { "120" } };
+            start.UseShellExecute = false;
+            child = Process.Start(start) ?? throw new InvalidOperationException("The child did not start.");
+        }
+
+        using (new Holder(child))
+        {
+            Assert.False(child.HasExited);
+            using var again = OperationLock.Acquire(local, "cli", "revert");
+            Assert.Equal("revert", again.Holder.Command);
+        }
+    }
+
     /// <summary>
     /// Another process that takes the same operating-system lock on the lock file and waits, until
     /// disposed, which kills it. On Windows, PowerShell opens it with no sharing; on Linux, flock(1)
-    /// takes the same exclusive flock(2) lock .NET takes.
+    /// takes the same exclusive flock(2) lock .NET takes. Its -o closes the locked file before running
+    /// the command, so only flock itself holds the lock: without it the shell and its sleep inherit
+    /// the file and keep the lock after flock is killed (found on CI and on the Mint box).
     /// </summary>
     private static Holder HoldInAnotherProcess(string localFolder)
     {
@@ -114,7 +142,7 @@ public class OperationLockTests
                     $"$f = [IO.File]::Open('{path.Replace("'", "''", StringComparison.Ordinal)}', 'OpenOrCreate', 'ReadWrite', 'None'); 'ready'; Start-Sleep 120",
                 },
             }
-            : new ProcessStartInfo("flock") { ArgumentList = { "-x", path, "-c", "echo ready; sleep 120" } };
+            : new ProcessStartInfo("flock") { ArgumentList = { "-o", "-x", path, "-c", "echo ready; sleep 120" } };
         start.RedirectStandardOutput = true;
         start.UseShellExecute = false;
 
