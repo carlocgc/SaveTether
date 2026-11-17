@@ -378,6 +378,49 @@ public class AppAddCliTests
     }
 
     [Fact]
+    public void A_save_folder_another_mapping_has_is_refused_and_nothing_is_written()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        ShareDefinition(deck, "testapp", TestApp);
+        var install = Path.Combine(deck.Home, "portable");
+        CliDevice.Write(install, "app.cfg", "config");
+        CliDevice.Write(install, "saves/slot1.sav", "save");
+
+        // Another app's mapping already has the folder, as a second Flash game would.
+        deck.Ok("map", "add", "flash.objects", "--target", "flash/objects", "--source", Path.Combine(install, "saves"));
+        var json = deck.Expect(CliApp.ExitRefused, "app", "add", "testapp", "--install-dir", install, "--json").Json();
+
+        Assert.Equal("conflict", json.GetProperty("app").GetProperty("problem").GetString());
+        Assert.Contains("is already the save folder of 'flash.objects'", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.False(MappingExists(deck, "testapp.saves"));
+        Assert.False(DeviceFile(deck).TryGetProperty("apps", out _));
+    }
+
+    [Fact]
+    public void Two_roles_of_one_app_whose_folders_nest_are_refused()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        ShareDefinition(deck, "nested", """
+            {
+              "schema": 1, "id": "nested", "name": "Nested", "kind": "game",
+              "installs": [ { "id": "portable", "os": "linux", "detect": { "dir": "{install_dir}" }, "base": "{install_dir}" } ],
+              "roles": [
+                { "id": "saves", "class": "save", "default": true, "path": "saves", "target": "saves" },
+                { "id": "slot", "class": "save", "default": true, "path": "saves/slot1", "target": "slot" },
+              ],
+            }
+            """);
+        var install = Path.Combine(deck.Home, "nested");
+        Directory.CreateDirectory(Path.Combine(install, "saves", "slot1"));
+
+        var err = deck.Expect(CliApp.ExitRefused, "app", "add", "nested", "--install-dir", install).Err;
+        Assert.Contains("is inside the save folder of 'nested.saves'", err, StringComparison.Ordinal);
+        Assert.False(MappingExists(deck, "nested.saves"));
+    }
+
+    [Fact]
     public void Waiting_for_another_devices_shared_copy_gives_no_moved_folder_hint()
     {
         using var sandbox = new Sandbox();

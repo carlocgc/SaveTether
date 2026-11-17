@@ -140,6 +140,34 @@ public class CliCommandTests
     }
 
     [Fact]
+    public void Map_add_refuses_a_save_folder_another_mapping_has_contains_or_is_inside()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        var deviceFile = Path.Combine(pc.SyncRoot, "savetether", ".savetether", "devices", "pc.json");
+        var before = File.ReadAllText(deviceFile);
+
+        foreach (var (source, how) in new[]
+        {
+            (pc.Source, "is already the save folder of"),
+            (Path.Combine(pc.Source, "GAME1"), "is inside the save folder of"),
+            (pc.AppFolder, "contains the save folder of"),
+        })
+        {
+            var err = pc.Expect(CliApp.ExitRefused, "map", "add", "other.saves", "--target", "other/saves", "--source", source).Err;
+            Assert.Contains($"{how} '{Id}'", err, StringComparison.Ordinal);
+            Assert.Contains($"savetether map remove {Id}", err, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(before, File.ReadAllText(deviceFile));
+
+        // A sibling folder is fine, and so is the same mapping given its own folder again.
+        pc.Ok("map", "add", "other.saves", "--target", "other/saves", "--source", Path.Combine(pc.AppFolder, "OTHER"));
+        pc.Ok("map", "add", Id, "--source", pc.Source);
+    }
+
+    [Fact]
     public void Status_reports_each_health_state()
     {
         using var sandbox = new Sandbox();
