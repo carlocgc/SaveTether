@@ -393,7 +393,7 @@ Added on 2026-11-17 (design 5.14). Goal: a person who has never used a terminal 
 
 Starts with two steps before any app code:
 1. **Toolkit decision** by the owner. *Done 2026-11-17: Avalonia approved after the trial below.* A Game Mode check was planned here and dropped the same day: the owner decided the app is for the desktop only, which on the Deck means Desktop Mode (design 5.14).
-2. **Specification** of the app's screens and states to the level of design 5.12, including every refusal the CLI can give and how the window shows it. *Drafted 2026-11-17 in `docs/design/desktop-app-spec.md`; its section 15 lists eleven decisions for the owner. Its section 13 adds six small core and CLI changes to come before or with the app, the first being core messages without CLI wording.*
+2. **Specification** of the app's screens and states to the level of design 5.12, including every refusal the CLI can give and how the window shows it. *Done 2026-11-17 in `docs/design/desktop-app-spec.md`; the owner accepted all eleven proposed decisions (its section 15). Its section 13 adds seven small core and CLI changes to come before or with the app, the first being core messages without CLI wording.*
 
 Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/avalonia-tray` (`spikes/AvaloniaTray`, not in the solution; removed since, and its README's findings are below). Avalonia 12.1.5, .NET 10, Native AOT:
 

@@ -1,6 +1,6 @@
 # Desktop app specification (phase 3)
 
-Status: draft, written 2026-11-17 for the owner's review. It specifies the desktop app of design 5.14 to the level of design 5.12. Each decision the owner has not yet made is marked **[owner]** and collected in section 15. Nothing here is built.
+Status: written 2026-11-17; the owner accepted every proposed answer to the open questions the same day (section 15). It specifies the desktop app of design 5.14 to the level of design 5.12. Nothing here is built.
 
 The design (`save-redirection-design.md`) says *what* SaveTether does and *why*. This document says what the window and tray icon show in every state, what each button does, and how every refusal the core can give reaches the person. Section numbers like "5.3" refer to the design.
 
@@ -18,7 +18,7 @@ The design (`save-redirection-design.md`) says *what* SaveTether does and *why*.
 
 - **One process, one copy.** `savetether-gui` holds a single-instance lock in the local folder (5.12, "Local files"). A second start sends "show the window" to the first copy and exits. Windows: a named mutex plus a named pipe. Linux: a lock file plus a Unix socket in the same folder. The operation lock (9.1) is separate: the app holds it only while an operation runs.
 - **Start.** With `--minimized` (used by the autostart entry, section 11) the app starts with the tray icon only. Without it the window opens. Either way it runs a health check at once.
-- **Closing the window** hides it and leaves the tray icon running. The first time this happens, a notification says: "SaveTether is still running in the tray. Quit it from the tray icon's menu." Where there is no tray host (stock GNOME), closing the window quits. **[owner]**: detecting "no tray host" is not reliable on Linux (plan section 5, trial notes). Proposed rule: on Linux, the app checks for a `org.kde.StatusNotifierWatcher` owner on the session bus at start; if none, closing the window quits.
+- **Closing the window** hides it and leaves the tray icon running. The first time this happens, a notification says: "SaveTether is still running in the tray. Quit it from the tray icon's menu." Where there is no tray host (stock GNOME), closing the window quits. Detecting "no tray host" is not reliable on Linux (plan section 5, trial notes), so the rule is: on Linux, the app checks for an `org.kde.StatusNotifierWatcher` owner on the session bus at start; if there is none, closing the window quits (decision 1).
 - **Quit** (tray menu, or Ctrl+Q in the window) is refused while an operation runs: "Wait for the current operation to finish." Operations are journalled transactions; stopping one half way is what `recover` exists for, not something to offer.
 - **Log.** The app appends one line per operation, refusal and unexpected error to `gui.log` in the local folder, and keeps the last 1 MB. No paths beyond those already in the local files, no content of save files.
 
@@ -45,7 +45,7 @@ The overall state is computed from one `Status()` report plus the journal, the l
 
 - **When**: at start, every 5 minutes, when the window is shown or the tray menu opens, and after every operation. "Check now" in the window header and the tray menu. A check takes milliseconds (5.5); it runs off the UI thread, and a check already running is not started twice.
 - **Notification** when a check finds a mapping in an amber state that it was not in at the previous check, or a new amber condition from rows 1 to 5. One notification per check at most, summarising: "Ryujinx saves: not linked. Eden saves: shared folder missing." At start, an amber state is notified once: this is the login check that 5.5 replaced with the tray icon. Nothing is notified when the state turns green; the icon changes.
-- **How**: Windows, a toast through PowerShell's `Windows.UI.Notifications` (no new dependency); Linux, `notify-send` when it is on `PATH`, otherwise none. A notification that cannot be shown is logged and otherwise ignored. Clicking a notification is not required to do anything **[owner]**: opening the window from a PowerShell toast needs an app ID registration, which the release archive does not do.
+- **How**: Windows, a toast through PowerShell's `Windows.UI.Notifications` (no new dependency); Linux, `notify-send` when it is on `PATH`, otherwise none. A notification that cannot be shown is logged and otherwise ignored. Clicking a notification is not required to do anything (decision 2): opening the window from a PowerShell toast needs an app ID registration, which the release archive does not do. The tray icon and its menu are the way in.
 
 ## 4. Window layout
 
@@ -61,7 +61,7 @@ Minimum 800 × 560, designed for 1280 × 800 (the Deck's screen) at 100 % scalin
 
 | # | When | Sentence | Actions |
 |---|---|---|---|
-| B1 | A shared or local file has a newer schema | "A newer version of SaveTether has written <file>. Update SaveTether on this device before going on." | Open the releases page **[owner]** (a link, so the only network access is the person's own browser), Details |
+| B1 | A shared or local file has a newer schema | "A newer version of SaveTether has written <file>. Update SaveTether on this device before going on." | Open the releases page (decision 3: a link, so the only network access is the person's own browser), Details |
 | B2 | Journal open | "<Operation> of <mapping> did not finish. Nothing else can be done until it is recovered." | **Recover** (section 9.5), Details |
 | B3 | Sync root unavailable | "The sync folder <path> is not available: <reason>. If it is on a drive or a network share, connect it." The reason is "it does not exist" or "the SaveTether folder is not in it", from the core's two cases (5.12, "Sync root unavailable") | Check again, Open the folder's parent |
 | B4 | Device file mismatch | "Another SaveTether install uses the device name '<name>'. Two machines with one name would apply each other's folders." | **This is that device** (take over, section 6.3), **Use another name** (section 6.2), Details |
@@ -87,7 +87,7 @@ The core's `HealthState` has seven values. Replaced and Not applied each cover s
 | OK | | Linked | green | "Saves here are the shared copy." | none | Open folder, Open shared folder, Backups, Revert |
 | Not applied | no folder set on this device | Not on this device | grey | "Set up on <devices>, not here." | Add (opens Add app at this app) | none |
 | Not applied | folder set, not linked | Ready to link | grey | "Not linked yet." | **Apply** | Open folder, Stop using here |
-| Not applied | the folder in the device file is not an absolute path | Folder setting is wrong | amber **[owner]** | "This device's file has '<value>' as the folder." | Add again | Details |
+| Not applied | the folder in the device file is not an absolute path | Folder setting is wrong | amber | "This device's file has '<value>' as the folder." | Add again | Details |
 | Replaced | the folder holds files | Not linked | amber | "The link was replaced by a real folder. Saves made here are not shared." | **Apply** (stops at the choice, section 9.2) | Open folder, Backups |
 | Replaced | the folder is empty | Link missing | amber | "The link is gone and the folder is empty." | **Apply** | Open folder |
 | Replaced | nothing at the folder | Folder gone | amber | "Nothing is at <path>. If the app has moved, find it again." | **Find the app again** (Add app, section 8) | Apply |
@@ -100,7 +100,7 @@ The core's `HealthState` has seven values. Replaced and Not applied each cover s
 
 **Stop using here** is `map remove`: refused by the core while applied, so it is only offered when Ready to link. It asks for confirmation: "Forget this device's folder for <role>? Nothing is deleted; the shared copy and other devices are not affected."
 
-The "Folder setting is wrong" row turns the overall state amber, unlike the core's Not applied. **[owner]**: the alternative is to keep it green as the CLI does, at the cost of a silent misconfiguration.
+The "Folder setting is wrong" row turns the overall state amber, unlike the core's Not applied (decision 4). Keeping it green, as the CLI does, would leave a misconfiguration unnoticed.
 
 ## 6. First-run setup
 
@@ -140,7 +140,7 @@ Apply, Revert, Restore, Recover, Add app, Stop using here, the Flatpak grant and
 1. Takes the operation lock (9.1). If another process holds it: "Another SaveTether operation is running (<command>). Try again when it has finished." Nothing else happens.
 2. Plans (where the core plans): `PlanApply`, `PlanRevert`, `PlanRestore`, `PlanAppAdd`.
 3. On a refusal, shows it (section 9) and releases the lock.
-4. On a plan, shows the confirmation for that action, with the plan's steps in plain words under "Show steps". The lock is held while the dialog is open, so the plan cannot go stale behind it; a dialog left open for 10 minutes is cancelled and the lock released **[owner]**.
+4. On a plan, shows the confirmation for that action, with the plan's steps in plain words under "Show steps". The lock is held while the dialog is open, so the plan cannot go stale behind it; a dialog left open for 10 minutes is cancelled and the lock released (decision 5).
 5. Runs the plan with progress (9.3), then shows the result (9.3), releases the lock, and runs a health check.
 
 ## 8. Add app
@@ -167,7 +167,7 @@ A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmati
 
 **Re-running for a moved app.** "Find the app again" on a Folder gone row opens page 2 for that app directly. The core's rule for a folder that is applied at the old place (revert first, unless the link moved with the folder) arrives as `conflict`.
 
-**Add a folder by hand** **[owner]**: a link at the bottom of page 1, for apps with no definition. A form for `map add`: mapping ID, target, save folder, process names, entry depth. Proposed: include it, since it is the only way to add an unlisted app without the CLI, but it can wait for a later step of phase 3.
+**Add a folder by hand** (decision 6): a link at the bottom of page 1, for apps with no definition. A form for `map add`: mapping ID, target, save folder, process names, entry depth. It is the only way to add an unlisted app without the CLI. It comes late in phase 3, after the guided flow.
 
 ## 9. Apply, revert, restore, recover
 
@@ -231,7 +231,7 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 - When `AssumeSyncedWouldHelp`, `add-missing` and `replace-shared` are shown disabled with: "The shared copy may still be arriving: it lacks files a device shared. Wait for the sync tool, or confirm it has finished." and a checkbox "It has finished syncing", which re-plans with `AssumeSynced`.
 - `replace-shared` leads to the replace confirmation.
 
-**The replace confirmation.** Its own dialog, never combined with the choice: "Replace the shared saves for <role> on every device?" then: "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. The deletion reaches every device through the sync tool." Buttons: Cancel (focused), **Replace on every device**. **[owner]**: the CLI needs a typed "yes"; the window could ask for the app's name to be typed as well. Proposed: no typing, because the separate dialog with Cancel focused already makes it deliberate, and on the Deck's Desktop Mode typing usually means the on-screen keyboard.
+**The replace confirmation.** Its own dialog, never combined with the choice: "Replace the shared saves for <role> on every device?" then: "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. The deletion reaches every device through the sync tool." Buttons: Cancel (focused), **Replace on every device**. Nothing is typed (decision 7), although the CLI asks for a typed "yes": the separate dialog with Cancel focused already makes it deliberate, and on the Deck's Desktop Mode typing usually means the on-screen keyboard.
 
 **Double seed.** "Use this device's copy" runs `PlanApply` with `replace-shared`. On a device where the folder is already the link (classification row 1) the confirmation instead says: "Make this device's copy the one every device keeps? No files change; the other devices' claims are marked as replaced." Where the sync tool kept the other device's files and this device's should win, the route is revert, restore and replace (5.3); the dialog says so and links to Backups.
 
@@ -279,11 +279,11 @@ After a revert, when the core says a Flatpak grant is no longer needed (`Sandbox
 **Settings page.**
 
 - **Start with the session**: a switch. On writes the entry, off removes it. Linux: `~/.config/autostart/savetether.desktop` (`$XDG_CONFIG_HOME` honoured), `Exec=<path> --minimized`. Windows: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `SaveTether`, `"<path>" --minimized`. With the switch on, the app rewrites the entry with its current path at every start (5.14, "Distribution").
-- **Backups**: the location, with **Change**, which runs `Init` again with the new backup root after a confirmation that existing backups stay where they are and are no longer listed. **[owner]**: moving them is not offered; the core has no operation for it.
-- **This device**: name and sync folder, read only. Changing either is "Set up again", which shows the setup pages with the current values filled in. **[owner]**: the core's `Init` can point an install at a new sync root, but whether mappings applied under the old one should block that is not specified anywhere yet. Proposed: refuse while any mapping is applied here, as `map remove` does.
+- **Backups**: the location, with **Change**, which runs `Init` again with the new backup root after a confirmation that existing backups stay where they are and are no longer listed. Moving them is not offered, since the core has no operation for it (decision 8).
+- **This device**: name and sync folder, read only. Changing either is "Set up again", which shows the setup pages with the current values filled in. A new sync folder is refused while any mapping is applied here, as `map remove` is (decision 9): those links point into the old sync folder. The core's `Init` does not check this today (section 13, item 7).
 - **About**: version, the local folder (with Open), the licence.
 
-**Installing.** The release archive is unpacked anywhere. On first run, when the app is not in the per-user location (`~/.local/bin` on Linux, `%LOCALAPPDATA%\Programs\SaveTether` on Windows), the setup starts with: "Install SaveTether for this user?" It copies both binaries (and the app's native libraries) there, starts the copy and quits; the unpacked files are left for the person to delete. Not now carries on from where it is. On Windows, an option "Make the `savetether` command available in terminals" adds the folder to the user's `PATH` **[owner]**: a persistent change to the user's environment, so it is opt-in and unticked.
+**Installing.** The release archive is unpacked anywhere. On first run, when the app is not in the per-user location (`~/.local/bin` on Linux, `%LOCALAPPDATA%\Programs\SaveTether` on Windows), the setup starts with: "Install SaveTether for this user?" It copies both binaries (and the app's native libraries) there, starts the copy and quits; the unpacked files are left for the person to delete. Not now carries on from where it is. On Windows, an option "Make the `savetether` command available in terminals" adds the folder to the user's `PATH` (decision 10): a persistent change to the user's environment, so it is opt-in and unticked.
 
 **Autostart pointing to a missing binary.** The CLI's `status` reads the entry and warns when its path is missing (`autostart_missing: <path>` in `--json`); the app shows banner B5. Neither changes the entry without being asked.
 
@@ -309,6 +309,7 @@ These come before or with the app, each its own small PR.
 4. **Operation lock** (9.1), in the core, used by the CLI and the app.
 5. **Autostart check** in `status` (section 11), once the app writes entries.
 6. **Facts as fields.** Where an app sentence above needs a fact the core only has inside a message (not-enough-space's sizes, app-running's process names, a conflict's other folder), the refusal carries it as a field. Found while writing the app's texts; additive.
+7. **Sync folder change guarded.** `init` with a sync root other than the one in `bootstrap.json` is refused while any mapping is applied on this device: its link points into the old sync folder, and the device would lose track of it. The refusal names the mappings to revert first. Applies to the CLI and the app alike (decision 9).
 
 The JSON contract freeze (plan section 5) should come after items 1, 2 and 6, since they add fields to the output.
 
@@ -326,9 +327,11 @@ The JSON contract freeze (plan section 5) should come after items 1, 2 and 6, si
   - Autostart entries compared with expected text.
 - **Not testable in CI**: the tray icon, notifications, the folder picker. These are the phase 3 lines of the hardware checklist (plan section 8).
 
-## 15. Decisions for the owner
+## 15. Decisions
 
-| # | Question | Proposed |
+Proposed in the draft and accepted by the owner on 2026-11-17, all eleven as proposed.
+
+| # | Question | Decided |
 |---|---|---|
 | 1 | On Linux with no tray host, should closing the window quit? (2) | Yes, detected by a StatusNotifierWatcher on the session bus |
 | 2 | Clicking a notification on Windows opens nothing (3.1) | Accept for phase 3 |
