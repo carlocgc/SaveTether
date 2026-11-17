@@ -68,7 +68,8 @@ contains "The shared location already holds saves"
 contains "--no-copy | --add-missing | --replace-shared --confirm-replace"
 
 expect 1 deck apply "$id" --copy
-contains "--copy is refused"
+contains "the shared copy is refused"
+contains "Use --no-copy, --add-missing, or --replace-shared --confirm-replace."
 [ "$(cat "$work/deck/apps/ppsspp/SAVEDATA/GAME1/save.bin")" = "deck-1" ]
 
 expect 0 deck apply "$id" --no-copy

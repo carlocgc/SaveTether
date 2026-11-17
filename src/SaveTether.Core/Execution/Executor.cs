@@ -51,8 +51,8 @@ public sealed record ExecutionResult(
     string? MappingId,
     PlanOperation? Operation,
     IReadOnlyList<string> BackupIds,
-    IReadOnlyList<string> Messages,
-    string? Error = null);
+    IReadOnlyList<Note> Messages,
+    Note? Error = null);
 
 /// <summary>
 /// Runs a <see cref="Plan"/> step by step (design 5.3). Every change goes through
@@ -150,7 +150,7 @@ public sealed partial class Executor
     }
 
     /// <summary>What stops the plan from starting at all. Nothing has been changed.</summary>
-    private string? Preflight(Plan plan)
+    private Note? Preflight(Plan plan)
     {
         if (_journal.IsOpen)
         {
@@ -565,7 +565,7 @@ public sealed partial class Executor
     /// <summary>A step that failed, as opposed to a bug or a simulated crash.</summary>
     private static bool IsFailure(Exception e) => e is IOException or UnauthorizedAccessException;
 
-    private static ExecutionResult Result(ExecutionStatus status, Transaction tx, string? error = null) =>
+    private static ExecutionResult Result(ExecutionStatus status, Transaction tx, Note? error = null) =>
         new(status, tx.Plan.MappingId, tx.Plan.Operation, tx.Entry.BackupIds, tx.Messages, error);
 
     /// <summary>The operation in progress: its journal entry as last written, and what to tell the owner.</summary>
@@ -575,6 +575,6 @@ public sealed partial class Executor
 
         public Plan Plan => Entry.Plan;
 
-        public List<string> Messages { get; } = [];
+        public List<Note> Messages { get; } = [];
     }
 }

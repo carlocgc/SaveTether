@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SaveTether.Cli;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Planning;
@@ -104,7 +105,7 @@ public class PrecheckTests
 
         var refusal = Planner.Plan(snapshot, Copy).Refusal!;
         Assert.Equal([PrecheckKind.AppRunning], refusal.Failures.Select(f => f.Kind));
-        Assert.Contains("PPSSPPQt", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("PPSSPPQt", refusal.Message.Text, StringComparison.Ordinal);
 
         // The owner can override a false positive.
         Assert.True(Planner.Plan(snapshot, Copy with { AssumeClosed = true }).IsPlanned);
@@ -142,7 +143,7 @@ public class PrecheckTests
             [PrecheckKind.UnfinishedOperation, PrecheckKind.SourceParentMissing, PrecheckKind.TargetNotLocal, PrecheckKind.AppRunning],
             refusal.Failures.Select(f => f.Kind));
         Assert.Equal(RefusalKind.Precondition, refusal.Kind);
-        Assert.Contains("4 checks failed", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("4 checks failed", refusal.Message.Text, StringComparison.Ordinal);
     }
 
     [Fact]

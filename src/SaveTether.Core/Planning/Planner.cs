@@ -44,8 +44,7 @@ public static class Planner
                 "Remove that link by hand first (design 5.7); SaveTether will not follow or replace it."),
             Classification.NotArrived => Refuse(
                 snapshot, RefusalKind.NotArrived, classification,
-                $"Device '{snapshot.ActiveMarkers[0].DeviceName}' made its saves the shared copy, but the shared folder is empty here. " +
-                "The sync has probably not finished. Wait for it, then try again." + EmptiedThroughLinkHint(snapshot),
+                NotArrivedMessage(snapshot),
                 assumeSyncedWouldHelp: true),
             Classification.LinkOnly => PlanLinkOnly(snapshot, request),
             Classification.FirstDevice => PlanFirstDevice(snapshot, request),
@@ -66,7 +65,7 @@ public static class Planner
         ArgumentNullException.ThrowIfNull(snapshot);
         var s = snapshot;
         var failures = new List<PrecheckFailure>();
-        void Fail(PrecheckKind kind, string message) => failures.Add(new PrecheckFailure(kind, message));
+        void Fail(PrecheckKind kind, Note message) => failures.Add(new PrecheckFailure(kind, message));
 
         if (!s.SyncRootInitialized)
         {
@@ -119,7 +118,7 @@ public static class Planner
 
         var staging = s.Source + StagingSuffix;
         var steps = new List<PlanStep>();
-        var notes = new List<string> { "The shared folder is left as it is, for the other devices." };
+        var notes = new List<Note> { "The shared folder is left as it is, for the other devices." };
         if (s.TargetTree.HasData)
         {
             steps.Add(new PlanStep(StepKind.BackUpTarget, s.Target));
@@ -182,7 +181,7 @@ public static class Planner
     private static List<PrecheckFailure> StructuralFailures(Snapshot s, ApplyRequest request)
     {
         var failures = new List<PrecheckFailure>();
-        void Fail(PrecheckKind kind, string message) => failures.Add(new PrecheckFailure(kind, message));
+        void Fail(PrecheckKind kind, Note message) => failures.Add(new PrecheckFailure(kind, message));
 
         if (!s.SyncRootInitialized)
         {
@@ -243,8 +242,10 @@ public static class Planner
         {
             Fail(
                 PrecheckKind.SandboxCannotReach,
-                $"The save folder is inside the Flatpak app {sandbox.AppId}, whose sandbox cannot write {string.Join(" or ", sandbox.Unreachable.Select(p => $"'{p}'"))}, " +
-                $"so the link would not work inside the app. Add --grant-sandbox to let SaveTether allow it (only that folder, for this user), or run:\n  {sandbox.FixCommand}\nthen apply again.");
+                new Note(
+                    $"The save folder is inside the Flatpak app {sandbox.AppId}, whose sandbox cannot write {string.Join(" or ", sandbox.Unreachable.Select(p => $"'{p}'"))}, " +
+                    $"so the link would not work inside the app. SaveTether can allow it (only that folder, for this user), or run:\n  {sandbox.FixCommand}\nthen apply again.",
+                    new NextStep(NextStepKind.GrantSandbox, s.MappingId)));
         }
 
         // An existing link is only verified and recorded, so a running app and backups do not matter.
@@ -265,7 +266,7 @@ public static class Planner
         return failures;
     }
 
-    internal const string UnfinishedMessage = "An earlier operation did not finish. Run 'savetether recover' first.";
+    internal static readonly Note UnfinishedMessage = new("An earlier operation did not finish.", new NextStep(NextStepKind.Recover));
 
     internal static string AppRunningMessage(IReadOnlyList<string> running, IReadOnlyList<string> lookedFor) =>
         $"The app appears to be running ({string.Join(", ", running)}). Close it and try again. " +
@@ -350,8 +351,8 @@ public static class Planner
                 [
                     "Already linked, so no saves are copied or deleted. The shared folder as it is now becomes the agreed copy, " +
                     "and the other devices' records are marked as superseded.",
-                    "If the shared folder does not hold the saves you want: revert, restore this device's backup with 'savetether backup restore', " +
-                    "then apply with --replace-shared again.",
+                    "If the shared folder does not hold the saves you want: revert, restore this device's backup, " +
+                    "then apply again, replacing the shared saves.",
                 ]);
         }
 
@@ -370,7 +371,9 @@ public static class Planner
         {
             return Refuse(
                 s, RefusalKind.ChoiceNotAllowed, Classification.LinkOnly,
-                "This device has no saves in that folder, so there is nothing to replace the shared copy with. Run apply without a choice to just link.");
+                new Note(
+                    "This device has no saves in that folder, so there is nothing to replace the shared copy with.",
+                    new NextStep(NextStepKind.ApplyWithoutChoice, s.MappingId)));
         }
 
         var notes = new List<string>();
@@ -392,8 +395,9 @@ public static class Planner
             case null:
                 return Refuse(
                     s, RefusalKind.ChoiceNeeded, Classification.FirstDevice,
-                    "This device has saves in that folder and the shared location is empty. " +
-                    "Choose whether they become the shared copy (--copy) or stay only in the backup (--no-copy).",
+                    new Note(
+                        "This device has saves in that folder and the shared location is empty.",
+                        new NextStep(NextStepKind.ChooseSetup, s.MappingId, Choices: FirstDeviceChoices)),
                     allowed: FirstDeviceChoices, comparison: Compare(s));
 
             case SetupChoice.Copy:
@@ -422,7 +426,9 @@ public static class Planner
             default:
                 return Refuse(
                     s, RefusalKind.ChoiceNotAllowed, Classification.FirstDevice,
-                    "That choice is for when the shared location already holds saves, and it is empty. Use --copy or --no-copy.",
+                    new Note(
+                        "That choice is for when the shared location already holds saves, and it is empty.",
+                        new NextStep(NextStepKind.UseAllowedChoice, s.MappingId, Choices: FirstDeviceChoices)),
                     allowed: FirstDeviceChoices, comparison: Compare(s));
         }
     }
@@ -437,17 +443,17 @@ public static class Planner
             case null:
                 return Refuse(
                     s, RefusalKind.ChoiceNeeded, Classification.Guard,
-                    "The shared location already holds saves, and so does this device. Choose: " +
-                    "--no-copy (use the shared saves; this device's stay in the backup), " +
-                    "--add-missing (also add what the shared copy lacks; nothing is overwritten), or " +
-                    "--replace-shared --confirm-replace (this device's saves replace the shared copy on every device).",
+                    new Note(
+                        "The shared location already holds saves, and so does this device.",
+                        new NextStep(NextStepKind.ChooseSetup, s.MappingId, Choices: GuardChoices)),
                     allowed: GuardChoices, comparison: comparison);
 
             case SetupChoice.Copy:
                 return Refuse(
                     s, RefusalKind.ChoiceNotAllowed, Classification.Guard,
-                    "The shared location already holds saves, so --copy is refused: it would overwrite them. " +
-                    "Use --no-copy, --add-missing, or --replace-shared --confirm-replace.",
+                    new Note(
+                        "The shared location already holds saves, so making this device's saves the shared copy is refused: it would overwrite them.",
+                        new NextStep(NextStepKind.UseAllowedChoice, s.MappingId, Choices: GuardChoices)),
                     allowed: GuardChoices, comparison: comparison);
 
             case SetupChoice.NoCopy:
@@ -495,8 +501,10 @@ public static class Planner
                 {
                     return Refuse(
                         s, RefusalKind.ConfirmationNeeded, Classification.Guard,
-                        "Replacing the shared saves deletes them on every device once it syncs. " +
-                        "The shared copy is backed up on this device first. Add --confirm-replace to go ahead.",
+                        new Note(
+                            "Replacing the shared saves deletes them on every device once it syncs. " +
+                            "The shared copy is backed up on this device first.",
+                            new NextStep(NextStepKind.ConfirmReplace, s.MappingId)),
                         allowed: GuardChoices, comparison: comparison);
                 }
 
@@ -553,25 +561,32 @@ public static class Planner
     private static PlanOutcome RefuseMaybeArriving(Snapshot s, Comparison comparison) => Refuse(
         s, RefusalKind.NotArrived, Classification.Guard,
         $"{s.MissingSeedFiles.Count} file(s) from the original shared copy are not here, so the shared copy may still be arriving. " +
-        "Comparing against a partial copy could add or replace the wrong things. Wait for the sync to finish, " +
-        "or add --assume-synced if you know it has.",
+        "Comparing against a partial copy could add or replace the wrong things. Wait for the sync to finish.",
         allowed: GuardChoices, assumeSyncedWouldHelp: true, comparison: comparison);
 
     /// <summary>
-    /// The shared copy this very device made is empty, and its save folder is a real folder holding
-    /// files. Waiting for the sync will not help then. The likely cause is a move of the app's folder
-    /// to another drive by a tool that followed the link: it copied the shared saves into a real
-    /// folder, then deleted them through the link (PowerShell Move-Item and robocopy /MOVE do this;
-    /// Explorer does not). Those copied files are the saves.
+    /// Row 3's refusal. When the shared copy this very device made is empty and its save folder is
+    /// a real folder holding files, waiting for the sync will not help. The likely cause is a move
+    /// of the app's folder to another drive by a tool that followed the link: it copied the shared
+    /// saves into a real folder, then deleted them through the link (PowerShell Move-Item and
+    /// robocopy /MOVE do this; Explorer does not). Those copied files are the saves.
     /// </summary>
-    private static string EmptiedThroughLinkHint(Snapshot s) =>
-        s.ActiveMarkers.Any(m => m.DeviceName == s.DeviceName) && s.SourceKind == EntryKind.Directory && s.SourceTree.HasData
-            ? Environment.NewLine +
-              "This device made that shared copy, and its save folder holds files. If the app's folder was moved to another drive " +
-              "with a tool that followed the link (PowerShell Move-Item or robocopy /MOVE), the shared saves were deleted through it " +
-              $"and the files here are the saves. Check them, then run 'savetether apply {s.MappingId} --copy --assume-synced' " +
-              "to make them the shared copy again."
-            : string.Empty;
+    private static Note NotArrivedMessage(Snapshot s)
+    {
+        var text =
+            $"Device '{s.ActiveMarkers[0].DeviceName}' made its saves the shared copy, but the shared folder is empty here. " +
+            "The sync has probably not finished. Wait for it, then try again.";
+        var emptiedThroughLink = s.ActiveMarkers.Any(m => m.DeviceName == s.DeviceName)
+            && s.SourceKind == EntryKind.Directory && s.SourceTree.HasData;
+        return emptiedThroughLink
+            ? new Note(
+                text + Environment.NewLine +
+                "This device made that shared copy, and its save folder holds files. If the app's folder was moved to another drive " +
+                "with a tool that followed the link (PowerShell Move-Item or robocopy /MOVE), the shared saves were deleted through it " +
+                "and the files here are the saves. Check them first.",
+                new NextStep(NextStepKind.ReseedFromHere, s.MappingId))
+            : text;
+    }
 
     private static bool OthersHaveMarkers(Snapshot s) => s.ActiveMarkers.Any(m => m.DeviceName != s.DeviceName);
 
@@ -581,7 +596,7 @@ public static class Planner
         Snapshot s, Classification classification, SetupChoice? choice, IReadOnlyList<PlanStep> steps,
         IReadOnlyList<string> notes, bool needsFirstSeedConfirmation = false)
     {
-        var allNotes = notes.ToList();
+        var allNotes = notes.Select(n => new Note(n)).ToList();
         if (s.Sandbox is { CanReach: null } unknown)
         {
             allNotes.Add(
@@ -601,7 +616,7 @@ public static class Planner
     }
 
     private static PlanOutcome Refuse(
-        Snapshot s, RefusalKind kind, Classification classification, string message,
+        Snapshot s, RefusalKind kind, Classification classification, Note message,
         IReadOnlyList<PrecheckFailure>? failures = null, IReadOnlyList<SetupChoice>? allowed = null,
         bool assumeSyncedWouldHelp = false, Comparison? comparison = null, PlanOperation operation = PlanOperation.Apply) =>
         new(null, new Refusal(

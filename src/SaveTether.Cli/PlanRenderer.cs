@@ -2,22 +2,23 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using SaveTether.Core.Model;
+using SaveTether.Core.Planning;
 
-namespace SaveTether.Core.Planning;
+namespace SaveTether.Cli;
 
 /// <summary>
 /// Prints a plan or a refusal. A dry run is exactly this output: the same plan a real run would
 /// execute, so there is no second code path to drift (design 5.3).
 /// </summary>
-public static class PlanRenderer
+internal static class PlanRenderer
 {
     private const int MaxListed = 20;
 
-    /// <summary>One JSON object, for the Decky plugin and scripts.</summary>
+    /// <summary>One JSON object, with the same names and message wording as <c>--json</c> output.</summary>
     public static string ToJson(PlanOutcome outcome)
     {
         ArgumentNullException.ThrowIfNull(outcome);
-        return JsonSerializer.Serialize(outcome, PlanningJsonContext.Default.PlanOutcome);
+        return JsonSerializer.Serialize(outcome, CliJsonContext.Default.PlanOutcome);
     }
 
     public static string ToText(PlanOutcome outcome)
@@ -35,15 +36,6 @@ public static class PlanRenderer
 
         return text.ToString();
     }
-
-    /// <summary>The command-line flag for a choice.</summary>
-    public static string FlagFor(SetupChoice choice) => choice switch
-    {
-        SetupChoice.Copy => "--copy",
-        SetupChoice.NoCopy => "--no-copy",
-        SetupChoice.AddMissing => "--add-missing",
-        _ => "--replace-shared --confirm-replace",
-    };
 
     /// <summary>One sentence saying what a step does.</summary>
     public static string Describe(PlanStep step)
@@ -91,7 +83,7 @@ public static class PlanRenderer
                 break;
 
             default:
-                var choice = plan.Choice is { } c ? $", {FlagFor(c).Split(' ')[0]}" : string.Empty;
+                var choice = plan.Choice is { } c ? $", {Hints.FlagFor(c).Split(' ')[0]}" : string.Empty;
                 text.AppendLine(CultureInfo.InvariantCulture, $"Plan for {plan.MappingId} ({Describe(plan.Classification)}{choice}):");
                 text.AppendLine(CultureInfo.InvariantCulture, $"  save folder:   {plan.Source}");
                 text.AppendLine(CultureInfo.InvariantCulture, $"  shared folder: {plan.Target}");
@@ -105,7 +97,7 @@ public static class PlanRenderer
 
         foreach (var note in plan.Notes)
         {
-            text.AppendLine(CultureInfo.InvariantCulture, $"  Note: {note}");
+            text.AppendLine(CultureInfo.InvariantCulture, $"  Note: {Hints.Compose(note)}");
         }
 
         if (plan.NeedsFirstSeedConfirmation)
@@ -125,13 +117,13 @@ public static class PlanRenderer
             _ => "Not applied",
         };
         text.AppendLine(CultureInfo.InvariantCulture, $"{what}: {refusal.MappingId}. Nothing was changed.");
-        text.AppendLine(refusal.Message);
+        text.AppendLine(Hints.Compose(refusal.Message));
 
         if (refusal.Failures.Count > 1)
         {
             foreach (var failure in refusal.Failures)
             {
-                text.AppendLine(CultureInfo.InvariantCulture, $"  - {failure.Message}");
+                text.AppendLine(CultureInfo.InvariantCulture, $"  - {Hints.Compose(failure.Message)}");
             }
         }
 
@@ -142,7 +134,7 @@ public static class PlanRenderer
 
         if (refusal.AllowedChoices.Count > 0)
         {
-            text.AppendLine(CultureInfo.InvariantCulture, $"Choices: {string.Join(" | ", refusal.AllowedChoices.Select(FlagFor))}");
+            text.AppendLine(CultureInfo.InvariantCulture, $"Choices: {string.Join(" | ", refusal.AllowedChoices.Select(Hints.FlagFor))}");
         }
 
         if (refusal.AssumeSyncedWouldHelp)

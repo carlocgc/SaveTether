@@ -39,7 +39,7 @@ public enum HealthState
 
 /// <param name="Source">S on this device, or null when this device has no save folder set for the mapping.</param>
 /// <param name="Detail">One sentence saying what the state means here and what to do.</param>
-public sealed record MappingHealth(string MappingId, HealthState State, string? Source, string Target, string Detail);
+public sealed record MappingHealth(string MappingId, HealthState State, string? Source, string Target, Note Detail);
 
 /// <summary>
 /// Works out a mapping's state from one look at S, one read of its link, and the seed markers.
@@ -55,11 +55,13 @@ public static class HealthCheck
         ArgumentNullException.ThrowIfNull(mapping);
 
         var target = shared.TargetPathOf(mapping);
-        MappingHealth Is(HealthState state, string detail) => new(mapping.Id, state, path?.Source, target, detail);
+        MappingHealth Is(HealthState state, Note detail) => new(mapping.Id, state, path?.Source, target, detail);
 
         if (path is null)
         {
-            return Is(HealthState.NotApplied, $"No save folder is set for it on this device. Set one with 'savetether map add {mapping.Id} --source <path>'.");
+            return Is(
+                HealthState.NotApplied,
+                new Note("No save folder is set for it on this device.", new NextStep(NextStepKind.SetSaveFolder, mapping.Id)));
         }
 
         if (!Path.IsPathFullyQualified(path.Source))
@@ -87,17 +89,18 @@ public static class HealthCheck
             return seeders.Count > 1
                 ? Is(
                     HealthState.DoubleSeed,
-                    $"More than one device made its saves the shared copy ({string.Join(", ", seeders)}). " +
-                    "On the device that should win, run 'savetether apply " + mapping.Id + " --replace-shared', or restore a backup.")
+                    new Note(
+                        $"More than one device made its saves the shared copy ({string.Join(", ", seeders)}).",
+                        new NextStep(NextStepKind.MakeThisCopyWin, mapping.Id)))
                 : Is(HealthState.Ok, "Linked to the shared folder.");
         }
 
         if (recorded is not null)
         {
-            return Is(HealthState.Replaced, ReplacedDetail(path.Source, kind));
+            return Is(HealthState.Replaced, ReplacedDetail(mapping.Id, path.Source, kind));
         }
 
-        return Is(HealthState.NotApplied, "Not applied on this device yet. Run 'savetether apply " + mapping.Id + "'.");
+        return Is(HealthState.NotApplied, new Note("Not applied on this device yet.", new NextStep(NextStepKind.Apply, mapping.Id)));
     }
 
     /// <summary>
@@ -111,7 +114,7 @@ public static class HealthCheck
         ArgumentException.ThrowIfNullOrWhiteSpace(mappingId);
         ArgumentNullException.ThrowIfNull(recorded);
 
-        MappingHealth Is(HealthState state, string detail) => new(mappingId, state, recorded.Source, recorded.Target, detail);
+        MappingHealth Is(HealthState state, Note detail) => new(mappingId, state, recorded.Source, recorded.Target, detail);
 
         var kind = SafeFs.Probe(recorded.Source);
         if (kind is EntryKind.Symlink or EntryKind.Junction)
@@ -122,16 +125,17 @@ public static class HealthCheck
                 : Is(HealthState.Retargeted, $"The save folder now links to '{linkTarget}' instead of the shared folder.");
         }
 
-        return Is(HealthState.Replaced, ReplacedDetail(recorded.Source, kind));
+        return Is(HealthState.Replaced, ReplacedDetail(mappingId, recorded.Source, kind));
     }
 
-    private static string ReplacedDetail(string source, EntryKind kind)
+    private static Note ReplacedDetail(string mappingId, string source, EntryKind kind)
     {
         if (kind == EntryKind.Missing)
         {
             // Nothing there at all: the app's folder has most likely moved, taking the link with it.
-            return "There is nothing at the save folder now. If the app has moved, run 'savetether app add' with its new location; " +
-                "otherwise run apply to link it again.";
+            return new Note(
+                "There is nothing at the save folder now. The app may have moved.",
+                new NextStep(NextStepKind.FindAppAgain, mappingId));
         }
 
         var stranded = kind == EntryKind.Directory && SafeFs.EnumerateTree(source).Any(e => e.Kind != EntryKind.Directory);

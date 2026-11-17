@@ -130,7 +130,7 @@ public class ChoiceTests
         var refusal = AssertRefused(Planner.Plan(snapshot, new ApplyRequest(SetupChoice.Copy)), RefusalKind.NotArrived);
 
         Assert.True(refusal.AssumeSyncedWouldHelp);
-        Assert.Contains("desktop", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("desktop", refusal.Message.Text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -146,7 +146,7 @@ public class ChoiceTests
         Assert.Equal([EnsureTarget, .. Switch], existing.Kinds());
         Assert.Equal([EnsureTarget, CreateLink, VerifyLink, WriteState], missing.Kinds());
         Assert.Equal(SetupChoice.NoCopy, existing.Plan!.Choice);
-        Assert.Equal(choice is not null, existing.Plan.Notes.Any(n => n.Contains("nothing to copy", StringComparison.Ordinal)));
+        Assert.Equal(choice is not null, existing.Plan.Notes.Any(n => n.Text.Contains("nothing to copy", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public class ChoiceTests
         var outcome = Planner.Plan(Snap.WithLocalSaves(), new ApplyRequest(SetupChoice.NoCopy));
 
         Assert.Equal([BackUpSource, EnsureTarget, .. Switch], outcome.Kinds());
-        Assert.Contains(outcome.Plan!.Notes, n => n.Contains("will see no saves", StringComparison.Ordinal));
+        Assert.Contains(outcome.Plan!.Notes, n => n.Text.Contains("will see no saves", StringComparison.Ordinal));
         Assert.False(outcome.Plan.NeedsFirstSeedConfirmation);
     }
 
@@ -217,7 +217,7 @@ public class ChoiceTests
         var refusal = AssertRefused(Planner.Plan(Snap.Guarded(), new ApplyRequest()), RefusalKind.ChoiceNeeded);
 
         Assert.Equal([SetupChoice.NoCopy, SetupChoice.AddMissing, SetupChoice.ReplaceShared], refusal.AllowedChoices);
-        Assert.Contains("already holds saves", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("already holds saves", refusal.Message.Text, StringComparison.Ordinal);
         Assert.Equal(
             [("GAME1", EntryPresence.Different), ("GAME2", EntryPresence.OnlyLocal), ("GAME3", EntryPresence.OnlyShared)],
             refusal.Comparison!.Entries.Select(e => (e.Name, e.Presence)));
@@ -228,7 +228,8 @@ public class ChoiceTests
     {
         var refusal = AssertRefused(Planner.Plan(Snap.Guarded(), new ApplyRequest(SetupChoice.Copy)), RefusalKind.ChoiceNotAllowed);
 
-        Assert.Contains("--copy is refused", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("is refused", refusal.Message.Text, StringComparison.Ordinal);
+        Assert.Contains(refusal.Message.Next, n => n.Kind == NextStepKind.UseAllowedChoice);
         Assert.DoesNotContain(SetupChoice.Copy, refusal.AllowedChoices);
     }
 
@@ -247,7 +248,7 @@ public class ChoiceTests
 
         Assert.Equal([BackUpSource, CopyIntoTarget, .. Switch], outcome.Kinds());
         Assert.Equal(["GAME2"], outcome.Plan!.Steps.Single(s => s.Kind == CopyIntoTarget).Entries);
-        Assert.Contains(outcome.Plan.Notes, n => n.Contains("GAME1", StringComparison.Ordinal) && n.Contains("shared version is kept", StringComparison.Ordinal));
+        Assert.Contains(outcome.Plan.Notes, n => n.Text.Contains("GAME1", StringComparison.Ordinal) && n.Text.Contains("shared version is kept", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -276,7 +277,7 @@ public class ChoiceTests
         var outcome = Planner.Plan(snapshot, new ApplyRequest(SetupChoice.AddMissing));
 
         Assert.Equal([BackUpSource, .. Switch], outcome.Kinds());
-        Assert.Contains(outcome.Plan!.Notes, n => n.Contains("Nothing will be copied", StringComparison.Ordinal));
+        Assert.Contains(outcome.Plan!.Notes, n => n.Text.Contains("Nothing will be copied", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -285,7 +286,7 @@ public class ChoiceTests
         var refusal = AssertRefused(
             Planner.Plan(Snap.Guarded(), new ApplyRequest(SetupChoice.ReplaceShared)), RefusalKind.ConfirmationNeeded);
 
-        Assert.Contains("--confirm-replace", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(refusal.Message.Next, n => n.Kind == NextStepKind.ConfirmReplace);
     }
 
     [Fact]
@@ -299,7 +300,7 @@ public class ChoiceTests
                 WriteSeedMarker, SupersedeMarkers, WriteState, DeleteAside,
             ],
             outcome.Kinds());
-        Assert.Contains(outcome.Plan!.Notes, n => n.Contains("every device", StringComparison.Ordinal));
+        Assert.Contains(outcome.Plan!.Notes, n => n.Text.Contains("every device", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -314,7 +315,7 @@ public class ChoiceTests
         // Linking is safe: the sync tool keeps filling the folder.
         var noCopy = Planner.Plan(snapshot, new ApplyRequest(SetupChoice.NoCopy));
         Assert.True(noCopy.IsPlanned);
-        Assert.Contains(noCopy.Plan!.Notes, n => n.Contains("may still be arriving", StringComparison.Ordinal));
+        Assert.Contains(noCopy.Plan!.Notes, n => n.Text.Contains("may still be arriving", StringComparison.Ordinal));
 
         foreach (var request in new[] { new ApplyRequest(SetupChoice.AddMissing), ReplaceConfirmed })
         {
@@ -334,7 +335,7 @@ public class ChoiceTests
 
         var outcome = Planner.Plan(snapshot, new ApplyRequest(SetupChoice.NoCopy));
 
-        Assert.Contains(outcome.Plan!.Notes, n => n.Contains("More than one device", StringComparison.Ordinal) && n.Contains("desktop", StringComparison.Ordinal));
+        Assert.Contains(outcome.Plan!.Notes, n => n.Text.Contains("More than one device", StringComparison.Ordinal) && n.Text.Contains("desktop", StringComparison.Ordinal));
     }
 
     [Fact]

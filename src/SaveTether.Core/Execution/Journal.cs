@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SaveTether.Core.FileSystem;
+using SaveTether.Core.Model;
 using SaveTether.Core.Planning;
 using SaveTether.Core.Storage;
 
@@ -90,7 +91,7 @@ public sealed class Journal
     {
         if (IsOpen)
         {
-            throw new ExecutionException(Planner.UnfinishedMessage);
+            throw new ExecutionException(Planner.UnfinishedMessage.Text);
         }
 
         var entry = new JournalFile
@@ -145,6 +146,25 @@ public sealed class ExecutionException : IOException
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
     UseStringEnumConverter = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
+    UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+    Converters = [typeof(NoteAsTextConverter)])]
 [JsonSerializable(typeof(JournalFile))]
 internal sealed partial class ExecutionJsonContext : JsonSerializerContext;
+
+/// <summary>
+/// Keeps a plan's notes as plain strings in the journal, as they were before notes carried next
+/// steps, so the journal's format does not change. Next steps are for showing a plan, not for
+/// recovering one, so they are not stored.
+/// </summary>
+internal sealed class NoteAsTextConverter : JsonConverter<Note>
+{
+    public override Note Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        new(reader.GetString() ?? string.Empty);
+
+    public override void Write(Utf8JsonWriter writer, Note value, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(value);
+        writer.WriteStringValue(value.Text);
+    }
+}

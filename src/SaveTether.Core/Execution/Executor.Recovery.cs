@@ -1,4 +1,5 @@
 using SaveTether.Core.FileSystem;
+using SaveTether.Core.Model;
 using SaveTether.Core.Planning;
 
 namespace SaveTether.Core.Execution;
@@ -44,7 +45,7 @@ public sealed partial class Executor
         }
         catch (Exception e) when (IsFailure(e))
         {
-            var error = $"Recovery could not finish: {e.Message} Fix the cause and run 'savetether recover' again.";
+            var error = new Note($"Recovery could not finish: {e.Message} Fix the cause first.", new NextStep(NextStepKind.Recover));
             return tx is null
                 ? new ExecutionResult(ExecutionStatus.RecoveryNeeded, null, null, [], [], error)
                 : Result(ExecutionStatus.RecoveryNeeded, tx, error);
@@ -61,7 +62,9 @@ public sealed partial class Executor
             {
                 return Result(
                     ExecutionStatus.RecoveryNeeded, tx,
-                    $"The {what} could not be finished: {failure.Message} Fix the cause and run 'savetether recover' to complete it.");
+                    new Note(
+                        $"The {what} could not be finished: {failure.Message} Fix the cause first; recovering then completes it.",
+                        new NextStep(NextStepKind.Recover)));
             }
 
             RollBack(tx);
@@ -72,7 +75,9 @@ public sealed partial class Executor
         {
             return Result(
                 ExecutionStatus.RecoveryNeeded, tx,
-                $"The {what} failed ({failure.Message}) and could not be undone ({e.Message}). Run 'savetether recover'.");
+                new Note(
+                    $"The {what} failed ({failure.Message}) and could not be undone ({e.Message}).",
+                    new NextStep(NextStepKind.Recover)));
         }
     }
 
@@ -196,11 +201,13 @@ public sealed partial class Executor
                 .Where((_, i) => plan.Steps[i].Kind == StepKind.BackUpTarget)
                 .Select(s => s.BackupId)
                 .FirstOrDefault(id => id is not null);
+            var partly = $"The shared folder '{cleared.Step.Path}' may have been partly replaced. ";
             tx.Messages.Add(
-                $"The shared folder '{cleared.Step.Path}' may have been partly replaced. " +
-                (backup is null
-                    ? "It held no saves before."
-                    : $"What it held before is in backup '{backup}'; put it back with 'savetether backup restore {backup} --confirm-replace'."));
+                backup is null
+                    ? partly + "It held no saves before."
+                    : new Note(
+                        partly + $"What it held before is in backup '{backup}'.",
+                        new NextStep(NextStepKind.RestoreSharedBackup, tx.Plan.MappingId, backup)));
         }
         else if (Started(StepKind.CopyIntoTarget) is { } copied)
         {

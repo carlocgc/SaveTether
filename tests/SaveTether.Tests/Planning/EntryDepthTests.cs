@@ -167,8 +167,8 @@ public class EntryDepthTests
 
         var copy = plan.Steps.Single(s => s.Kind == StepKind.CopyIntoTarget);
         Assert.Equal(["00050000/aaaa0000"], copy.Entries);
-        Assert.Contains(plan.Notes, n => n.Contains("00050000/aaaa0000", StringComparison.Ordinal));
-        Assert.Contains(plan.Notes, n => n.Contains("the shared version is kept", StringComparison.Ordinal) && n.Contains("00050000/101c9500", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Text.Contains("00050000/aaaa0000", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Text.Contains("the shared version is kept", StringComparison.Ordinal) && n.Text.Contains("00050000/101c9500", StringComparison.Ordinal));
 
         // Free space is judged on what would really be copied: one game, 30 bytes.
         Assert.True(Planner.Plan(snapshot with { FreeBytesAtTarget = 30 }, new ApplyRequest(SetupChoice.AddMissing)).IsPlanned);
@@ -331,7 +331,7 @@ public class EntryDepthTests
         var result = world.Executor().Run(plan);
 
         Assert.Equal(ExecutionStatus.RolledBack, result.Status);
-        Assert.Contains("00050000/cccc0000", result.Error, StringComparison.Ordinal);
+        Assert.Contains("00050000/cccc0000", result.Error?.Text, StringComparison.Ordinal);
         Assert.Equal(
             new Dictionary<string, string>
             {

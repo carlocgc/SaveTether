@@ -45,7 +45,7 @@ public partial class PathResolverTests
         Assert.Equal(problem, result.Problem);
         if (messagePart is not null)
         {
-            Assert.Contains(messagePart, result.Message, StringComparison.Ordinal);
+            Assert.Contains(messagePart, result.Message?.Text, StringComparison.Ordinal);
         }
     }
 
