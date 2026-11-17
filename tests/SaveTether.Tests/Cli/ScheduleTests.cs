@@ -223,6 +223,11 @@ public class ScheduleTests
         pc.Commands.Calls.Clear();
         pc.Ok("schedule", "remove");
         Assert.Contains(@"schtasks.exe /Delete /TN \SaveTether\Status /F", pc.Commands.Calls);
+
+        // schtasks leaves the empty folder behind (seen on the owner's PC); it is removed only when empty.
+        var cleanup = Assert.Single(pc.Commands.Calls, c => c.StartsWith("powershell.exe", StringComparison.Ordinal));
+        Assert.Contains("GetTasks(1).Count -eq 0", cleanup, StringComparison.Ordinal);
+        Assert.Contains("DeleteFolder('SaveTether',0)", cleanup, StringComparison.Ordinal);
     }
 
     [Fact]

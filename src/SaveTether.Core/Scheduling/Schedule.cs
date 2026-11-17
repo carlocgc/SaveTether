@@ -271,6 +271,11 @@ public static class Schedule
             Systemctl(context, "daemon-reload");
         }
 
+        if (context.IsWindows && done.Count > 0 && RemoveEmptyTaskFolder(context))
+        {
+            done.Add($"Removed the empty Task Scheduler folder {TaskFolder.TrimEnd('\\')}");
+        }
+
         return done.Count == 0 ? ["Nothing was scheduled."] : done;
     }
 
@@ -374,6 +379,19 @@ public static class Schedule
         }
 
         return done;
+    }
+
+    /// <summary>
+    /// schtasks deletes tasks but not the folder they were in. Removes SaveTether's folder through
+    /// Task Scheduler's own scripting interface, only when it holds no task. Best effort.
+    /// </summary>
+    private static bool RemoveEmptyTaskFolder(ScheduleContext context)
+    {
+        const string Script =
+            "$s=New-Object -ComObject Schedule.Service;$s.Connect();" +
+            "try{$f=$s.GetFolder('\\SaveTether')}catch{exit 1};" +
+            "if($f.GetTasks(1).Count -eq 0 -and $f.GetFolders(0).Count -eq 0){$s.GetFolder('\\').DeleteFolder('SaveTether',0);exit 0};exit 1";
+        return context.Commands.Run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", Script]).ExitCode == 0;
     }
 
     private static List<string> RemoveWindowsJob(string job, ScheduleContext context)
