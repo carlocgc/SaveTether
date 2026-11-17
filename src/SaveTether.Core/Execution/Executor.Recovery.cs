@@ -13,7 +13,13 @@ namespace SaveTether.Core.Execution;
 public sealed partial class Executor
 {
     /// <summary>Undoes or finishes the unfinished operation, if there is one, and closes the journal.</summary>
-    public ExecutionResult Recover()
+    /// <param name="progress">
+    /// Told about the plan's steps when the operation is carried through: first each step already
+    /// done, then each remaining step as it starts and finishes. Not called when the operation is
+    /// undone, since undoing does not run the plan's steps. The same rules as for
+    /// <see cref="Run"/> apply.
+    /// </param>
+    public ExecutionResult Recover(IProgress<StepProgress>? progress = null)
     {
         Transaction? tx = null;
         try
@@ -32,7 +38,7 @@ public sealed partial class Executor
             var what = Describe(tx.Plan);
             if (PastPointOfNoReturn(entry))
             {
-                RunSteps(tx, resuming: true);
+                RunSteps(tx, resuming: true, progress);
                 tx.Messages.Insert(0, $"The unfinished {what} was completed.");
                 _journal.Close();
                 return Result(ExecutionStatus.Completed, tx);

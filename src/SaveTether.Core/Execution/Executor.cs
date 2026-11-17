@@ -54,6 +54,12 @@ public sealed record ExecutionResult(
     IReadOnlyList<Note> Messages,
     Note? Error = null);
 
+/// <summary>One step of a running plan starting or finishing, for a front end that shows progress.</summary>
+/// <param name="Index">The step's position in the plan, from 0.</param>
+/// <param name="Count">How many steps the plan has.</param>
+/// <param name="Status"><see cref="StepStatus.Started"/> or <see cref="StepStatus.Done"/>.</param>
+public sealed record StepProgress(int Index, int Count, PlanStep Step, StepStatus Status);
+
 /// <summary>
 /// Runs a <see cref="Plan"/> step by step (design 5.3). Every change goes through
 /// <see cref="SafeFs"/>, <see cref="BackupStore"/> or the stores, and every step is journalled
@@ -96,7 +102,12 @@ public sealed partial class Executor
     }
 
     /// <summary>Runs the plan. On a failure it rolls back, where the operation can still be undone.</summary>
-    public ExecutionResult Run(Plan plan)
+    /// <param name="progress">
+    /// Told when each step starts and finishes, after the journal records it. Called on this thread,
+    /// in the middle of the operation: it must return quickly and must not throw. A throw is treated
+    /// like a crash at that point, so the operation is left for recovery.
+    /// </param>
+    public ExecutionResult Run(Plan plan, IProgress<StepProgress>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
@@ -108,7 +119,7 @@ public sealed partial class Executor
         var tx = new Transaction(_journal.Begin(plan, _deviceName, _time.GetUtcNow()));
         try
         {
-            RunSteps(tx, resuming: false);
+            RunSteps(tx, resuming: false, progress);
             _journal.Close();
             PruneBackups(tx);
             return Result(ExecutionStatus.Completed, tx);
@@ -176,21 +187,27 @@ public sealed partial class Executor
         return null;
     }
 
-    private void RunSteps(Transaction tx, bool resuming)
+    private void RunSteps(Transaction tx, bool resuming, IProgress<StepProgress>? progress)
     {
         var steps = tx.Plan.Steps;
+        void Report(int index, StepStatus status) => progress?.Report(new StepProgress(index, steps.Count, steps[index], status));
+
         for (var i = 0; i < steps.Count; i++)
         {
             if (tx.Entry.Steps[i].Status == StepStatus.Done)
             {
+                // Done before an interruption: reported, so a list of the steps shows it ticked.
+                Report(i, StepStatus.Done);
                 continue;
             }
 
             tx.Entry = _journal.Mark(tx.Entry, i, StepStatus.Started);
+            Report(i, StepStatus.Started);
             _faults?.At(FaultPoint.BeforeStep, i, steps[i]);
             var backupId = RunStep(tx, steps[i], resuming);
             _faults?.At(FaultPoint.AfterStep, i, steps[i]);
             tx.Entry = _journal.Mark(tx.Entry, i, StepStatus.Done, backupId);
+            Report(i, StepStatus.Done);
         }
     }
 
