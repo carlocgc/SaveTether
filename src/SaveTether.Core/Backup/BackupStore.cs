@@ -321,17 +321,30 @@ public sealed class BackupStore
     private static string UniqueName(string mappingFolder, DateTimeOffset created)
     {
         var stamp = created.UtcDateTime.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
-        var name = stamp;
-        for (var n = 2; Exists(name); n++)
+
+        // One past the highest number used in this second, not the first free one: after pruning
+        // removed an older backup, a free number would give a new backup an ID an old one had.
+        var highest = 0;
+        foreach (var entry in Directory.EnumerateFileSystemEntries(mappingFolder, stamp + "*"))
         {
-            name = $"{stamp}-{n}";
+            var name = Path.GetFileName(entry);
+            if (name.EndsWith(PartialSuffix, StringComparison.Ordinal))
+            {
+                name = name[..^PartialSuffix.Length];
+            }
+
+            if (name == stamp)
+            {
+                highest = Math.Max(highest, 1);
+            }
+            else if (name.StartsWith(stamp + "-", StringComparison.Ordinal)
+                && int.TryParse(name.AsSpan(stamp.Length + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var n))
+            {
+                highest = Math.Max(highest, n);
+            }
         }
 
-        return name;
-
-        bool Exists(string candidate) =>
-            SafeFs.Probe(Path.Combine(mappingFolder, candidate)) != EntryKind.Missing
-            || SafeFs.Probe(Path.Combine(mappingFolder, candidate + PartialSuffix)) != EntryKind.Missing;
+        return highest == 0 ? stamp : $"{stamp}-{highest + 1}";
     }
 
     private static bool IsValidName(string name) =>
