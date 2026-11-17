@@ -4,6 +4,7 @@ using SaveTether.Core.Execution;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Planning;
+using SaveTether.Core.Resolution;
 using SaveTether.Core.Storage;
 
 namespace SaveTether.Core.Diagnostics;
@@ -189,6 +190,13 @@ public static class SelfTest
 
             var broken = DefinitionLoader.Parse(text.Replace("\"emulator\"", "\"toaster\"", StringComparison.Ordinal), "selftest.jsonc");
             Require(broken.Errors is [{ Line: 3 }], "a mistake in a definition was not reported with its line");
+
+            // Resolve the role against this machine, with the install folder set to the temporary root.
+            var definition = loaded.Definition!;
+            var resolver = new PathResolver(ResolverEnvironment.FromSystem());
+            var resolved = resolver.ResolveRole(definition.Installs[0], definition.Roles[0], new DeviceValues(InstallDir: root));
+            Require(resolved.Path == Path.Combine(root, "saves"), "the role did not resolve: " + resolved);
+            Require(resolver.Resolve("{home}", DeviceValues.None).IsResolved, "{home} did not resolve on this machine");
         });
 
         yield return ("directory link", () =>

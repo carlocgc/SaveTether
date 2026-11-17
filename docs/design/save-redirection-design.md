@@ -335,6 +335,17 @@ Rules the loader enforces, beyond the shape:
 
 Every problem in a file is reported, each as `file(line): message`, so a mistake in a hand-written file can be found. Tokens such as `{install_dir}` are not checked when a definition is loaded; that is the resolver's job (plan P2.4).
 
+**Resolving paths.** The resolver turns a path from a definition into an absolute path on one device. It reads, never writes.
+
+- A path is either absolute, or one token at the start followed by `/` and more parts: `{xdg_data}/Cemu/mlc01`. Parts are separated by single `/` and may not be empty, `.`, `..`, or hold `\` or another token. `{flatpak:<id>}` and `{steam_compatdata:<appid>}` take an argument; no other token does.
+- `{home}` and `{install_dir}` exist on both systems. `{appdata}`, `{localappdata}`, `{locallow}` and `{documents}` are Windows folders: on Linux they are refused outside a winpath. `{xdg_config}`, `{xdg_data}`, `{flatpak:...}`, `{sd_card}`, `{emudeck}` and `{steam_compatdata:...}` exist only on Linux.
+- `{xdg_config}` and `{xdg_data}` follow the XDG spec: the variable when it holds an absolute path, else `~/.config` and `~/.local/share`.
+- `{sd_card}` is an `mmcblk` device mounted under `/run/media/` or `/media/`, read from `/proc/mounts`. None mounted, or more than one, is reported, never guessed. A value set for the device overrides it.
+- `{emudeck}` is `emulationPath` in `~/.config/EmuDeck/settings.sh`, with a leading `~`, `$HOME` or `${HOME}` expanded **[I]**: that the file and key are where EmuDeck keeps its root is inferred, and should be checked on the Deck before an EmuDeck definition is used.
+- `{install_dir}`, the SD card and the Wine prefix can be set per device and app. Where those values are stored is settled with `app add` (P2.5).
+- A winpath starts with `{home}`, `{appdata}`, `{localappdata}`, `{locallow}`, `{documents}` or a drive (`C:/...`). On Linux it is looked up in the prefix's `drive_c/users/<user>`, where the user is the only profile folder there, else the login name's, else Proton's `steamuser`; anything else is reported as ambiguous. `{documents}` uses `My Documents` only in a prefix that has that and no `Documents`. Only drive C is looked up inside a prefix.
+- The Wine prefix is, in order: the one set for the device; the definition's `path` prefix (which may start with a token); and a Steam compatdata folder is accepted for the `pfx` inside it. A folder without `drive_c` is refused.
+
 `definitions/definition.schema.json` is a JSON Schema of the same format, for editors that offer completion and checking. The loader is what decides; a test keeps the two agreeing on which fields and values exist.
 
 **Cemu.** The one definition whose paths have been used on both of the owner's devices (M7 trial, 2026-11-12). Its save folder is why entry depth exists.
