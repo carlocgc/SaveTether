@@ -197,6 +197,9 @@ public static class SelfTest
             var resolved = resolver.ResolveRole(definition.Installs[0], definition.Roles[0], new DeviceValues(InstallDir: root));
             Require(resolved.Path == Path.Combine(root, "saves"), "the role did not resolve: " + resolved);
             Require(resolver.Resolve("{home}", DeviceValues.None).IsResolved, "{home} did not resolve on this machine");
+
+            // The shipped definitions are embedded resources; prove they made it into this build.
+            Require(new DefinitionCatalog(null).Find("cemu") is { IsValid: true }, "the built-in Cemu definition is missing or invalid");
         });
 
         yield return ("directory link", () =>

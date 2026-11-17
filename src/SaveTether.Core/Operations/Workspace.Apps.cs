@@ -1,0 +1,337 @@
+using System.Text.Json.Serialization;
+using SaveTether.Core.Definitions;
+using SaveTether.Core.FileSystem;
+using SaveTether.Core.Model;
+using SaveTether.Core.Resolution;
+using SaveTether.Core.Storage;
+
+namespace SaveTether.Core.Operations;
+
+/// <summary>What "app add" was asked to do. Null values fall back to what this device recorded last time.</summary>
+/// <param name="Install">The install ID to use, or null to detect it.</param>
+/// <param name="Roles">The role IDs to add, or empty for the roles the definition turns on by default.</param>
+public sealed record AppAddRequest(
+    string AppId,
+    string? Install = null,
+    IReadOnlyList<string>? Roles = null,
+    string? InstallDir = null,
+    string? SdCard = null,
+    string? WinePrefix = null);
+
+/// <summary>Why "app add" has no plan.</summary>
+public enum AppAddProblem
+{
+    /// <summary>No definition has that ID.</summary>
+    [JsonStringEnumMemberName("unknown-app")]
+    UnknownApp,
+
+    /// <summary>The definition file has mistakes.</summary>
+    [JsonStringEnumMemberName("invalid-definition")]
+    InvalidDefinition,
+
+    /// <summary>The install asked for is not in the definition, or not for this operating system.</summary>
+    [JsonStringEnumMemberName("unknown-install")]
+    UnknownInstall,
+
+    /// <summary>No install of the app was found on this device.</summary>
+    [JsonStringEnumMemberName("not-installed")]
+    NotInstalled,
+
+    /// <summary>More than one install was found. The owner must choose; SaveTether does not guess.</summary>
+    [JsonStringEnumMemberName("install-choice-needed")]
+    InstallChoiceNeeded,
+
+    /// <summary>A role asked for is not in the definition, or the chosen install does not have it.</summary>
+    [JsonStringEnumMemberName("unknown-role")]
+    UnknownRole,
+
+    /// <summary>A role's folder could not be resolved.</summary>
+    [JsonStringEnumMemberName("unresolved")]
+    Unresolved,
+
+    /// <summary>The change contradicts what is recorded: another target, or the role is applied elsewhere.</summary>
+    [JsonStringEnumMemberName("conflict")]
+    Conflict,
+}
+
+/// <summary>One install of the app, and whether it was found here.</summary>
+/// <param name="Found">What showed it is there: a folder, file, Flatpak app or Steam manifest. Null when not found.</param>
+/// <param name="Reason">Why it was not found. Null when found.</param>
+public sealed record InstallCandidate(string Id, string? Found, string? Reason)
+{
+    public bool IsDetected => Found is not null;
+}
+
+/// <summary>One role "app add" will turn into a mapping and this device's save folder for it.</summary>
+/// <param name="Source">The save folder on this device.</param>
+/// <param name="Exists">False when the folder is not there yet; apply then starts it from the shared copy.</param>
+/// <param name="IsLink">True when the folder is already a link, so its size is the shared copy's.</param>
+/// <param name="Bytes">Total size of the files in the folder, without following links inside it.</param>
+/// <param name="CreatesMapping">True when no device has added this mapping yet.</param>
+/// <param name="EntryDepth">The mapping's entry depth: the definition's for a new mapping, the existing one's otherwise.</param>
+/// <param name="Note">A sentence the owner should read, such as an existing mapping's depth differing from the definition.</param>
+public sealed record AppRolePlan(
+    string RoleId,
+    RoleClass Class,
+    string MappingId,
+    string Target,
+    string Source,
+    bool Exists,
+    bool IsLink,
+    long Bytes,
+    int Files,
+    bool CreatesMapping,
+    int EntryDepth,
+    string? Note);
+
+/// <summary>What "app add" will write, before it writes anything.</summary>
+public sealed record AppAddPlan(
+    string AppId,
+    string AppName,
+    DefinitionSource DefinitionSource,
+    string DefinitionLocation,
+    string Install,
+    DeviceApp Values,
+    IReadOnlyList<AppRolePlan> Roles,
+    IReadOnlyList<string> Quirks);
+
+/// <summary>A plan, or the reason there is none. <see cref="Candidates"/> lists the installs looked at.</summary>
+public sealed record AppAddOutcome(
+    AppAddPlan? Plan, AppAddProblem? Problem, string? Message, IReadOnlyList<InstallCandidate> Candidates)
+{
+    public static AppAddOutcome Refuse(AppAddProblem problem, string message, IReadOnlyList<InstallCandidate>? candidates = null) =>
+        new(null, problem, message, candidates ?? []);
+}
+
+public sealed partial class Workspace
+{
+    /// <summary>The catalog this device reads definitions from: the shared folder, then the built-in ones.</summary>
+    public DefinitionCatalog Definitions => new(Path.Combine(Shared.MetaRoot, DefinitionCatalog.SharedFolderName));
+
+    /// <summary>
+    /// Works out what "app add" would do: which install, which roles, where each save folder is and
+    /// how big it is. Reads only. Every reason not to go ahead is found here, before anything is written.
+    /// </summary>
+    public AppAddOutcome PlanAppAdd(AppAddRequest request, ResolverEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(environment);
+        var device = ReadOwnDevice();
+
+        if (!Identifiers.IsValidAppId(request.AppId))
+        {
+            return AppAddOutcome.Refuse(AppAddProblem.UnknownApp, $"'{request.AppId}' is not a valid app ID.");
+        }
+
+        var catalog = Definitions;
+        var entry = catalog.Find(request.AppId);
+        if (entry is null)
+        {
+            return AppAddOutcome.Refuse(
+                AppAddProblem.UnknownApp,
+                $"There is no definition for '{request.AppId}'. Known apps: {string.Join(", ", catalog.AvailableIds())}.");
+        }
+
+        if (entry.Definition is not { } definition)
+        {
+            return AppAddOutcome.Refuse(
+                AppAddProblem.InvalidDefinition,
+                $"The definition {entry.Location} has mistakes:\n" + string.Join("\n", entry.Errors));
+        }
+
+        var stored = device.Apps?.GetValueOrDefault(definition.Id);
+        var values = new DeviceValues(
+            InstallDir: Absolute(request.InstallDir) ?? stored?.InstallDir,
+            SdCard: Absolute(request.SdCard) ?? stored?.SdCard,
+            WinePrefix: Absolute(request.WinePrefix) ?? stored?.WinePrefix);
+        var resolver = new PathResolver(environment);
+
+        // Which install: the one asked for, else the only one found, else the one used last time if still found.
+        var forThisOs = definition.Installs.Where(i => i.Os.Contains(environment.Os)).ToList();
+        var candidates = forThisOs.Select(install =>
+        {
+            var detected = resolver.Detect(install, values);
+            return new InstallCandidate(install.Id, detected.Path, detected.Message);
+        }).ToList();
+
+        InstallDefinition chosen;
+        if (request.Install is { } asked)
+        {
+            chosen = forThisOs.FirstOrDefault(i => i.Id == asked)!;
+            if (chosen is null)
+            {
+                return AppAddOutcome.Refuse(
+                    AppAddProblem.UnknownInstall,
+                    $"'{definition.Id}' has no install '{asked}' for this system. Its installs here: {Join(forThisOs.Select(i => i.Id))}.",
+                    candidates);
+            }
+        }
+        else
+        {
+            var detected = candidates.Where(c => c.IsDetected).ToList();
+            if (detected.Count == 0)
+            {
+                return AppAddOutcome.Refuse(
+                    AppAddProblem.NotInstalled,
+                    forThisOs.Count == 0
+                        ? $"'{definition.Id}' has no install for this system."
+                        : $"No install of {definition.Name} was found on this device.",
+                    candidates);
+            }
+
+            var pick = detected.Count == 1 ? detected[0]
+                : detected.FirstOrDefault(c => c.Id == stored?.Install);
+            if (pick is null)
+            {
+                return AppAddOutcome.Refuse(
+                    AppAddProblem.InstallChoiceNeeded,
+                    $"{definition.Name} was found more than once on this device ({Join(detected.Select(c => c.Id))}). Choose one with --install <id>.",
+                    candidates);
+            }
+
+            chosen = forThisOs.First(i => i.Id == pick.Id);
+        }
+
+        // Which roles: those asked for, else the default ones this install has.
+        var roles = new List<RoleDefinition>();
+        if (request.Roles is { Count: > 0 } askedRoles)
+        {
+            foreach (var roleId in askedRoles.Distinct(StringComparer.Ordinal))
+            {
+                var role = definition.Roles.FirstOrDefault(r => r.Id == roleId);
+                if (role is null || !role.Paths.ContainsKey(chosen.Id))
+                {
+                    var available = definition.Roles.Where(r => r.Paths.ContainsKey(chosen.Id)).Select(r => r.Id);
+                    return AppAddOutcome.Refuse(
+                        AppAddProblem.UnknownRole,
+                        $"Install '{chosen.Id}' of '{definition.Id}' has no role '{roleId}'. Its roles: {Join(available)}.",
+                        candidates);
+                }
+
+                roles.Add(role);
+            }
+        }
+        else
+        {
+            roles.AddRange(definition.Roles.Where(r => r.Default && r.Paths.ContainsKey(chosen.Id)));
+            if (roles.Count == 0)
+            {
+                return AppAddOutcome.Refuse(
+                    AppAddProblem.UnknownRole,
+                    $"Install '{chosen.Id}' of '{definition.Id}' has no role that is on by default. Name the roles with --role <id>.",
+                    candidates);
+            }
+        }
+
+        var planned = new List<AppRolePlan>();
+        foreach (var role in roles)
+        {
+            var resolved = resolver.ResolveRole(chosen, role, values);
+            if (!resolved.IsResolved)
+            {
+                return AppAddOutcome.Refuse(
+                    AppAddProblem.Unresolved,
+                    $"The folder for role '{role.Id}' could not be found: {resolved.Message}" + HintFor(resolved.Problem),
+                    candidates);
+            }
+
+            var mappingId = role.MappingIdFor(definition.Id);
+            var target = role.MappingTargetFor(definition.Id);
+            var source = PathRules.Normalize(resolved.Path!);
+            var mapping = Shared.TryReadMapping(mappingId);
+            if (mapping is not null && mapping.Target != target)
+            {
+                return AppAddOutcome.Refuse(
+                    AppAddProblem.Conflict,
+                    $"Mapping '{mappingId}' already exists with target '{mapping.Target}', but the definition says '{target}'.",
+                    candidates);
+            }
+
+            if (device.Paths.TryGetValue(mappingId, out var current) && !PathRules.AreSame(current.Source, source) && IsLink(current.Source))
+            {
+                return AppAddOutcome.Refuse(
+                    AppAddProblem.Conflict,
+                    $"'{mappingId}' is applied on this device at '{current.Source}', but the definition now finds '{source}'. " +
+                    $"Run 'savetether revert {mappingId}' first, then add the app again.",
+                    candidates);
+            }
+
+            var note = mapping is not null && mapping.Depth != role.EntryDepth
+                ? $"The existing mapping's entry depth ({mapping.Depth}) is kept; the definition says {role.EntryDepth}. Change it with 'savetether map add {mappingId} --source <path> --entry-depth <n>'."
+                : null;
+            var (exists, isLink, bytes, files) = Measure(source);
+            planned.Add(new AppRolePlan(
+                role.Id, role.Class, mappingId, target, source, exists, isLink, bytes, files,
+                CreatesMapping: mapping is null, EntryDepth: mapping?.Depth ?? role.EntryDepth, note));
+        }
+
+        var app = new DeviceApp { Install = chosen.Id, InstallDir = values.InstallDir, SdCard = values.SdCard, WinePrefix = values.WinePrefix };
+        return new AppAddOutcome(
+            new AppAddPlan(definition.Id, definition.Name, entry.Source, entry.Location, chosen.Id, app, planned, definition.Quirks),
+            null, null, candidates);
+    }
+
+    /// <summary>
+    /// Writes what <see cref="PlanAppAdd"/> planned: each role's mapping (created when new), this
+    /// device's save folder for it, and how the app was found. Links nothing; "apply" does that.
+    /// </summary>
+    public void AddApp(AppAddPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        foreach (var role in plan.Roles)
+        {
+            var existing = ReadOwnDevice().Paths.GetValueOrDefault(role.MappingId);
+            MapAdd(
+                role.MappingId,
+                role.Target,
+                role.Source,
+                existing?.ProcessNames ?? [],
+                role.CreatesMapping ? role.EntryDepth : null);
+        }
+
+        var device = ReadOwnDevice();
+        var apps = new Dictionary<string, DeviceApp>(device.Apps ?? new Dictionary<string, DeviceApp>(), StringComparer.Ordinal)
+        {
+            [plan.AppId] = plan.Values,
+        };
+        Shared.WriteDevice(device with { Apps = apps });
+    }
+
+    private static string? Absolute(string? path) => path is null ? null : Path.GetFullPath(path);
+
+    private static string Join(IEnumerable<string> ids) => ids.Any() ? string.Join(", ", ids) : "none";
+
+    private static string HintFor(ResolveProblem? problem) => problem switch
+    {
+        ResolveProblem.NeedsValue => " Give it with --install-dir, --sd-card or --wine-prefix.",
+        ResolveProblem.Ambiguous => " Give the one to use with --sd-card or --wine-prefix.",
+        _ => string.Empty,
+    };
+
+    /// <summary>Whether a folder is there, whether it is a link, and the size of what is in it, not following links inside.</summary>
+    private static (bool Exists, bool IsLink, long Bytes, int Files) Measure(string folder)
+    {
+        var kind = SafeFs.Probe(folder);
+        var isLink = kind is EntryKind.Symlink or EntryKind.Junction;
+        if (kind != EntryKind.Directory && !(isLink && Directory.Exists(folder)))
+        {
+            return (false, isLink, 0, 0);
+        }
+
+        long bytes = 0;
+        var files = 0;
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+        };
+        foreach (var file in new DirectoryInfo(folder).EnumerateFiles("*", options))
+        {
+            bytes += file.Length;
+            files++;
+        }
+
+        return (true, isLink, bytes, files);
+    }
+}

@@ -116,6 +116,73 @@ public sealed class PathResolver
         return SplitRelative(relative, out var parts, out var error) ? Join(root.Path!, parts) : error;
     }
 
+    /// <summary>
+    /// Checks whether an install is present on this device by its detect rule. Resolves to what was
+    /// found (the folder, file, Flatpak app folder or Steam manifest), or says why it is not there.
+    /// </summary>
+    public ResolveResult Detect(InstallDefinition install, DeviceValues values)
+    {
+        ArgumentNullException.ThrowIfNull(install);
+        ArgumentNullException.ThrowIfNull(values);
+
+        if (!install.Os.Contains(_env.Os))
+        {
+            return ResolveResult.Fail(ResolveProblem.NotOnThisOs, $"Install '{install.Id}' is not for {OsName(_env.Os)}.");
+        }
+
+        var rule = install.Detect;
+        if ((rule.Dir ?? rule.File) is { } template)
+        {
+            var path = Resolve(template, values);
+            if (!path.IsResolved)
+            {
+                return path;
+            }
+
+            var found = rule.Dir is not null ? Directory.Exists(path.Path) : File.Exists(path.Path);
+            return found
+                ? path
+                : ResolveResult.Fail(ResolveProblem.Missing, $"{(rule.Dir is not null ? "No folder" : "No file")} at {path.Path}.");
+        }
+
+        if (rule.Flatpak is { } flatpak)
+        {
+            if (LinuxOnly("flatpak") is { } refused)
+            {
+                return refused;
+            }
+
+            var installations = new[]
+            {
+                Path.Combine(Xdg("XDG_DATA_HOME", Path.Combine(".local", "share")), "flatpak"),
+                _env.FlatpakSystemInstallation,
+            };
+            var app = installations
+                .OfType<string>()
+                .Select(root => Path.Combine(root, "app", flatpak))
+                .FirstOrDefault(Directory.Exists);
+            return app is not null
+                ? ResolveResult.Ok(app)
+                : ResolveResult.Fail(ResolveProblem.Missing, $"The Flatpak app {flatpak} is not installed.");
+        }
+
+        if (rule.Steam is { } appId)
+        {
+            if (_env.Os == TargetOs.Windows)
+            {
+                return ResolveResult.Fail(
+                    ResolveProblem.NotYetSupported,
+                    "Finding Steam games on Windows is not supported yet. Choose the install with --install.");
+            }
+
+            return appId > 0 && Steam().FindAppManifest((ulong)appId) is { } manifest
+                ? ResolveResult.Ok(manifest)
+                : ResolveResult.Fail(ResolveProblem.Missing, $"Steam app {appId} is not installed in any Steam library on this device.");
+        }
+
+        return ResolveResult.Fail(ResolveProblem.Invalid, $"Install '{install.Id}' has no detect rule.");
+    }
+
     /// <summary>Resolves a Windows path: directly on Windows, inside a Wine prefix on Linux.</summary>
     public ResolveResult ResolveWinPath(string winPath, PrefixRule? prefix, DeviceValues values)
     {

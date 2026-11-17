@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SaveTether.Core.Definitions;
 
 public enum AppKind
@@ -15,11 +17,17 @@ public enum TargetOs
 /// <summary>What a role's folder holds. It decides which roles are on by default and what the owner is told.</summary>
 public enum RoleClass
 {
+    [JsonStringEnumMemberName("save")]
     Save,
+    [JsonStringEnumMemberName("system")]
     System,
+    [JsonStringEnumMemberName("state")]
     State,
+    [JsonStringEnumMemberName("cache")]
     Cache,
+    [JsonStringEnumMemberName("mod")]
     Mod,
+    [JsonStringEnumMemberName("media")]
     Media,
 }
 

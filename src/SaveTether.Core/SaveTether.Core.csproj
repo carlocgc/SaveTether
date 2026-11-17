@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <!-- Core library: no console, no UI, no process exit. Must stay trimmable and AOT-safe. -->
   <PropertyGroup>
@@ -9,6 +9,11 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="SaveTether.Tests" />
+  </ItemGroup>
+
+  <!-- The shipped app definitions, built into the binary (design 5.2, "Where definitions come from"). -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\definitions\*.jsonc" LogicalName="definitions/%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

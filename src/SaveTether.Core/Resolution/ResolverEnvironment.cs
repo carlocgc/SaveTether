@@ -37,6 +37,12 @@ public sealed class ResolverEnvironment
     /// </summary>
     public Func<string?> ReadMounts { get; init; } = () => null;
 
+    /// <summary>
+    /// Linux only: the system-wide Flatpak installation, where an installed app has a folder
+    /// app/&lt;id&gt;. The per-user installation is found under the XDG data folder.
+    /// </summary>
+    public string? FlatpakSystemInstallation { get; init; }
+
     public static ResolverEnvironment FromSystem()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -66,6 +72,7 @@ public sealed class ResolverEnvironment
             UserName = Environment.UserName,
             GetVariable = Environment.GetEnvironmentVariable,
             ReadMounts = ReadProcMounts,
+            FlatpakSystemInstallation = "/var/lib/flatpak",
         };
     }
 

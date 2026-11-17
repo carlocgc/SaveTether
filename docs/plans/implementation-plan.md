@@ -332,6 +332,16 @@ Deliver: add an app from a definition. Resolve its install, show the roles with 
 
 Tests: end to end against fixture trees; an ambiguous install asks, never guesses; with `--json` it refuses instead of asking.
 
+Decided by the owner on 2026-11-17 before building: definitions are built in and shared (shared wins); `app add` records how it found the app in the device file; Cemu is the only shipped definition.
+
+As built (differences from the list above, and decisions made while building):
+- Commands `app add` and `app list`. `app add --dry-run` shows the plan and writes nothing; it is allowed while an operation is unfinished, like `status`.
+- Re-running `app add` is how a moved install or a changed SD card is picked up: remembered values fill in missing options, the install used last time breaks a tie, and a save folder that is not applied moves to where the app is found now. One that is applied must be reverted first. This is the route to the phase 2 exit test; no separate "refresh" command was added.
+- The device file is `schema: 2` only once it has `apps`.
+- An existing mapping's entry depth and a device's process names are kept, not overwritten from the definition. Definitions have no process names yet, so `apply` cannot tell that an app added this way is running until `map add --process` is used.
+- Steam detection works on Linux only. On Windows an install with a `steam` detect rule must be named with `--install`.
+- `definitions/cemu.jsonc` is the design's Cemu example; a test checks every file in `definitions/` is built in and loads.
+
 ### P2.6 Flatpak precheck (S)
 
 Deliver: read the app's permissions; refuse with the exact `flatpak override --user` command when T is unreachable.
