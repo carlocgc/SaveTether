@@ -341,3 +341,115 @@ The JSON contract freeze (plan section 5) should come after items 1, 2 and 6, si
 | 9 | Changing the sync folder is refused while any mapping is applied (11) | Yes |
 | 10 | Opt-in "add to PATH" on Windows (11) | Offer it, unticked |
 | 11 | Two projects, view models without Avalonia (14) | Yes |
+
+## Appendix A. Flows of the common actions
+
+Drawn from the sections above, as a summary; where a diagram and the text disagree, the text is right. Rounded boxes are what the person sees or does, rectangles are what runs, diamonds are what the core decides. Every flow ends with a health check, which updates the tray icon (section 3.1).
+
+### A.1 First-run setup (section 6)
+
+Nothing is written until "Set up". "This is my first device" is the only path that creates the SaveTether folder in the sync folder.
+
+```mermaid
+flowchart TD
+  A(["Start the app<br/>no setup on this device"]) --> I{"Running from the<br/>per-user folder?"}
+  I -- no --> J(["Offer: Install for this user"]) --> S1
+  I -- yes --> S1(["Step 1: choose sync folder"])
+  S1 --> C{"SaveTether folder<br/>in the sync folder?"}
+  C -- yes --> S2(["Step 2: device name<br/>existing devices listed"])
+  C -- "no, folder exists" --> F(["This is my first device?<br/>confirmation"])
+  F -- "Cancel" --> S1
+  F -- confirm --> S2
+  C -- "folder missing" --> X(["Connect the drive<br/>or share, then Back"]) --> S1
+  S2 -- "Take over a name" --> T(["Confirm take over"]) --> S3
+  S2 -- "New name" --> S3(["Step 3: backup location"])
+  S3 --> R["Set up: init"]
+  R --> D{"Device already has<br/>apps set up?"}
+  D -- yes --> AA(["Offer: Apply all"])
+  D -- no --> AP(["Apps page"])
+  AA --> AP
+```
+
+### A.2 Add an app (section 8)
+
+The window asks only for what it cannot find by looking. Adding changes no save data, so the plan page is the confirmation.
+
+```mermaid
+flowchart TD
+  A(["Apps page: Add app"]) --> L(["Page 1: pick an app<br/>Found / Not found / Added"])
+  L --> P["Make the plan"]
+  P --> O{"Outcome"}
+  O -- "plan" --> R(["Page 2: install found,<br/>roles with sizes, quirks"])
+  O -- "more than one install" --> CH(["Pick the install"]) --> P
+  O -- "not found / unresolved" --> FLD(["Fields: install folder,<br/>SD card, Wine prefix"]) --> P
+  O -- "conflict / bad definition" --> E(["Say why, Back"])
+  R -- "untick roles" --> R
+  R --> ADD["Add"]
+  ADD --> Q(["Apply it now?"])
+  Q -- "Apply" --> APL(["Apply flow"])
+  Q -- "Not now" --> AP(["Apps page<br/>rows: Ready to link"])
+```
+
+### A.3 Apply (sections 7, 9.2, 9.3)
+
+The window offers only the choices the core allows. The operation lock is held from planning until the result is shown.
+
+```mermaid
+flowchart LR
+  A(["Row: Apply"]) --> LK{"Lock free?"}
+  LK -- no --> BUSY(["Another operation<br/>is running"])
+  LK -- yes --> P["Plan, no choice"]
+  P --> O{"Outcome"}
+  O -- "plan" --> CF(["Confirm: save folder<br/>and shared folder in full"])
+  O -- "choice needed" --> CD(["Choice dialog<br/>comparison + allowed choices"])
+  O -- "app running" --> RUN(["Close the app first<br/>Check again"])
+  O -- "Flatpak can't reach" --> GR(["Give access?"])
+  O -- "not arrived" --> NA(["Shared copy not here yet<br/>Check again"])
+  O -- "other precondition" --> PRE(["Each problem in a line<br/>with its fix"])
+  RUN -- "Check again" --> P
+  GR -- "Give access" --> P
+  NA -- "Check again" --> P
+  CD -- "replace" --> RC(["Replace confirmation<br/>Cancel focused"])
+  CD -- "other choice" --> CF
+  RC -- "Replace on every device" --> GO
+  CF -- "Apply" --> GO["Run: progress<br/>step by step"]
+  GO --> RES{"Result"}
+  RES -- "completed" --> OK(["Linked, backup ID"])
+  RES -- "rolled back" --> RB(["Failed and undone,<br/>nothing changed"])
+  RES -- "stopped part way" --> RV(["Recover banner"])
+  OK --> H["Health check, tray"]
+  RB --> H
+  RV --> H
+```
+
+### A.4 Fixing a problem the tray found (sections 3.1, 5.1)
+
+```mermaid
+flowchart TD
+  T["Check: every 5 min,<br/>on open, after operations"] --> S{"Any row amber<br/>that wasn't before?"}
+  S -- no --> G(["Icon stays as it is"])
+  S -- yes --> N(["Icon amber +<br/>one notification"])
+  N --> O(["Open SaveTether"])
+  O --> R(["Row sorted to the top<br/>with its main action"])
+  R -- "Not linked" --> AP(["Apply: stops at<br/>the choice dialog"])
+  R -- "Shared folder missing" --> CK(["Check again after<br/>the sync catches up"])
+  R -- "Folder gone" --> FA(["Find the app again"])
+  R -- "Linked elsewhere /<br/>not SaveTether's link" --> HB(["Open folder,<br/>fix by hand"])
+```
+
+### A.5 Revert and restore (sections 9.6, 9.7)
+
+```mermaid
+flowchart TD
+  A(["Row: Revert"]) --> C1(["Confirm: own copy here,<br/>others keep sharing"])
+  C1 --> R1["Run with progress"]
+  R1 --> FG{"Flatpak access<br/>still needed?"}
+  FG -- no --> RM(["Offer: Remove access<br/>Keep focused"])
+  FG -- yes --> DONE(["Not linked here"])
+  RM --> DONE
+  B(["Backups: Restore"]) --> K{"Whose backup?"}
+  K -- "this device's folder" --> L{"Folder linked?"}
+  L -- yes --> RF(["Revert first"]) --> A
+  L -- no --> C2(["Confirm restore"]) --> R2["Run with progress"]
+  K -- "the shared copy" --> C3(["Restore on every device?<br/>Cancel focused"]) --> R2
+```
