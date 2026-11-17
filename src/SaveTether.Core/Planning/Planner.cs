@@ -239,6 +239,14 @@ public static class Planner
             Fail(PrecheckKind.TargetNotLocal, $"The shared folder '{s.Target}' is on a network drive. A Windows junction can only point to a local drive.");
         }
 
+        if (s.Sandbox is { CanReach: false } sandbox)
+        {
+            Fail(
+                PrecheckKind.SandboxCannotReach,
+                $"The save folder is inside the Flatpak app {sandbox.AppId}, whose sandbox cannot write {string.Join(" or ", sandbox.Unreachable.Select(p => $"'{p}'"))}, " +
+                $"so the link would not work inside the app. Allow it with:\n  {sandbox.FixCommand}\nThen run apply again.");
+        }
+
         // An existing link is only verified and recorded, so a running app and backups do not matter.
         var sourceIsLink = s.SourceKind is EntryKind.Symlink or EntryKind.Junction;
         if (!sourceIsLink)
@@ -558,6 +566,13 @@ public static class Planner
         IReadOnlyList<string> notes, bool needsFirstSeedConfirmation = false)
     {
         var allNotes = notes.ToList();
+        if (s.Sandbox is { CanReach: null } unknown)
+        {
+            allNotes.Add(
+                $"The save folder is inside the Flatpak app {unknown.AppId}, but its permissions could not be read, so SaveTether " +
+                "could not check that the app can reach the shared folder. Check with 'flatpak info --show-permissions " + unknown.AppId + "'.");
+        }
+
         if (s.ActiveMarkers.Count > 1)
         {
             allNotes.Add(

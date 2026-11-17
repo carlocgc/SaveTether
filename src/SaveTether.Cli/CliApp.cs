@@ -508,7 +508,7 @@ internal static class CliApp
             _ => ExitRefused,
         };
 
-        private Workspace Open() => Workspace.Open(_local, environment.Processes, environment.Time, environment.Faults);
+        private Workspace Open() => Workspace.Open(_local, environment.Processes, environment.Time, environment.Faults, environment.Flatpak);
 
         private CliOutput Failed(int exitCode, string error) => new() { Command = command.Name, ExitCode = exitCode, Error = error };
 
