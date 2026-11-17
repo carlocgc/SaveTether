@@ -19,7 +19,7 @@ Settled on 2026-11-12, in addition to the design's section 7.
 | Product direction | UI first for people, CLI as the core | Decided by the owner 2026-11-17. The desktop app (window and tray icon) is phase 3; the CLI stays the core for scripts, SSH and LLM agents. Design 5.14 |
 | Snapshots and scheduled jobs | Dropped | Decided by the owner 2026-11-17: SaveTether is a redirection tool, not a backup solution. Built in PR #20 and closed unmerged. The backups taken before each operation stay, with retention |
 | Decky plugin | Status first | Decided by the owner 2026-11-17: typing in Game Mode is fiddly, so only status and actions that need no input. Design 5.11 |
-| GUI toolkit (phase 3) | **Open** | Avalonia is the candidate (design 5.14); it is a large dependency and needs the owner's approval before phase 3 starts |
+| GUI toolkit (phase 3) | Avalonia 12, with Native AOT | Approved by the owner 2026-11-17, after a trial (section 5, step 1). The only new runtime dependency, used by the desktop app only; the CLI stays dependency-free. Packages: `Avalonia`, `Avalonia.Desktop`, `Avalonia.Themes.Fluent`, pinned to one version. Design 5.14 |
 
 Still open, and not blocking:
 
@@ -379,8 +379,24 @@ What remains, built in PR #21: the backups taken before each apply, revert and r
 Added on 2026-11-17 (design 5.14). Goal: a person who has never used a terminal can set up a device, add an app, apply it and see at a glance that it stays healthy, on Windows and Linux.
 
 Starts with two steps before any app code:
-1. **Toolkit decision** by the owner. Avalonia is the candidate; the check from design section 6 comes first: a hello-world Avalonia build with a tray icon, run on Windows, on Mint (Cinnamon), and on the Deck in Desktop Mode and under gamescope in Game Mode.
+1. **Toolkit decision** by the owner. *Done 2026-11-17: Avalonia approved after the trial below.* The open part is the Game Mode check, which needs the owner at the Deck; it is now the first item of step 2.
 2. **Specification** of the app's screens and states to the level of design 5.12, including every refusal the CLI can give and how the window shows it.
+
+Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/avalonia-tray` (`spikes/AvaloniaTray`, not in the solution; its README has the details). Avalonia 12.1.5, .NET 10, Native AOT:
+
+| | Windows 11 | Linux Mint 22.3, Cinnamon, X11 | Steam Deck, Desktop Mode, KDE Plasma, Wayland |
+|---|---|---|---|
+| Native AOT build | no warnings | no warnings | the Mint build, no missing libraries |
+| Window | shown | shown | shown, through XWayland |
+| Tray icon | created | registered with the desktop's StatusNotifierWatcher while running, gone after quitting | registered with KDE's StatusNotifierWatcher |
+| Green to amber, clean exit | yes | yes | yes |
+| Size, no debug symbols | 34.7 MB | 31.7 MB | same as Mint |
+
+- The app is four files, not one: the executable plus native Skia and HarfBuzz (and ANGLE on Windows). Acceptable in the release archive; the CLI is unaffected at about 6 MB.
+- On the Deck's Wayland desktop Avalonia runs through XWayland. Over SSH it needs the session's `XAUTHORITY`; started from the desktop or by autostart it has it.
+- Checked by the runs: the window was created and shown, and the tray item registered with each desktop's tray host. Not yet checked: how it looks on each screen, and the window under gamescope in Game Mode with the controller (design section 6). The trial binary is left at `~/sttest-spike` on the Deck for that check, and logs each key press; both it and the branch are removed once the check is done.
+- Known limits taken into account in design 5.14: the tray icon's own menu is a plain system menu (text, separators, ticks), so anything richer is our own window; where the tray icon is on screen is not reliably known on Linux, so a click opens the main window rather than a panel beside the icon; desktop notifications need the small per-platform code (`notify-send`, a PowerShell toast); bindings must be compiled bindings for Native AOT.
+- Alternatives considered: Tauri (small and web-styled, but a second language and toolchain, all actions through the CLI's JSON, and WebKitGTK unconfirmed on SteamOS), Eto.Forms (native widgets, less styling freedom, GTK and AOT on SteamOS unproven), Uno Platform (heavier for a small app), Photino (no tray), Electron (too large). .NET MAUI has no Linux desktop and WPF and WinForms are Windows only.
 
 | Item | Deliver | Tests |
 |---|---|---|
