@@ -127,6 +127,13 @@ public static class HealthCheck
 
     private static string ReplacedDetail(string source, EntryKind kind)
     {
+        if (kind == EntryKind.Missing)
+        {
+            // Nothing there at all: the app's folder has most likely moved, taking the link with it.
+            return "There is nothing at the save folder now. If the app has moved, run 'savetether app add' with its new location; " +
+                "otherwise run apply to link it again.";
+        }
+
         var stranded = kind == EntryKind.Directory && SafeFs.EnumerateTree(source).Any(e => e.Kind != EntryKind.Directory);
         return stranded
             ? "The save folder is a real folder again and holds files, so saves made here are not shared. Run apply to link it again."

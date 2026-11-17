@@ -45,7 +45,7 @@ public static class Planner
             Classification.NotArrived => Refuse(
                 snapshot, RefusalKind.NotArrived, classification,
                 $"Device '{snapshot.ActiveMarkers[0].DeviceName}' made its saves the shared copy, but the shared folder is empty here. " +
-                "The sync has probably not finished. Wait for it, then try again.",
+                "The sync has probably not finished. Wait for it, then try again." + EmptiedThroughLinkHint(snapshot),
                 assumeSyncedWouldHelp: true),
             Classification.LinkOnly => PlanLinkOnly(snapshot, request),
             Classification.FirstDevice => PlanFirstDevice(snapshot, request),
@@ -556,6 +556,22 @@ public static class Planner
         "Comparing against a partial copy could add or replace the wrong things. Wait for the sync to finish, " +
         "or add --assume-synced if you know it has.",
         allowed: GuardChoices, assumeSyncedWouldHelp: true, comparison: comparison);
+
+    /// <summary>
+    /// The shared copy this very device made is empty, and its save folder is a real folder holding
+    /// files. Waiting for the sync will not help then. The likely cause is a move of the app's folder
+    /// to another drive by a tool that followed the link: it copied the shared saves into a real
+    /// folder, then deleted them through the link (PowerShell Move-Item and robocopy /MOVE do this;
+    /// Explorer does not). Those copied files are the saves.
+    /// </summary>
+    private static string EmptiedThroughLinkHint(Snapshot s) =>
+        s.ActiveMarkers.Any(m => m.DeviceName == s.DeviceName) && s.SourceKind == EntryKind.Directory && s.SourceTree.HasData
+            ? Environment.NewLine +
+              "This device made that shared copy, and its save folder holds files. If the app's folder was moved to another drive " +
+              "with a tool that followed the link (PowerShell Move-Item or robocopy /MOVE), the shared saves were deleted through it " +
+              $"and the files here are the saves. Check them, then run 'savetether apply {s.MappingId} --copy --assume-synced' " +
+              "to make them the shared copy again."
+            : string.Empty;
 
     private static bool OthersHaveMarkers(Snapshot s) => s.ActiveMarkers.Any(m => m.DeviceName != s.DeviceName);
 

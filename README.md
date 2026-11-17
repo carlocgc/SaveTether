@@ -35,6 +35,12 @@ savetether apply cemu.save
 
 If that device has saves of its own, `apply` stops, shows how they differ from the shared copy, and lists the choices. A verified backup is taken before anything is changed; see `savetether backup list`. `savetether status` shows each mapping's state, `savetether revert <id>` undoes a link, and `savetether --help` lists everything. Add `--dry-run` to see what a command would do, and `--json` for machine-readable output.
 
+### Moving an app's folder
+
+After moving an app that has linked save folders, run `savetether app add <app> --install-dir <new folder>` and then `savetether apply --all`.
+
+On Windows, move it to another drive with Explorer, or `savetether revert` each of its mappings first. PowerShell `Move-Item` and `robocopy /MOVE` follow the links: they copy the shared saves into the new folder and then delete them from the shared folder, and your sync tool deletes them on every other device too. If that has happened, `apply` says so and how to make the moved copy the shared one again.
+
 ## Building
 
 Requires the .NET 10 SDK.
