@@ -110,11 +110,42 @@ public sealed partial class Executor
         {
             RunSteps(tx, resuming: false);
             _journal.Close();
+            PruneBackups(tx);
             return Result(ExecutionStatus.Completed, tx);
         }
         catch (Exception e) when (IsFailure(e))
         {
             return HandleFailure(tx, e);
+        }
+    }
+
+    /// <summary>
+    /// After an operation has completed: deletes old backups of each mapping it backed up, keeping
+    /// the first one ever taken and the newest <see cref="BackupStore.DefaultKeep"/> (design 5.12,
+    /// "Backup store"). Runs after the journal is closed, so it is not part of the operation, and a
+    /// problem here is reported without failing the operation that already succeeded.
+    /// </summary>
+    private void PruneBackups(Transaction tx)
+    {
+        if (_backups is null)
+        {
+            return;
+        }
+
+        foreach (var mappingId in tx.Entry.BackupIds.Select(id => id.Split('/')[0]).Distinct(StringComparer.Ordinal))
+        {
+            try
+            {
+                var removed = _backups.Prune(mappingId);
+                if (removed.Count > 0)
+                {
+                    tx.Messages.Add($"Removed {removed.Count} older backup(s) of {mappingId}, keeping its first backup and the newest {BackupStore.DefaultKeep}: {string.Join(", ", removed)}");
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or BackupException or SafeFsException)
+            {
+                tx.Messages.Add($"Older backups of {mappingId} could not be cleaned up: {e.Message}");
+            }
         }
     }
 
