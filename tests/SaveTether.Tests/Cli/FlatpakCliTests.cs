@@ -190,7 +190,10 @@ public class FlatpakCliTests
     {
         using var sandbox = new Sandbox();
         var (deck, flatpak, _) = FlatpakDevice(sandbox, "host:ro");
-        flatpak.Overrides.Add("host");
+
+        // A grant wider than the savetether folder, made by someone else. Not "host": on Linux the
+        // test sandbox is under /tmp, which "host" does not expose.
+        flatpak.Overrides.Add(deck.SyncRoot);
         deck.Ok("apply", CliDevice.MappingId, "--copy");
 
         var operation = deck.Ok("revert", CliDevice.MappingId, "--json").Operation();
