@@ -106,6 +106,24 @@ public class BackupStoreTests
     }
 
     [Fact]
+    public void A_backup_id_is_never_reused_after_pruning_in_the_same_second()
+    {
+        // Found on Linux, where several backups fit in one second: pruning freed "-2" and the next
+        // backup took it, so an ID shown earlier came to mean a different backup.
+        using var sandbox = new Sandbox();
+        var source = BuildSaves(sandbox);
+        var store = new BackupStore(sandbox.Dir("backups"), time: new FakeTime());
+
+        var ids = Enumerable.Range(0, 4).Select(_ => store.Create(Mapping, source, BackupReason.PreApply).Id).ToList();
+        store.Prune(Mapping, keep: 1);
+        var next = store.Create(Mapping, source, BackupReason.PreApply).Id;
+
+        Assert.Equal(["20260102T030405Z", "20260102T030405Z-2", "20260102T030405Z-3", "20260102T030405Z-4"], ids.Select(id => id.Split('/')[1]));
+        Assert.DoesNotContain(next, ids);
+        Assert.EndsWith("-5", next, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_failed_backup_removes_only_itself()
     {
         using var sandbox = new Sandbox();
