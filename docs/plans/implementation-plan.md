@@ -348,6 +348,15 @@ Deliver: read the app's permissions; refuse with the exact `flatpak override --u
 
 Tests: parser tests on captured `flatpak info --show-permissions` output, including the five emulators read on 2026-11-12; live check on the Deck.
 
+As built (differences from the list above, and decisions made while building):
+- The output read on 2026-11-12 was not kept. The fixtures are instead the Flathub builds' own permissions for the same five emulators, read on 2026-11-17 with `flatpak remote-info --show-metadata flathub <id>` on Mint; the `[Context]` group has the same format as `flatpak info --show-permissions`, which was confirmed on two apps installed there.
+- **Found:** as Flathub ships them, Xemu, Dolphin, PPSSPP and Citra have `host:ro`, which is read-only, and only melonDS has `home`. A link into the sync folder would let those four read saves but not write them. Section 1 says each Deck emulator has "`home` or `host`"; whether the Deck's have `:ro`, or EmuDeck overrides that remove it, has to be read again on the Deck. The precheck will say so either way when one of them is applied.
+- The check runs only for `apply`, only when S is inside `~/.var/app/<id>/`, and only on Linux. It needs write access to T as the link names it and, when a link in that path leads elsewhere (`~/Sync` to `/data/Sync`), to where it leads.
+- The fix command grants the `savetether` folder, not just T, so one override covers every mapping of that app. Paths are quoted for the shell.
+- Permissions that cannot be read (no `flatpak` command, app not installed) add a note to the plan instead of refusing.
+- Covered entry forms: `host` (except the folders the sandbox keeps its own), `home`, `~/...`, absolute paths, `xdg-config`, `xdg-data`, `xdg-cache` and the user folders (`xdg-documents` and so on, read from `user-dirs.dirs`), each with `:ro`, `:rw` or `:create`, and `!entry` removing an entry. Anything else is treated as not covering T, which can only refuse, never wrongly allow.
+- Live check on Mint (2026-11-17) with the installed Discord Flatpak: apply refused and printed the override command; nothing was changed. Not yet checked on the Deck.
+
 ### P2.7 Snapshots and the login-time check (M)
 
 Deliver:
