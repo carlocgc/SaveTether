@@ -23,8 +23,16 @@ public sealed record InitResult(
 /// <param name="EntryDepthChanged">True when an existing mapping's entry depth was changed by this call.</param>
 public sealed record MapResult(MappingFile Mapping, DevicePath Path, bool CreatedMapping, bool EntryDepthChanged);
 
+/// <param name="SyncRootProblem">
+/// Null when the sync root can be read. Otherwise why not; <see cref="Mappings"/> then holds only
+/// the mappings this device's own record says it applied, since the shared list is out of reach.
+/// </param>
 public sealed record StatusReport(
-    string DeviceName, string SyncRoot, bool DeviceFileMismatch, bool JournalOpen, IReadOnlyList<MappingHealth> Mappings);
+    string DeviceName, string SyncRoot, bool DeviceFileMismatch, bool JournalOpen, IReadOnlyList<MappingHealth> Mappings,
+    string? SyncRootProblem = null)
+{
+    public bool SyncRootAvailable => SyncRootProblem is null;
+}
 
 /// <summary>
 /// This device, set up: its local files, the shared files, and the operations the commands
@@ -246,9 +254,32 @@ public sealed partial class Workspace
         return path;
     }
 
-    /// <summary>"status": every mapping in the shared list, or one, as it stands on this device.</summary>
+    /// <summary>
+    /// "status": every mapping in the shared list, or one, as it stands on this device. When the sync
+    /// root is unmounted or not set up, it still reports, from this device's own record of what it
+    /// applied: those links are Broken then, and that is what the owner most needs to see.
+    /// </summary>
     public StatusReport Status(string? mappingId = null)
     {
+        if (!Shared.IsInitialized)
+        {
+            var problem = Shared.NotAvailableMessage;
+            var recorded = Local.ReadState().Mappings;
+            if (mappingId is not null && !recorded.ContainsKey(mappingId))
+            {
+                throw new StoreException(StoreProblem.NotInitialized, problem);
+            }
+
+            return new StatusReport(
+                DeviceName, Shared.SyncRoot, DeviceFileMismatch: false, Journal.IsOpen,
+                recorded
+                    .Where(r => mappingId is null || r.Key == mappingId)
+                    .OrderBy(r => r.Key, StringComparer.Ordinal)
+                    .Select(r => HealthCheck.CheckRecorded(r.Key, r.Value, problem))
+                    .ToList(),
+                problem);
+        }
+
         var device = Shared.TryReadDevice(DeviceName)
             ?? throw new StoreException(
                 StoreProblem.NotFound,

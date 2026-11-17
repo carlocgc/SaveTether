@@ -280,7 +280,15 @@ internal static class OutputWriter
     private static void WriteStatus(StatusReport status, TextWriter stdout, TextWriter stderr)
     {
         stdout.WriteLine($"Device '{status.DeviceName}', sync root '{status.SyncRoot}'");
-        if (status.Mappings.Count == 0)
+        if (status.SyncRootProblem is { } problem)
+        {
+            stdout.WriteLine(
+                status.Mappings.Count == 0
+                    ? "The sync root is not available, and this device has not linked anything."
+                    : "The sync root is not available. These are the save folders this device linked, from its own record:");
+            stderr.WriteLine($"Warning: {problem}");
+        }
+        else if (status.Mappings.Count == 0)
         {
             stdout.WriteLine("No mappings yet. Add one with 'savetether map add'.");
         }

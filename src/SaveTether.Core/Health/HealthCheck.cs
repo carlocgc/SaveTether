@@ -94,14 +94,42 @@ public static class HealthCheck
 
         if (recorded is not null)
         {
-            var stranded = kind == EntryKind.Directory && SafeFs.EnumerateTree(path.Source).Any(e => e.Kind != EntryKind.Directory);
-            return Is(
-                HealthState.Replaced,
-                stranded
-                    ? "The save folder is a real folder again and holds files, so saves made here are not shared. Run apply to link it again."
-                    : "The save folder is no longer a link. Run apply to link it again.");
+            return Is(HealthState.Replaced, ReplacedDetail(path.Source, kind));
         }
 
         return Is(HealthState.NotApplied, "Not applied on this device yet. Run 'savetether apply " + mapping.Id + "'.");
+    }
+
+    /// <summary>
+    /// The state of a mapping this device applied, worked out from its own record alone: for when
+    /// the sync root cannot be read, so neither the shared list nor this device's file is there.
+    /// A link still pointing where it was made is Broken then, since the sync root it leads into is unusable.
+    /// </summary>
+    /// <param name="rootProblem">Why the sync root cannot be used, as one or two sentences.</param>
+    public static MappingHealth CheckRecorded(string mappingId, AppliedMapping recorded, string rootProblem)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mappingId);
+        ArgumentNullException.ThrowIfNull(recorded);
+
+        MappingHealth Is(HealthState state, string detail) => new(mappingId, state, recorded.Source, recorded.Target, detail);
+
+        var kind = SafeFs.Probe(recorded.Source);
+        if (kind is EntryKind.Symlink or EntryKind.Junction)
+        {
+            var linkTarget = PathRules.ResolveAll(SafeFs.ReadLinkTarget(recorded.Source));
+            return PathRules.AreSame(linkTarget, PathRules.ResolveAll(recorded.Target))
+                ? Is(HealthState.Broken, $"The link is in place, but the sync root is not available. {rootProblem}")
+                : Is(HealthState.Retargeted, $"The save folder now links to '{linkTarget}' instead of the shared folder.");
+        }
+
+        return Is(HealthState.Replaced, ReplacedDetail(recorded.Source, kind));
+    }
+
+    private static string ReplacedDetail(string source, EntryKind kind)
+    {
+        var stranded = kind == EntryKind.Directory && SafeFs.EnumerateTree(source).Any(e => e.Kind != EntryKind.Directory);
+        return stranded
+            ? "The save folder is a real folder again and holds files, so saves made here are not shared. Run apply to link it again."
+            : "The save folder is no longer a link. Run apply to link it again.";
     }
 }

@@ -45,6 +45,17 @@ public sealed class SharedStore
     public bool IsInitialized => SafeFs.Probe(MetaRoot) == EntryKind.Directory;
 
     /// <summary>
+    /// Why the sync root cannot be used, for when <see cref="IsInitialized"/> is false. A missing
+    /// sync root folder and a missing marker folder get different advice.
+    /// </summary>
+    public string NotAvailableMessage =>
+        SafeFs.Probe(PathRules.ResolveAll(SyncRoot)) == EntryKind.Directory
+            ? $"'{SyncRoot}' is not set up for SaveTether: the folder '{Path.Combine(ToolFolderName, MetaFolderName)}' is missing. " +
+              "If this device syncs with one that is already set up, wait for the sync to finish. " +
+              "If the sync root is on a removable drive, check that it is connected."
+            : $"The sync root '{SyncRoot}' does not exist. If it is on a removable drive, check that it is connected.";
+
+    /// <summary>
     /// Creates the marker folder. Only for the first device ever ("init --create-root"); every
     /// other device must receive it through the sync tool.
     /// </summary>
@@ -229,11 +240,7 @@ public sealed class SharedStore
     {
         if (!IsInitialized)
         {
-            throw new StoreException(
-                StoreProblem.NotInitialized,
-                $"'{SyncRoot}' is not set up for SaveTether: the folder '{Path.Combine(ToolFolderName, MetaFolderName)}' is missing. " +
-                "If this device syncs with one that is already set up, wait for the sync to finish. " +
-                "If the sync root is on a removable drive, check that it is connected.");
+            throw new StoreException(StoreProblem.NotInitialized, NotAvailableMessage);
         }
     }
 
