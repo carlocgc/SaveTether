@@ -1,0 +1,11 @@
+<Project>
+
+  <!--
+    Avalonia's packages bring Avalonia.BuildServices, whose AvaloniaStats target reports each build
+    (project name, versions, output type) to Avalonia's servers. SaveTether sends nothing from its
+    build, so the target is replaced with an empty one. This file is imported after the packages'
+    targets, so this definition is the one MSBuild runs.
+  -->
+  <Target Name="AvaloniaStats" />
+
+</Project>
