@@ -10,7 +10,7 @@ namespace SaveTether.Gui;
 
 /// <summary>
 /// The Backups page (desktop-app-spec.md, section 9.7), in place of the Apps page while open: backups grouped
-/// by mapping with an app filter, Open folder, and Restore. The logic is <see cref="BackupsPage"/>; restore
+/// by mapping with an app filter, Open folder, Restore and Delete. The logic is <see cref="BackupsPage"/>; restore
 /// runs through <see cref="ActionFlow.RestoreAsync"/> as an operation, after which the list is read again.
 /// </summary>
 internal sealed class BackupsScreen : UserControl
@@ -108,7 +108,7 @@ internal sealed class BackupsScreen : UserControl
 
     private Grid Row(BackupGroup group, BackupRow row, Func<string, string> appName)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("150,150,120,*,Auto,Auto"), Margin = new Thickness(0, 3) };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("150,150,120,*,Auto,Auto,Auto"), Margin = new Thickness(0, 3) };
         Add(grid, 0, new TextBlock { Text = row.Kept ? $"{row.When} *" : row.When, VerticalAlignment = VerticalAlignment.Center });
         Add(grid, 1, new TextBlock { Text = row.Reason, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.85 });
         Add(grid, 2, new TextBlock { Text = row.Of, VerticalAlignment = VerticalAlignment.Center, FontWeight = row.OfSharedCopy ? FontWeight.SemiBold : FontWeight.Normal });
@@ -124,7 +124,22 @@ internal sealed class BackupsScreen : UserControl
         var role = group.MappingId.Contains('.', StringComparison.Ordinal) ? group.MappingId[(group.MappingId.IndexOf('.', StringComparison.Ordinal) + 1)..] : group.MappingId;
         restore.Click += (_, _) => _ = RestoreAsync(row, appName(group.AppId), role);
         Add(grid, 5, restore);
+
+        var delete = new Button { Content = "Delete", Margin = new Thickness(8, 0, 0, 0) };
+        AutomationProperties.SetName(delete, $"Delete: {group.Name} backup {row.When}");
+        delete.Click += (_, _) => _ = DeleteAsync(row);
+        Add(grid, 6, delete);
         return grid;
+    }
+
+    private async Task DeleteAsync(BackupRow row)
+    {
+        var deleted = false;
+        await _operate(async actions => deleted = await actions.DeleteBackupAsync(row));
+        if (deleted)
+        {
+            await LoadAsync();
+        }
     }
 
     private async Task RestoreAsync(BackupRow row, string app, string role)

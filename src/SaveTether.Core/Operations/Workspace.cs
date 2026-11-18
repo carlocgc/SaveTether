@@ -462,6 +462,24 @@ public sealed partial class Workspace
     /// <summary>"backup list".</summary>
     public IReadOnlyList<BackupInfo> ListBackups(string? mappingId = null) => OpenBackups(ReadOwnDevice()).List(mappingId);
 
+    /// <summary>"backup delete", before asking: the backup, and whether it is its mapping's first. Reads only.</summary>
+    public BackupDeletion DescribeBackupDeletion(string backupId) => OpenBackups(ReadOwnDevice()).Describe(backupId);
+
+    /// <summary>
+    /// "backup delete": removes one backup. Refused while an operation is unfinished, since recovering it may
+    /// need the backups it took. Call it under the operation lock, once the owner has confirmed.
+    /// </summary>
+    public BackupDeletion DeleteBackup(string backupId)
+    {
+        if (Journal.IsOpen)
+        {
+            throw new BackupException(
+                $"No backup is deleted while an operation is unfinished: recovering it may need its backups. Recover first, then delete '{backupId}'.");
+        }
+
+        return OpenBackups(ReadOwnDevice()).Remove(backupId);
+    }
+
     private Executor NewExecutor(DeviceFile? device)
     {
         BackupStore? backups = null;

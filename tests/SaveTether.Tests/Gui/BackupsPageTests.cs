@@ -116,6 +116,36 @@ public class BackupsPageTests
     }
 
     [Fact]
+    public void Deleting_is_worded_more_strongly_for_the_first_backup_and_runs_through_the_session()
+    {
+        using var sandbox = new Sandbox();
+        var pc = WithBothBackups(sandbox);
+        var local = new LocalStore(pc.LocalFolder);
+        var rows = BackupsPage.Load(local).Groups[0].Rows;
+        var kept = rows.Single(r => r.Kept);
+        var later = rows.First(r => !r.Kept);
+
+        Assert.Contains("only copy of it from before SaveTether changed it", BackupsPage.DeleteText(kept), StringComparison.Ordinal);
+        Assert.DoesNotContain("first backup", BackupsPage.DeleteText(later), StringComparison.Ordinal);
+        Assert.Contains("cannot be undone", BackupsPage.DeleteText(later), StringComparison.Ordinal);
+        Assert.Equal("Delete the first backup", BackupsPage.DeleteButton(kept));
+        Assert.Equal("Delete", BackupsPage.DeleteButton(later));
+        Assert.Equal($"Delete the backup from {later.When}?", BackupsPage.DeleteTitle(later));
+
+        var (session, _) = OperationSession.Begin(local, "backup delete", new Processes(), null);
+        using (session)
+        {
+            var deleted = session!.DeleteBackup(later.Info.Id);
+            Assert.False(deleted.WasFirst);
+            Assert.Equal(1, deleted.Remaining);
+        }
+
+        Assert.Equal([kept.Info.Id], BackupsPage.Load(local).Groups[0].Rows.Select(r => r.Info.Id));
+        Assert.False(Directory.Exists(later.Info.Location));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void A_restore_destination_that_is_not_a_link_names_no_revert()
     {
         var failure = new PrecheckFailure(PrecheckKind.RestoreDestinationUnusable, "'x' exists but is not a folder.");

@@ -112,6 +112,9 @@ internal sealed record CliOutput
     public IReadOnlyList<OperationOutput>? Operations { get; init; }
 
     public IReadOnlyList<BackupInfo>? Backups { get; init; }
+
+    /// <summary>"backup delete": the backup removed, whether it was its mapping's first, and how many are left.</summary>
+    public BackupDeletion? BackupDeleted { get; init; }
 }
 
 [JsonSourceGenerationOptions(
@@ -172,6 +175,11 @@ internal static class OutputWriter
         if (output.Backups is { } backups)
         {
             WriteBackups(backups, stdout);
+        }
+
+        if (output.BackupDeleted is { } deleted)
+        {
+            stdout.WriteLine($"Deleted backup {deleted.Backup.Id}. {deleted.Remaining} backup(s) of {deleted.Backup.MappingId} left.");
         }
 
         if (output.Message is { } message)
@@ -284,7 +292,7 @@ internal static class OutputWriter
         }
     }
 
-    private static string FormatBytes(long bytes) => bytes switch
+    internal static string FormatBytes(long bytes) => bytes switch
     {
         >= 1L << 30 => $"{bytes / (double)(1L << 30):0.0} GiB",
         >= 1L << 20 => $"{bytes / (double)(1L << 20):0.0} MiB",

@@ -148,6 +148,7 @@ public class JsonContractTests
         Record("apply-refused-guard", 1, "apply", Id);
         var backupId = pc.Ok("backup", "list", "--json").Json().GetProperty("backups")[0].GetProperty("id").GetString()!;
         Record("backup-restore", 0, "backup", "restore", backupId);
+        Record("backup-delete", 0, "backup", "delete", backupId, "--confirm-delete");
         Record("recover", 0, "recover");
         Record("map-remove", 0, "map", "remove", Id);
         Record("refused", 1, "revert", Id);

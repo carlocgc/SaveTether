@@ -199,6 +199,33 @@ public sealed class BackupStore
         return deleted;
     }
 
+    /// <summary>
+    /// What deleting <paramref name="backupId"/> would remove, without removing it: the backup, and whether it
+    /// is its mapping's first, the one retention always keeps. Refuses an ID that is not a finished backup.
+    /// </summary>
+    public BackupDeletion Describe(string backupId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(backupId);
+        var mappingId = backupId.Split('/')[0];
+        RequireMappingId(mappingId);
+        var backups = List(mappingId);
+        var info = backups.FirstOrDefault(b => b.Id == backupId)
+            ?? throw new BackupException($"There is no backup '{backupId}' in '{_root}'.");
+        return new BackupDeletion(info, WasFirst: backups[0].Id == backupId, Remaining: backups.Count - 1);
+    }
+
+    /// <summary>
+    /// Deletes one backup: its folder, data and manifest, through <see cref="SafeFs"/>, so links recorded
+    /// inside it are removed, never followed. Deleting the first backup means retention keeps the next
+    /// oldest from then on.
+    /// </summary>
+    public BackupDeletion Remove(string backupId)
+    {
+        var deletion = Describe(backupId);
+        _fs.DeleteTree(deletion.Backup.Location);
+        return deletion;
+    }
+
     /// <summary>The folder holding the plain copy of the files for <paramref name="backupId"/>.</summary>
     public string DataPathOf(string backupId) => Path.Combine(FolderOf(backupId), DataName);
 

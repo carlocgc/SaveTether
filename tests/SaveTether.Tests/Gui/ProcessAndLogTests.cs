@@ -127,7 +127,11 @@ public class ProcessAndLogTests
             Path.Combine(local.Folder, OperationLock.HolderFileName),
             $$"""{"schema": 1, "process_id": {{holder.ProcessId}}, "front_end": "{{holder.FrontEnd}}", "command": "{{holder.Command}}", "started_utc": "{{holder.StartedUtc:O}}"}""");
 
-    /// <summary>A long-running process other than this one: the oldest one this user can see.</summary>
+    /// <summary>
+    /// A long-running process other than this one: the oldest one this user can see. It must answer both
+    /// questions the core asks, its start time and whether it has exited: a protected Windows process such as
+    /// audiodg gives its start time but refuses HasExited, and the core then counts it as the holder.
+    /// </summary>
     private static int OtherRunningProcess()
     {
         var candidates = System.Diagnostics.Process.GetProcesses()
@@ -136,7 +140,7 @@ public class ProcessAndLogTests
             {
                 try
                 {
-                    return (p.Id, Start: (DateTime?)p.StartTime);
+                    return (p.Id, Start: p.HasExited ? null : (DateTime?)p.StartTime);
                 }
                 catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
                 {

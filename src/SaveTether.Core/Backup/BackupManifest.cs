@@ -67,6 +67,14 @@ public sealed record BackupInfo(
     long TotalBytes,
     string Location);
 
+/// <summary>A backup to delete, or deleted.</summary>
+/// <param name="WasFirst">
+/// It is its mapping's first backup, which retention never removes: usually the only copy of the folder
+/// from before SaveTether changed it. Front ends warn more strongly about it.
+/// </param>
+/// <param name="Remaining">How many backups of the mapping are left after it is deleted.</param>
+public sealed record BackupDeletion(BackupInfo Backup, bool WasFirst, int Remaining);
+
 /// <summary>The result of checking a backup against its manifest.</summary>
 public sealed record BackupVerification(IReadOnlyList<string> Problems)
 {
