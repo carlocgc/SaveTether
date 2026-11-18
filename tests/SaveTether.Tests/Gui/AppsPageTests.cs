@@ -21,7 +21,11 @@ public class AppsPageTests
         var ok = For(HealthState.Ok);
         Assert.Equal("Saves here are the shared copy.", ok.Sentence);
         Assert.Null(ok.Main);
-        Assert.Equal([RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Revert], ok.Others);
+        Assert.Equal([RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert], ok.Others);
+
+        // Backups, where section 5.1 lists it: Linked, Not linked, Two shared copies.
+        Assert.Contains(RowAction.Backups, For(HealthState.Replaced, HealthReason.FolderHoldsFiles).Others);
+        Assert.Contains(RowAction.Backups, For(HealthState.DoubleSeed).Others);
 
         var ready = For(HealthState.NotApplied, HealthReason.NotLinkedYet);
         Assert.Equal((RowAction?)RowAction.Apply, ready.Main);

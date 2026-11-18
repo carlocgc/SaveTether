@@ -26,7 +26,7 @@ There is no .NET on the Deck. Build on the Mint box and copy the binaries over t
    ```
 
 2. **Throwaway sync folders too.** A test device gets its own sync folder under the scratch area, set up with `init --create-root`. Never point a test device at the real sync folder, which syncs to every device.
-3. **Clean up after.** Stop what was started, remove the scratch folder, and check that the real setup is unchanged: `savetether status` before and after, compared.
+3. **Clean up after.** Stop what was started, remove the scratch folder, and check that the real setup is unchanged: `savetether status` before and after, compared. Run that check in a fresh shell, not one that sourced the test's environment file: with `SAVETETHER_HOME` still set, `status` reads the scratch folder just removed and says the device is not set up.
 4. **Name the process exactly.** `pgrep -x savetether-gui`, never `pgrep -f`/`pkill -f` with a pattern that also matches the remote `bash -c` command line: that kills the SSH session itself.
 5. **Do not leave windows behind** on the owner's screen. If a test opens one that cannot be closed remotely (see "Driving the app"), say so.
 
@@ -148,6 +148,15 @@ Two throwaway devices sharing one throwaway sync folder: the app's device with a
 - More on the linked row: exactly Open folder, Open shared folder, Revert. Open folder opens the file manager at the folder (capture the whole screen to see it; close the window by hand).
 - Apply all: the confirmation names the one row it will link and the one that needs you; the summary says "1 linked. 1 need you: …".
 - Stop using here on a ready row: its confirmation, then the row moves to "Not on this device", and the folder's files are still on disk.
+
+### Backups and restore
+
+A throwaway device whose apply replaced a shared copy, so it has a backup of each kind: a save file in the folder, a different file put in the shared folder by hand, `map add`, then `apply <id> --replace-shared --confirm-replace`. Change the shared file afterwards, so a restore of it shows.
+
+- Backups (the page's button, or More on the row): one group, newest first, "Shared copy" and "This device", sizes, the first one marked with `*` and the footnote.
+- Restore the "This device" backup while linked: refused, "<role> is linked, so restoring would write into the shared copy. Revert first.", with Cancel and Revert. Revert: its confirmation and result; the list now has a "before reverting" backup.
+- Restore it again: the confirmation names the time and reason; afterwards the file on disk is the backed-up one, and there is a "before restoring" backup.
+- Restore the shared-copy backup: "Restore the shared saves for <role> on every device?" first, then the plan's confirmation; afterwards the shared folder holds the backed-up file.
 
 ### Add app
 

@@ -19,6 +19,9 @@ public enum RefusalAction
 
     /// <summary>Give the Flatpak app access to the SaveTether folder, then plan again.</summary>
     GiveAccess,
+
+    /// <summary>A restore refused because the save folder is a link (section 9.7): revert the mapping instead.</summary>
+    Revert,
 }
 
 /// <summary>A refusal as the window shows it: the app's sentences, what can be done, and the core's message under Details.</summary>
@@ -82,7 +85,11 @@ public static class ActionTexts
                 or PrecheckKind.SourceUnusable or PrecheckKind.TargetUnusable => $"{role} cannot be linked as it is set up.",
             PrecheckKind.NotApplied => "The folder is no longer this mapping's link, so there is nothing to revert.",
             PrecheckKind.BackupUnusable => "This backup is incomplete or damaged, so it cannot be restored.",
-            PrecheckKind.RestoreDestinationUnusable => $"{role} is linked, so restoring would write into the shared copy. Revert first.",
+            // Only the link case names Revert as the way out; the others (not a folder, its parent gone, a shared
+            // folder that is no longer a save folder) leave copying by hand from the backup's folder.
+            PrecheckKind.RestoreDestinationUnusable => failure.Message.Next.Any(n => n.Kind == NextStepKind.Revert)
+                ? $"{role} is linked, so restoring would write into the shared copy. Revert first."
+                : "The folder this backup was taken from cannot be restored into as it is now. Its files can still be copied back by hand: open the backup's folder.",
             _ => throw new ArgumentOutOfRangeException(nameof(failure), failure.Kind, "A precondition with no text."),
         };
     }
@@ -311,6 +318,11 @@ public static class ActionTexts
         {
             actions.Add(RefusalAction.CheckAgain);
             actions.Add(RefusalAction.AssumeClosed);
+        }
+
+        if (refusal.Failures.Any(f => f.Kind == PrecheckKind.RestoreDestinationUnusable && f.Message.Next.Any(n => n.Kind == NextStepKind.Revert)))
+        {
+            actions.Add(RefusalAction.Revert);
         }
 
         return actions;

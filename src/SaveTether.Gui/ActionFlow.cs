@@ -105,10 +105,84 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
     }
 
-    public async Task RevertAsync(MappingState state)
+    public Task RevertAsync(MappingState state)
     {
         ArgumentNullException.ThrowIfNull(state);
-        var mapping = new Subject(state.MappingId, state.AppName, state.Role);
+        return RevertAsync(new Subject(state.MappingId, state.AppName, state.Role));
+    }
+
+    /// <summary>
+    /// Restore (section 9.7): a backup of the shared copy is confirmed first, like replace-shared; then the plan,
+    /// its refusals and confirmation as for apply. Refused because the save folder is linked, it offers Revert,
+    /// which runs as its own operation once the restore's lock is released.
+    /// </summary>
+    public async Task RestoreAsync(BackupRow row, string appName, string roleName)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var mapping = new Subject(row.Info.MappingId, appName, roleName);
+        var role = mapping.Name;
+        if (row.OfSharedCopy && !await overlay.ConfirmAsync(
+                BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device"))
+        {
+            return;
+        }
+
+        var session = await BeginAsync("backup restore");
+        if (session is null)
+        {
+            return;
+        }
+
+        var revertInstead = false;
+        using (session)
+        {
+            var request = new RestoreRequest(ConfirmReplace: row.OfSharedCopy);
+            while (true)
+            {
+                var outcome = await Task.Run(() => session.PlanRestore(row.Info.Id, request));
+                if (outcome.Plan is { } plan)
+                {
+                    await ConfirmAndRunAsync(session, plan, role, row.OfSharedCopy ? null : BackupsPage.RestoreLocalText(row));
+                    return;
+                }
+
+                var refusal = outcome.Refusal!;
+                log.Write($"backup restore {row.Info.Id} refused: {refusal.Kind}: {refusal.Message.Text}");
+                if (refusal.Kind == RefusalKind.ConfirmationNeeded)
+                {
+                    if (!await overlay.ConfirmAsync(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device", Overlay.OperationDialogTimeout))
+                    {
+                        return;
+                    }
+
+                    request = request with { ConfirmReplace = true };
+                    continue;
+                }
+
+                var next = await HandleRefusalAsync(session, mapping, role, refusal);
+                if (next is null)
+                {
+                    return;
+                }
+
+                if (next == RefusalAction.Revert)
+                {
+                    revertInstead = true;
+                    break;
+                }
+
+                request = request with { AssumeClosed = request.AssumeClosed || next == RefusalAction.AssumeClosed };
+            }
+        }
+
+        if (revertInstead)
+        {
+            await RevertAsync(mapping);
+        }
+    }
+
+    private async Task RevertAsync(Subject mapping)
+    {
         var role = mapping.Name;
         var session = await BeginAsync("revert");
         if (session is null)
@@ -372,9 +446,10 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         overlay.ConfirmAsync(ActionTexts.ReplaceTitle(role), ActionTexts.ReplaceText, "Replace on every device", Overlay.OperationDialogTimeout);
 
     /// <summary>The plan's confirmation with its steps under "Show steps", then the run and its result. Null when cancelled.</summary>
-    private async Task<ExecutionResult?> ConfirmAndRunAsync(OperationSession session, Plan plan, string role)
+    private async Task<ExecutionResult?> ConfirmAndRunAsync(OperationSession session, Plan plan, string role, string? lead = null)
     {
-        var (title, sentences) = ActionTexts.Confirmation(plan, role);
+        var (title, planSentences) = ActionTexts.Confirmation(plan, role);
+        IReadOnlyList<string> sentences = lead is null ? planSentences : [lead, .. planSentences];
         var steps = new Expander
         {
             Header = "Show steps",
@@ -486,6 +561,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         RefusalAction.AssumeClosed => $"{app} is closed",
         RefusalAction.AssumeSynced => "The shared saves really were deleted",
         RefusalAction.GiveAccess => "Give access",
+        RefusalAction.Revert => "Revert",
         _ => action.ToString(),
     };
 }

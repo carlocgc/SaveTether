@@ -40,6 +40,9 @@ public enum RowAction
 
     /// <summary>Not on this device: Add app's page 2 for this app (section 5.1). Needs a definition.</summary>
     AddHere,
+
+    /// <summary>The Backups page, filtered to this row's app (section 9.7).</summary>
+    Backups,
 }
 
 /// <summary>One row of the Apps page: a mapping, its sentence and its actions.</summary>
@@ -93,7 +96,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         var (sentence, main, others) = (mapping.Health.State, mapping.Health.Reason) switch
         {
             (HealthState.Ok, _) => ("Saves here are the shared copy.", (RowAction?)null,
-                new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Revert }),
+                new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert }),
             (HealthState.NotApplied, HealthReason.NoSaveFolder) => (
                 mapping.SetUpOn.Count == 0 ? "No device has a folder set for it." : $"Set up on {string.Join(", ", mapping.SetUpOn)}, not here.",
                 mapping.HasDefinition ? RowAction.AddHere : (RowAction?)null, []),
@@ -107,7 +110,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
             (HealthState.Replaced, HealthReason.NotAFolder) => (
                 $"Something other than a folder is at {source}. Move it away by hand, then apply.", RowAction.OpenFolderParent, new[] { RowAction.Details }),
             (HealthState.Replaced, _) => (
-                "The link was replaced by a real folder. Saves made here are not shared.", RowAction.Apply, new[] { RowAction.OpenFolder }),
+                "The link was replaced by a real folder. Saves made here are not shared.", RowAction.Apply, new[] { RowAction.OpenFolder, RowAction.Backups }),
             (HealthState.Broken, HealthReason.SyncRootUnavailable) => (
                 "The sync folder is not available.", RowAction.CheckAgain, new[] { RowAction.OpenFolder }),
             (HealthState.Broken, _) => (
@@ -116,7 +119,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
             (HealthState.Retargeted, _) => (
                 $"The folder now links to {link} instead of the shared folder. Remove that link by hand, then apply.", RowAction.OpenFolder,
                 new[] { RowAction.Details }),
-            (HealthState.DoubleSeed, _) => ("More than one device made its saves the shared copy.", RowAction.UseThisCopy, new[] { RowAction.Details }),
+            (HealthState.DoubleSeed, _) => ("More than one device made its saves the shared copy.", RowAction.UseThisCopy, new[] { RowAction.Backups, RowAction.Details }),
             (HealthState.ForeignLink, _) => (
                 $"The folder is a link SaveTether did not make, to {link}. Remove it by hand, then apply.", RowAction.OpenFolder,
                 new[] { RowAction.Details }),
@@ -139,6 +142,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         RowAction.Details => "Details",
         RowAction.FindAppAgain => "Find the app again",
         RowAction.AddHere => "Add",
+        RowAction.Backups => "Backups",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no label."),
     };
 
