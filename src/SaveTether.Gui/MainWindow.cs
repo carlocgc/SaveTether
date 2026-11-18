@@ -6,6 +6,8 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using SaveTether.Core.Execution;
+using SaveTether.Core.Storage;
 using SaveTether.Gui.Presentation;
 
 namespace SaveTether.Gui;
@@ -28,12 +30,16 @@ internal sealed class MainWindow : Window
     private readonly Overlay _overlay;
     private readonly string _localFolder;
     private readonly Action _checkNow;
+    private readonly Func<Func<ActionFlow, Task>, Task> _operate;
+    private readonly ActionFlow _actions;
     private SetupView? _setup;
 
-    public MainWindow(string localFolder, Action checkNow, Action quit)
+    /// <param name="operate">Runs one operation: the app marks itself busy around it and checks after it.</param>
+    public MainWindow(string localFolder, Action checkNow, Action quit, Func<Func<ActionFlow, Task>, Task> operate)
     {
         _localFolder = localFolder;
         _checkNow = checkNow;
+        _operate = operate;
         Title = Texts.AppName;
         Icon = Icons.For(amber: false);
         MinWidth = 800;
@@ -65,6 +71,7 @@ internal sealed class MainWindow : Window
             },
         });
         Content = _overlay;
+        _actions = new ActionFlow(localFolder, _overlay, App.Options.Log);
 
         KeyDown += (_, e) =>
         {
@@ -82,6 +89,9 @@ internal sealed class MainWindow : Window
 
         _headline.Text = "Checking";
     }
+
+    /// <summary>Tells something in the window, as a dialog with OK.</summary>
+    public Task InformAsync(string title, string text) => _overlay.InformAsync(title, text);
 
     /// <summary>Section 10's "anything else": the app keeps running, and the details are in gui.log.</summary>
     public Task ShowUnexpectedErrorAsync(string message) =>
@@ -113,7 +123,14 @@ internal sealed class MainWindow : Window
         _setup = null;
         _body.Content = _rows;
         _banners.Children.Clear();
-        if (Texts.Banner(status) is { } banner)
+        if (status.Condition == OverallCondition.Unfinished)
+        {
+            // Banner B2 names what did not finish, from the journal, and offers Recover (section 9.5).
+            var recover = new Button { Content = "Recover" };
+            recover.Click += (_, _) => _ = _operate(flow => flow.RecoverAsync());
+            _banners.Children.Add(Banner(ActionTexts.Unfinished(Journal.For(new LocalStore(_localFolder)).TryRead()), null, recover));
+        }
+        else if (Texts.Banner(status) is { } banner)
         {
             _banners.Children.Add(Banner(banner, status.Detail));
         }
@@ -124,10 +141,13 @@ internal sealed class MainWindow : Window
             _banners.Children.Add(Banner($"Another SaveTether operation is running ({holder.Command}, started {started}). Actions are paused until it finishes.", null));
         }
 
+        // While B1, B2 or B3 is shown, or another process holds the lock, the core would refuse every action (section 4.1).
+        var actionsAllowed = result.LockHeldBy is null
+            && status.Condition is not (OverallCondition.UpdateNeeded or OverallCondition.Unfinished or OverallCondition.SyncRootUnavailable);
         _rows.Children.Clear();
         foreach (var mapping in status.Mappings)
         {
-            _rows.Children.Add(Row(mapping));
+            _rows.Children.Add(Row(mapping, actionsAllowed));
         }
 
         if (status.Mappings.Count == 0 && status.Report is not null)
@@ -142,12 +162,19 @@ internal sealed class MainWindow : Window
         return control;
     }
 
-    private static Border Banner(string sentence, string? detail)
+    private static Border Banner(string sentence, string? detail, Button? action = null)
     {
         var text = new StackPanel { Spacing = 4, Children = { new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap, FontWeight = FontWeight.SemiBold } } };
         if (detail is not null)
         {
             text.Children.Add(new TextBlock { Text = detail, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 });
+        }
+
+        if (action is not null)
+        {
+            action.HorizontalAlignment = HorizontalAlignment.Left;
+            action.Margin = new Thickness(0, 6, 0, 0);
+            text.Children.Add(action);
         }
 
         return new Border
@@ -161,15 +188,37 @@ internal sealed class MainWindow : Window
         };
     }
 
-    private static Grid Row(MappingState mapping)
+    private Grid Row(MappingState mapping, bool actionsAllowed)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,240,200,*"), Margin = new Thickness(0, 6) };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,240,200,*,Auto"), Margin = new Thickness(0, 4) };
         Add(grid, 0, new Ellipse { Width = 10, Height = 10, Fill = new SolidColorBrush(Icons.ColourOf(mapping.Word.Shade)), Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 1, new TextBlock { Text = $"{mapping.AppName} {mapping.Role}", FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-        Add(grid, 2, new TextBlock { Text = mapping.Word.Word });
-        Add(grid, 3, new TextBlock { Text = mapping.Health.Source ?? string.Empty, Opacity = 0.75, TextTrimming = TextTrimming.CharacterEllipsis });
+        Add(grid, 1, new TextBlock { Text = $"{mapping.AppName} {mapping.Role}", FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+        Add(grid, 2, new TextBlock { Text = mapping.Word.Word, VerticalAlignment = VerticalAlignment.Center });
+        Add(grid, 3, new TextBlock { Text = mapping.Health.Source ?? string.Empty, Opacity = 0.75, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+
+        var action = MainActions.For(mapping.Health);
+        if (action != MainAction.None)
+        {
+            var button = new Button { Content = MainActions.Label(action), IsEnabled = actionsAllowed || action == MainAction.CheckAgain, Margin = new Thickness(12, 0, 0, 0) };
+            AutomationProperties.SetName(button, $"{MainActions.Label(action)} {mapping.AppName} {mapping.Role}");
+            button.Click += (_, _) =>
+            {
+                _ = action switch
+                {
+                    MainAction.Apply => _operate(flow => flow.ApplyAsync(mapping, useThisCopy: false)),
+                    MainAction.UseThisCopy => _operate(flow => flow.ApplyAsync(mapping, useThisCopy: true)),
+                    MainAction.Revert => _operate(flow => flow.RevertAsync(mapping)),
+                    _ => Task.Run(_checkNow),
+                };
+            };
+            Add(grid, 4, button);
+        }
+
         return grid;
     }
+
+    /// <summary>The flow the window's operations run through.</summary>
+    public ActionFlow Actions => _actions;
 
     private static void Add(Grid grid, int column, Control control)
     {
