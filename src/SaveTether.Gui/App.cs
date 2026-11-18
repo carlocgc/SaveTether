@@ -28,6 +28,7 @@ internal sealed class App : Application
     private bool _closeQuits;
     private bool _toldAboutTray;
     private bool? _iconAmber;
+    private bool _busy;
 
     public static StartOptions Options { get; set; } = null!;
 
@@ -78,7 +79,7 @@ internal sealed class App : Application
     {
         if (_window is null)
         {
-            _window = new MainWindow(Options.LocalFolder, CheckNow, Quit);
+            _window = new MainWindow(Options.LocalFolder, CheckNow, Quit, OperateAsync);
             _window.Closing += OnWindowClosing;
             if (_last is not null)
             {
@@ -92,9 +93,38 @@ internal sealed class App : Application
         CheckNow();
     }
 
-    /// <summary>Runs a check off the UI thread. One already running is not started twice.</summary>
+    /// <summary>
+    /// Runs one operation from the window. While it runs the app is busy: no check runs, since this process
+    /// holds the lock and a folder may be renamed aside for a moment, and Quit is refused. A check follows.
+    /// </summary>
+    public async Task OperateAsync(Func<ActionFlow, Task> operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (_busy || _window is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await operation(_window.Actions);
+        }
+        finally
+        {
+            _busy = false;
+            CheckNow();
+        }
+    }
+
+    /// <summary>Runs a check off the UI thread. One already running is not started twice, and none runs during an operation.</summary>
     public void CheckNow()
     {
+        if (_busy)
+        {
+            return;
+        }
+
         _ = Task.Run(() =>
         {
             var result = _monitor.Run();
@@ -107,7 +137,14 @@ internal sealed class App : Application
 
     public void Quit()
     {
-        // Operations come with the next part of phase 3; until then nothing can be running here.
+        // An operation is a journalled transaction: stopping one half way is what recover is for, not something to offer.
+        if (_busy)
+        {
+            ShowWindow();
+            _ = _window!.InformAsync("Not now", Texts.QuitRefused);
+            return;
+        }
+
         _tray?.Dispose();
         _desktop.Shutdown();
     }
