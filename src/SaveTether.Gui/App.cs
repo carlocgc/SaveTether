@@ -34,6 +34,9 @@ internal sealed class App : Application
 
     public static App? Instance { get; private set; }
 
+    /// <summary>The autostart entry: the Settings switch and banner B5.</summary>
+    public static SessionStart Session { get; private set; } = new(null, string.Empty);
+
     private static GuiLog Log => Options.Log;
 
     public override void Initialize()
@@ -51,6 +54,14 @@ internal sealed class App : Application
             _desktop = desktop;
             Dispatcher.UIThread.UnhandledException += OnUnhandledException;
             _monitor = HealthMonitor.For(new LocalStore(Options.LocalFolder));
+
+            // While starting with the session is on, the entry follows the app if it moved (section 11).
+            Session = new SessionStart(Core.Startup.Autostart.ForSystem(), Environment.ProcessPath ?? string.Empty);
+            if (Session.RefreshAtStart() is { } refreshed)
+            {
+                Log.Write(refreshed);
+            }
+
             _closeQuits = !TrayHost.Present();
             if (!_closeQuits)
             {

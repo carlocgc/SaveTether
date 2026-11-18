@@ -325,6 +325,13 @@ internal static class OutputWriter
         {
             stderr.WriteLine("Warning: an earlier operation did not finish. Run 'savetether recover'.");
         }
+
+        if (status.AutostartMissing is { } program)
+        {
+            stderr.WriteLine(
+                $"Warning: SaveTether is set to start with the session, but the entry points to '{program}', which is missing. " +
+                "Start the desktop app from where it is now to fix the entry, or turn starting with the session off in its settings.");
+        }
     }
 
     private static void WriteOperation(OperationOutput operation, TextWriter stdout, TextWriter stderr)

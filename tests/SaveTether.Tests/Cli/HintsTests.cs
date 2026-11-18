@@ -87,9 +87,10 @@ public partial class HintsTests
         var repo = FindRepositoryRoot();
         var core = Path.Combine(repo, "src", "SaveTether.Core");
         var offences = new List<string>();
-        // FlatpakSandbox runs the flatpak tool, whose options are its own, not SaveTether's.
+        // FlatpakSandbox runs the flatpak tool, whose options are its own, not SaveTether's. Autostart writes
+        // the desktop app's own command line, with its --minimized, into the session's entry; it is no message.
         var sources = Directory.EnumerateFiles(core, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !IsBuildOutput(f) && Path.GetFileName(f) != "FlatpakSandbox.cs")
+            .Where(f => !IsBuildOutput(f) && Path.GetFileName(f) is not ("FlatpakSandbox.cs" or "Autostart.cs"))
             .ToList();
         Assert.NotEmpty(sources);
         foreach (var file in sources)

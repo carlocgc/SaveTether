@@ -98,6 +98,8 @@ Then copy the image to the PC to look at it.
 
 **A page that greys out and stays so** has usually thrown inside work started with `_ = SomethingAsync()`: a task nobody awaits keeps its exception, so nothing is logged or shown. Look for a control read inside `Task.Run` (Avalonia refuses that off the UI thread): read the values first, then start the work. Found on the Deck in Add app.
 
+**Coordinates.** Take them from a capture made after the last change of layout: a banner, a dialog or a page change moves everything below it. A click that lands beside a button does nothing and gives no error, which reads like a bug in the app.
+
 **Helpers.** Two small scripts in the scratch folder save typing: `click.sh x y [wait]` (activate the window, click at window coordinates, wait) and `shot.sh name` (wake the display, activate the window, `spectacle -a` to `/tmp`). With `spectacle -a` on the Deck, the window's client area starts about 65 pixels right and 81 down from the capture's corner (shadow and title bar): subtract that from a point in the capture to get the coordinates to click.
 
 ## Testing against a real setup
@@ -161,6 +163,16 @@ A throwaway device whose apply replaced a shared copy, so it has a backup of eac
 - Restore the "This device" backup while linked: refused, "<role> is linked, so restoring would write into the shared copy. Revert first.", with Cancel and Revert. Revert: its confirmation and result; the list now has a "before reverting" backup.
 - Restore it again: the confirmation names the time and reason; afterwards the file on disk is the backed-up one, and there is a "before restoring" backup.
 - Restore the shared-copy backup: "Restore the shared saves for <role> on every device?" first, then the plan's confirmation; afterwards the shared folder holds the backed-up file.
+
+### Start with the session
+
+Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME` to a folder under the scratch area in the environment file, check it in the same `case` as `SAVETETHER_HOME`, and pass it to `systemd-run` with `-E XDG_CONFIG_HOME`. List `~/.config/autostart` before and after, and compare. On Windows the switch writes the real Run value: test it only with the owner's leave, and check `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` before and after.
+
+- Settings: the switch is off. Turn it on: `savetether.desktop` appears with `Exec="<the binary>" --minimized`. `savetether status` (with the same `XDG_CONFIG_HOME`) warns about nothing.
+- Make the entry stale (point `Exec` at a missing path with `sed`): `status` warns, and `--json` has `autostart_missing`. In the app, Check now: banner B5. Fix it: the entry names the binary again.
+- Stale again, then restart the app: the entry is rewritten at start, and `gui.log` says so.
+- Stale again, Check now, Turn it off: the entry is gone.
+- Not covered by this flow: logging in for real. That needs the owner's session, so it is done by the owner with the real entry.
 
 ### Add app
 
