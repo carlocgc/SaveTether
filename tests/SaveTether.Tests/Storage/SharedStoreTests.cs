@@ -76,11 +76,18 @@ public class SharedStoreTests
         // Rewriting it unchanged is fine.
         store.WriteMapping(Mapping("ppsspp.savedata", "ppsspp/SAVEDATA"));
 
-        AssertProblem(StoreProblem.Conflict, () => store.WriteMapping(Mapping("ppsspp.savedata", "ppsspp/other")));
-        AssertProblem(StoreProblem.Conflict, () => store.WriteMapping(Mapping("ppsspp.copy", "ppsspp/SAVEDATA")));
-        AssertProblem(StoreProblem.Conflict, () => store.WriteMapping(Mapping("ppsspp.lower", "ppsspp/savedata")));
+        // Each conflict carries what is in the way as fields, for a front end to word itself.
+        Assert.Equal(
+            new ConflictFacts(ConflictKind.TargetDiffers, "ppsspp.savedata", Target: "ppsspp/SAVEDATA"),
+            AssertProblem(StoreProblem.Conflict, () => store.WriteMapping(Mapping("ppsspp.savedata", "ppsspp/other"))).Conflict);
+        Assert.Equal(
+            new ConflictFacts(ConflictKind.TargetInUse, "ppsspp.savedata", Target: "ppsspp/SAVEDATA"),
+            AssertProblem(StoreProblem.Conflict, () => store.WriteMapping(Mapping("ppsspp.copy", "ppsspp/SAVEDATA"))).Conflict);
+        Assert.Equal(
+            new ConflictFacts(ConflictKind.TargetInUse, "ppsspp.savedata", Target: "ppsspp/SAVEDATA"),
+            AssertProblem(StoreProblem.Conflict, () => store.WriteMapping(Mapping("ppsspp.lower", "ppsspp/savedata"))).Conflict);
         AssertProblem(StoreProblem.Invalid, () => store.WriteMapping(Mapping("ppsspp.states", "eden/states")));
-        AssertProblem(StoreProblem.Invalid, () => store.WriteMapping(Mapping("Bad.Id", "Bad/x")));
+        Assert.Null(AssertProblem(StoreProblem.Invalid, () => store.WriteMapping(Mapping("Bad.Id", "Bad/x"))).Conflict);
 
         Assert.Equal(["ppsspp.savedata"], store.ListMappings().Select(m => m.Id));
         Assert.Equal("ppsspp/SAVEDATA", store.ReadMapping("ppsspp.savedata").Target);

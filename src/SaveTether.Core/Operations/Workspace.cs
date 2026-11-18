@@ -192,17 +192,17 @@ public sealed partial class Workspace
         var newSource = PathRules.Normalize(source);
         if (SourceOverlap(mappingId, newSource, SourcesOf(device)) is { } overlap)
         {
-            throw new StoreException(StoreProblem.Conflict, overlap);
+            throw new StoreException(overlap.Message, overlap.Facts);
         }
 
         if (device.Paths.TryGetValue(mappingId, out var current)
             && !PathRules.AreSame(current.Source, newSource) && IsLink(current.Source))
         {
             throw new StoreException(
-                StoreProblem.Conflict,
                 new Note(
                     $"'{mappingId}' is applied on this device at '{current.Source}', so its save folder cannot be changed.",
-                    new NextStep(NextStepKind.Revert, mappingId)));
+                    new NextStep(NextStepKind.Revert, mappingId)),
+                new ConflictFacts(ConflictKind.AppliedElsewhere, mappingId, Folder: current.Source));
         }
 
         var mapping = Shared.TryReadMapping(mappingId);
@@ -227,8 +227,8 @@ public sealed partial class Workspace
         else if (target is not null && target != mapping.Target)
         {
             throw new StoreException(
-                StoreProblem.Conflict,
-                $"Mapping '{mappingId}' already exists with target '{mapping.Target}'. Its target cannot be changed to '{target}'.");
+                $"Mapping '{mappingId}' already exists with target '{mapping.Target}'. Its target cannot be changed to '{target}'.",
+                new ConflictFacts(ConflictKind.TargetDiffers, mappingId, Target: mapping.Target));
         }
 
         // Unlike the target, the entry depth of an existing mapping may be changed: nothing points at it.
@@ -256,10 +256,10 @@ public sealed partial class Workspace
         if (IsLink(path.Source))
         {
             throw new StoreException(
-                StoreProblem.Conflict,
                 new Note(
                     $"'{mappingId}' is applied on this device: '{path.Source}' is a link.",
-                    new NextStep(NextStepKind.Revert, mappingId)));
+                    new NextStep(NextStepKind.Revert, mappingId)),
+                new ConflictFacts(ConflictKind.AppliedElsewhere, mappingId, Folder: path.Source));
         }
 
         var paths = new Dictionary<string, DevicePath>(device.Paths);
@@ -461,7 +461,8 @@ public sealed partial class Workspace
     /// folder reached two ways is still one folder; the save folder itself is not, since it is often a link.
     /// </summary>
     /// <param name="others">The other mappings' save folders, by mapping ID.</param>
-    internal static Note? SourceOverlap(string mappingId, string source, IEnumerable<KeyValuePair<string, string>> others)
+    internal static (Note Message, ConflictFacts Facts)? SourceOverlap(
+        string mappingId, string source, IEnumerable<KeyValuePair<string, string>> others)
     {
         var mine = PathRules.ResolveParents(source);
         foreach (var (otherId, otherSource) in others)
@@ -478,9 +479,11 @@ public sealed partial class Workspace
                 : null;
             if (how is not null)
             {
-                return new Note(
-                    $"'{source}' {how} '{otherId}' on this device ('{otherSource}'). A folder can be shared through one mapping only.",
-                    new NextStep(NextStepKind.RemoveMapping, otherId));
+                return (
+                    new Note(
+                        $"'{source}' {how} '{otherId}' on this device ('{otherSource}'). A folder can be shared through one mapping only.",
+                        new NextStep(NextStepKind.RemoveMapping, otherId)),
+                    new ConflictFacts(ConflictKind.FolderInUse, otherId, Folder: otherSource));
             }
         }
 

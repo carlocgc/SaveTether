@@ -124,16 +124,16 @@ public sealed class SharedStore
                 if (other.Target != mapping.Target)
                 {
                     throw new StoreException(
-                        StoreProblem.Conflict,
-                        $"Mapping '{mapping.Id}' already exists with target '{other.Target}'. Its target cannot be changed to '{mapping.Target}'.");
+                        $"Mapping '{mapping.Id}' already exists with target '{other.Target}'. Its target cannot be changed to '{mapping.Target}'.",
+                        new ConflictFacts(ConflictKind.TargetDiffers, mapping.Id, Target: other.Target));
                 }
             }
             else if (string.Equals(other.Target, mapping.Target, StringComparison.OrdinalIgnoreCase))
             {
                 var how = other.Target == mapping.Target ? "the same target" : "a target that differs only by letter case";
                 throw new StoreException(
-                    StoreProblem.Conflict,
-                    $"Mapping '{other.Id}' already uses {how} ('{other.Target}'). On Windows the two would be one folder.");
+                    $"Mapping '{other.Id}' already uses {how} ('{other.Target}'). On Windows the two would be one folder.",
+                    new ConflictFacts(ConflictKind.TargetInUse, other.Id, Target: other.Target));
             }
         }
 

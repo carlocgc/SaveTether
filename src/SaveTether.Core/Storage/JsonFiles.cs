@@ -70,10 +70,21 @@ public sealed class StoreException : IOException
         Next = message.Next;
     }
 
+    /// <param name="conflict">The facts behind a <see cref="StoreProblem.Conflict"/>.</param>
+    public StoreException(Note message, ConflictFacts conflict)
+        : this(StoreProblem.Conflict, message)
+    {
+        ArgumentNullException.ThrowIfNull(conflict);
+        Conflict = conflict;
+    }
+
     public StoreProblem Problem { get; } = StoreProblem.Invalid;
 
     /// <summary>What the owner can do about it. Each front end words it itself.</summary>
     public IReadOnlyList<NextStep> Next { get; } = [];
+
+    /// <summary>For <see cref="StoreProblem.Conflict"/>: what is in the way, as fields. Null for other problems.</summary>
+    public ConflictFacts? Conflict { get; }
 }
 
 /// <summary>

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using SaveTether.Core.Backup;
 using SaveTether.Core.Definitions;
 using SaveTether.Core.Health;
+using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
 using SaveTether.Core.Storage;
@@ -58,8 +59,10 @@ internal sealed record OperationOutput(
 /// <param name="Plan">Absent when there is no plan.</param>
 /// <param name="Problem">Why there is no plan.</param>
 /// <param name="Candidates">The installs of the app for this system, and whether each was found.</param>
+/// <param name="Conflict">When <paramref name="Problem"/> is a conflict: what is in the way.</param>
 internal sealed record AppOutput(
-    string AppId, bool Added, AppAddPlan? Plan, AppAddProblem? Problem, IReadOnlyList<InstallCandidate> Candidates);
+    string AppId, bool Added, AppAddPlan? Plan, AppAddProblem? Problem, IReadOnlyList<InstallCandidate> Candidates,
+    ConflictFacts? Conflict = null);
 
 /// <summary>"app list": one app that can be added.</summary>
 internal sealed record AppListEntry(string Id, string? Name, DefinitionSource Source, string? Error);
@@ -90,6 +93,9 @@ internal sealed record CliOutput
     /// <c>operation-running</c>. Absent otherwise.
     /// </summary>
     public StoreProblem? Problem { get; init; }
+
+    /// <summary>When <see cref="Problem"/> is <c>conflict</c>: what is in the way, as fields. Absent otherwise.</summary>
+    public ConflictFacts? Conflict { get; init; }
 
     public string? Message { get; init; }
 

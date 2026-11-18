@@ -202,7 +202,8 @@ internal static class CliApp
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 // The core's refusals outside the planner. Each says what is wrong and what to do; nothing was changed.
-                return Failed(ExitRefused, Hints.ErrorText(e)) with { Problem = (e as StoreException)?.Problem };
+                var store = e as StoreException;
+                return Failed(ExitRefused, Hints.ErrorText(e)) with { Problem = store?.Problem, Conflict = store?.Conflict };
             }
         }
 
@@ -357,7 +358,7 @@ internal static class CliApp
         private CliOutput AppFailed(string appId, AppAddOutcome outcome, string error) => new()
         {
             Command = command.Name, ExitCode = ExitRefused, Error = error,
-            App = new AppOutput(appId, Added: false, null, outcome.Problem, outcome.Candidates),
+            App = new AppOutput(appId, Added: false, null, outcome.Problem, outcome.Candidates, outcome.Conflict),
         };
 
         private CliOutput AppList()

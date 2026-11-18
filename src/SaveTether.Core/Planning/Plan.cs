@@ -220,7 +220,25 @@ public enum PrecheckKind
     RestoreDestinationUnusable,
 }
 
-public sealed record PrecheckFailure(PrecheckKind Kind, Note Message);
+/// <summary>
+/// One failed precondition. Where a front end needs a fact the message holds, it is also a field
+/// (design: desktop-app-spec.md, section 13, item 6); each field is set only for its kind.
+/// </summary>
+public sealed record PrecheckFailure(PrecheckKind Kind, Note Message)
+{
+    /// <summary>For <see cref="PrecheckKind.AppRunning"/>: what was found running, and what was looked for.</summary>
+    public ProcessFacts? Processes { get; init; }
+
+    /// <summary>For <see cref="PrecheckKind.NotEnoughSpace"/>: where, how much is needed and how much is free.</summary>
+    public SpaceFacts? Space { get; init; }
+}
+
+/// <param name="Running">The process names found running.</param>
+/// <param name="LookedFor">Every process name the mapping lists.</param>
+public sealed record ProcessFacts(IReadOnlyList<string> Running, IReadOnlyList<string> LookedFor);
+
+/// <param name="Path">The folder whose drive lacks the space, as the message names it.</param>
+public sealed record SpaceFacts(string Path, long NeededBytes, long FreeBytes);
 
 /// <summary>What the owner asked for on the command line.</summary>
 /// <param name="Choice">What to do with this device's saves; null when not given.</param>

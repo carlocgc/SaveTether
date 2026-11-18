@@ -59,7 +59,7 @@ public static class RestorePlanner
         var running = processNames.Count == 0 ? [] : ProcessCheck.FindRunning(processNames, processes.RunningProcessNames());
         if (running.Count > 0 && !request.AssumeClosed)
         {
-            Fail(PrecheckKind.AppRunning, Planner.AppRunningMessage(running, processNames));
+            failures.Add(Planner.AppRunning(running, processNames));
         }
 
         var data = backups.DataPathOf(backupId);
@@ -158,16 +158,12 @@ public static class RestorePlanner
         var currentBytes = current.Sum(e => e.Length);
         if (hasData && SnapshotReader.FreeBytesAt(backups.Root) is { } backupFree && currentBytes > backupFree)
         {
-            Fail(
-                PrecheckKind.NotEnoughSpace,
-                $"Backing up what is there now needs {currentBytes:N0} bytes, but only {backupFree:N0} are free at '{backups.Root}'.");
+            failures.Add(Planner.NotEnoughSpace("Backing up what is there now", backups.Root, currentBytes, backupFree));
         }
 
         if (SnapshotReader.FreeBytesAt(destination) is { } destinationFree && info.TotalBytes > destinationFree)
         {
-            Fail(
-                PrecheckKind.NotEnoughSpace,
-                $"Restoring needs {info.TotalBytes:N0} bytes, but only {destinationFree:N0} are free at '{destination}'.");
+            failures.Add(Planner.NotEnoughSpace("Restoring", destination, info.TotalBytes, destinationFree));
         }
 
         if (failures.Count > 0)

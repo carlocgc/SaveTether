@@ -100,8 +100,14 @@ public sealed record AppAddPlan(
 public sealed record AppAddOutcome(
     AppAddPlan? Plan, AppAddProblem? Problem, Note? Message, IReadOnlyList<InstallCandidate> Candidates)
 {
+    /// <summary>For <see cref="AppAddProblem.Conflict"/>: what is in the way, as fields. Null otherwise.</summary>
+    public ConflictFacts? Conflict { get; init; }
+
     public static AppAddOutcome Refuse(AppAddProblem problem, Note message, IReadOnlyList<InstallCandidate>? candidates = null) =>
         new(null, problem, message, candidates ?? []);
+
+    public static AppAddOutcome RefuseConflict(Note message, ConflictFacts conflict, IReadOnlyList<InstallCandidate> candidates) =>
+        Refuse(AppAddProblem.Conflict, message, candidates) with { Conflict = conflict };
 }
 
 public sealed partial class Workspace
@@ -264,20 +270,20 @@ public sealed partial class Workspace
             var mapping = Shared.TryReadMapping(mappingId);
             if (mapping is not null && mapping.Target != target)
             {
-                return AppAddOutcome.Refuse(
-                    AppAddProblem.Conflict,
+                return AppAddOutcome.RefuseConflict(
                     $"Mapping '{mappingId}' already exists with target '{mapping.Target}', but the definition says '{target}'.",
+                    new ConflictFacts(ConflictKind.TargetDiffers, mappingId, Target: mapping.Target),
                     candidates);
             }
 
             if (device.Paths.TryGetValue(mappingId, out var current) && !PathRules.AreSame(current.Source, source) && IsLink(current.Source))
             {
-                return AppAddOutcome.Refuse(
-                    AppAddProblem.Conflict,
+                return AppAddOutcome.RefuseConflict(
                     new Note(
                         $"'{mappingId}' is applied on this device at '{current.Source}', but the definition now finds '{source}'. " +
                         "It has to be reverted before the app is added again.",
                         new NextStep(NextStepKind.Revert, mappingId)),
+                    new ConflictFacts(ConflictKind.AppliedElsewhere, mappingId, Folder: current.Source),
                     candidates);
             }
 
@@ -285,7 +291,7 @@ public sealed partial class Workspace
             var others = SourcesOf(device).Concat(planned.Select(p => new KeyValuePair<string, string>(p.MappingId, p.Source)));
             if (SourceOverlap(mappingId, source, others) is { } overlap)
             {
-                return AppAddOutcome.Refuse(AppAddProblem.Conflict, overlap, candidates);
+                return AppAddOutcome.RefuseConflict(overlap.Message, overlap.Facts, candidates);
             }
 
             var note = mapping is not null && mapping.Depth != role.EntryDepth
