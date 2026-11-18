@@ -56,6 +56,8 @@ public sealed class OperationSession : IDisposable
 
     public PlanOutcome PlanRevert(string mappingId, bool assumeClosed) => Workspace.PlanRevert(mappingId, assumeClosed);
 
+    public PlanOutcome PlanRestore(string backupId, RestoreRequest request) => Workspace.PlanRestore(backupId, request);
+
     /// <summary>The Flatpak grant is offered only when it is all that stands in the way and the app's permissions could be read.</summary>
     public SandboxReach? GrantableSandbox(string mappingId, Refusal refusal)
     {
