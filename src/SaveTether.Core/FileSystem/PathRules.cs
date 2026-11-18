@@ -18,6 +18,32 @@ public static class PathRules
         return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
     }
 
+    /// <summary>
+    /// True when <paramref name="path"/> is absolute on Windows or on Linux, whichever this machine is. For a
+    /// path in a shared file written by another device: a Windows device's <c>E:\Games</c> is a good value
+    /// when read on the Deck, though only that device can use it. Relative paths are refused on both.
+    /// </summary>
+    public static bool IsAbsoluteOnAnySystem(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        // A network path needs a server after the two backslashes; .NET on Windows also takes a bare \\.
+        if (path.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            return !string.IsNullOrWhiteSpace(path[2..].Trim('\\'));
+        }
+
+        if (Path.IsPathFullyQualified(path) || path.StartsWith('/'))
+        {
+            return true;
+        }
+
+        return path.Length >= 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/';
+    }
+
     /// <summary>Lexical equality of two paths under this platform's case rule.</summary>
     public static bool AreSame(string a, string b) => string.Equals(Normalize(a), Normalize(b), NameComparison);
 

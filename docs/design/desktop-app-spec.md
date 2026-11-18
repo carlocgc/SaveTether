@@ -138,6 +138,13 @@ On Next the app checks the folder and shows one of:
 - After setup the window shows the Apps page. When the device was taken over and has folders set (a restore after a wipe), it also shows: "This device has <n> apps set up. Apply them all now?" with **Apply all** (section 9.4) and Not now.
 - First run only, before step 6.1: the install step of section 11, when the app is not running from the per-user location.
 
+*As built (2026-11-18):* `SetupFlow` in the presentation project, shown by `SetupView`. Three choices were made while building it:
+- **The lock.** Set up takes the operation lock. The app's own files mean the local folder exists before setup, so a CLI could run at the same moment.
+- **The backup location.** It is passed to `Init` only when the owner changed it. Unchanged, the core decides, as the CLI does without `--backup-root`. So a taken-over device's location that is not there is not created, since its drive may only be disconnected; the page shows the core's note beforehand.
+- **Typed paths.** A typed path may start with `~` on Linux.
+
+Not built yet: the install step, the Apply all offer after a take-over (it needs operations, section 9.4), and reaching setup again from banner B4.
+
 ## 7. Operation flow, common to every action
 
 Apply, Revert, Restore, Recover, Add app, Stop using here, the Flatpak grant and its revoke, Take over and changing the backup location are operations. Each:
