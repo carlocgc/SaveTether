@@ -56,7 +56,9 @@ public static class ActionTexts
         "Otherwise both devices will make their own saves the shared copy.";
 
     /// <summary>Section 9.2's precondition table: one sentence for each kind.</summary>
-    public static string Precondition(PrecheckFailure failure, string role)
+    /// <param name="role">The mapping, as the row names it: "Eden saves".</param>
+    /// <param name="app">The app, for what concerns the program rather than its folder: "Eden".</param>
+    public static string Precondition(PrecheckFailure failure, string role, string app)
     {
         ArgumentNullException.ThrowIfNull(failure);
         return failure.Kind switch
@@ -64,10 +66,10 @@ public static class ActionTexts
             PrecheckKind.SyncRootNotInitialized => "The sync folder is not available.",
             PrecheckKind.UnfinishedOperation => "An earlier operation did not finish. Recover it first.",
             PrecheckKind.AppRunning => failure.Processes is { } p
-                ? $"Close {role} first. SaveTether looked for: {string.Join(", ", p.LookedFor)}."
-                : $"Close {role} first.",
+                ? $"Close {app} first. SaveTether looked for: {string.Join(", ", p.LookedFor)}."
+                : $"Close {app} first.",
             PrecheckKind.SandboxCannotReach =>
-                $"{role} is a Flatpak and cannot write to the shared folder. SaveTether can give it access to the SaveTether folder in the sync folder, and nothing else.",
+                $"{app} is a Flatpak and cannot write to the shared folder. SaveTether can give it access to the SaveTether folder in the sync folder, and nothing else.",
             PrecheckKind.SourceParentMissing =>
                 "The folder that should hold the save folder does not exist. The app may have moved, or not been started yet.",
             PrecheckKind.BackupLocationUnusable => "Backups cannot be written to the backup location.",
@@ -86,7 +88,7 @@ public static class ActionTexts
     }
 
     /// <summary>A refusal as a dialog shows it. <see cref="RefusalKind.ChoiceNeeded"/> and <see cref="RefusalKind.ConfirmationNeeded"/> have their own dialogs.</summary>
-    public static RefusalView Describe(Refusal refusal, string role, bool sandboxGrantPossible)
+    public static RefusalView Describe(Refusal refusal, string role, string app, bool sandboxGrantPossible)
     {
         ArgumentNullException.ThrowIfNull(refusal);
         string[] messages = [refusal.Message.Text, .. refusal.Failures.Select(f => f.Message.Text)];
@@ -95,7 +97,7 @@ public static class ActionTexts
         {
             RefusalKind.Precondition => new RefusalView(
                 $"{role} cannot be {Done(refusal.Operation)} yet",
-                refusal.Failures.Select(f => Precondition(f, role)).Distinct(StringComparer.Ordinal).ToList(),
+                refusal.Failures.Select(f => Precondition(f, role, app)).Distinct(StringComparer.Ordinal).ToList(),
                 PreconditionActions(refusal, sandboxGrantPossible),
                 details),
             RefusalKind.NotArrived => new RefusalView(
@@ -249,7 +251,11 @@ public static class ActionTexts
     }
 
     /// <summary>A result as section 9.3 shows it.</summary>
-    public static (string Title, IReadOnlyList<string> Sentences) Result(ExecutionResult result, string role)
+    /// <param name="recovery">
+    /// True for <c>Recover</c>'s result. Then Completed means the unfinished operation was carried through,
+    /// and RolledBack means it was undone: recovery succeeded either way, so neither is worded as a failure.
+    /// </param>
+    public static (string Title, IReadOnlyList<string> Sentences) Result(ExecutionResult result, string role, bool recovery = false)
     {
         ArgumentNullException.ThrowIfNull(result);
         var sentences = result.Messages.Select(m => m.Text).ToList();
@@ -260,18 +266,20 @@ public static class ActionTexts
             PlanOperation.Restore => "Restore",
             _ => "Apply",
         };
-        var title = result.Status switch
+        var title = (result.Status, recovery) switch
         {
-            ExecutionStatus.Completed => result.Operation switch
+            (ExecutionStatus.Completed, true) => $"Recovered: the unfinished {operation.ToLowerInvariant()} was finished.",
+            (ExecutionStatus.RolledBack, true) => $"Recovered: the unfinished {operation.ToLowerInvariant()} was undone. Nothing has changed.",
+            (ExecutionStatus.Completed, _) => result.Operation switch
             {
                 PlanOperation.Revert => $"{role} has its own copy again.",
                 PlanOperation.Restore => "The backup is restored.",
                 _ => $"{role} is linked.",
             },
-            ExecutionStatus.Refused => "Nothing was changed.",
-            ExecutionStatus.RolledBack => $"{operation} failed and was undone. Nothing has changed.",
-            ExecutionStatus.RecoveryNeeded => $"{operation} stopped part way. Recover it before doing anything else.",
-            ExecutionStatus.NothingToRecover => "Nothing to recover: no operation is unfinished.",
+            (ExecutionStatus.Refused, _) => "Nothing was changed.",
+            (ExecutionStatus.RolledBack, _) => $"{operation} failed and was undone. Nothing has changed.",
+            (ExecutionStatus.RecoveryNeeded, _) => $"{operation} stopped part way. Recover it before doing anything else.",
+            (ExecutionStatus.NothingToRecover, _) => "Nothing to recover: no operation is unfinished.",
             _ => throw new ArgumentOutOfRangeException(nameof(result), result.Status, "A result with no text."),
         };
         if (result.Error is { } error)

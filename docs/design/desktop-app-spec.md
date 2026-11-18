@@ -155,6 +155,19 @@ Apply, Revert, Restore, Recover, Add app, Stop using here, the Flatpak grant and
 4. On a plan, shows the confirmation for that action, with the plan's steps in plain words under "Show steps". The lock is held while the dialog is open, so the plan cannot go stale behind it; a dialog left open for 10 minutes is cancelled and the lock released (decision 5).
 5. Runs the plan with progress (9.3), then shows the result (9.3), releases the lock, and runs a health check.
 
+*As built (2026-11-18), for Apply, Revert and Recover.* `OperationSession` (presentation project) holds the lock from the first plan to the result; `ActionFlow` (the app) shows the dialogs. While an operation runs, the app runs no health check, since its own lock is held and a folder may be renamed aside for a moment, and Quit is refused with section 2's sentence.
+
+Choices made while building:
+- **Arriving saves.** The choice dialog cannot know beforehand that the shared copy may still be arriving: the core says so only once add-missing or replace-shared is chosen (`RefusalKind.NotArrived` with `AssumeSyncedWouldHelp`). So that choice is followed by a dialog with section 9.2's sentence and "The shared saves really were deleted". Disabling the two choices in advance is not done.
+- **Which button has the focus.** In refusal dialogs Cancel has the focus, not Check again: it is the choice that changes nothing.
+- **Recovery's result** is worded as recovery succeeding: "Recovered: the unfinished apply was undone." The plain run's "failed and was undone" read as a new failure (found on the Deck).
+
+Not built yet:
+- the other row actions: Open folder, Backups, Stop using here, Find the app again;
+- Apply all;
+- Restore;
+- Add app.
+
 ## 8. Add app
 
 A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmation.

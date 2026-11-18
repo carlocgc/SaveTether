@@ -145,7 +145,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         using (session)
         {
             var result = await RunWithProgressAsync("Recovering", null, progress => session.Recover(progress));
-            await ShowResultAsync(result, result.MappingId ?? "the operation");
+            await ShowResultAsync(result, result.MappingId ?? "the operation", recovery: true);
         }
     }
 
@@ -165,7 +165,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     private async Task<RefusalAction?> HandleRefusalAsync(OperationSession session, MappingState mapping, string role, Refusal refusal)
     {
         var grant = await Task.Run(() => session.GrantableSandbox(mapping.MappingId, refusal));
-        var view = ActionTexts.Describe(refusal, role, grant is not null);
+        var view = ActionTexts.Describe(refusal, role, mapping.AppName, grant is not null);
         var close = new Button { Content = view.Actions.Count == 0 ? "Close" : "Cancel" };
         var buttons = new List<Button> { close };
         var actionOf = new Dictionary<Button, RefusalAction>();
@@ -324,9 +324,9 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
     }
 
-    private async Task ShowResultAsync(ExecutionResult result, string role)
+    private async Task ShowResultAsync(ExecutionResult result, string role, bool recovery = false)
     {
-        var (title, sentences) = ActionTexts.Result(result, role);
+        var (title, sentences) = ActionTexts.Result(result, role, recovery);
         await overlay.InformAsync(title, sentences.Count == 0 ? "Done." : string.Join("\n\n", sentences));
     }
 

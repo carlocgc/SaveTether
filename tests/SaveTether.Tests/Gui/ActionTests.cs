@@ -17,6 +17,7 @@ public class ActionTests
 {
     private const string Id = CliDevice.MappingId;
     private const string Role = "PPSSPP savedata";
+    private const string App = "PPSSPP";
 
     [Fact]
     public void Every_refusal_precondition_step_and_result_has_an_app_text()
@@ -24,12 +25,12 @@ public class ActionTests
         // A new enum value without a text fails here (section 14, exhaustiveness).
         foreach (var kind in Enum.GetValues<PrecheckKind>())
         {
-            Assert.False(string.IsNullOrWhiteSpace(ActionTexts.Precondition(new PrecheckFailure(kind, "core message"), Role)));
+            Assert.False(string.IsNullOrWhiteSpace(ActionTexts.Precondition(new PrecheckFailure(kind, "core message"), Role, App)));
         }
 
         foreach (var kind in Enum.GetValues<RefusalKind>())
         {
-            var view = ActionTexts.Describe(Refusal(kind, [new PrecheckFailure(PrecheckKind.TargetNotLocal, "core message")]), Role, sandboxGrantPossible: false);
+            var view = ActionTexts.Describe(Refusal(kind, [new PrecheckFailure(PrecheckKind.TargetNotLocal, "core message")]), Role, App, sandboxGrantPossible: false);
             Assert.False(string.IsNullOrWhiteSpace(view.Title));
             Assert.NotEmpty(view.Sentences);
             Assert.Contains("core message", view.Details + Refusal(kind, []).Message.Text, StringComparison.Ordinal);
@@ -42,8 +43,19 @@ public class ActionTests
 
         foreach (var status in Enum.GetValues<ExecutionStatus>())
         {
-            Assert.False(string.IsNullOrWhiteSpace(ActionTexts.Result(new ExecutionResult(status, Id, PlanOperation.Apply, [], []), Role).Title));
+            foreach (var recovery in new[] { false, true })
+            {
+                Assert.False(string.IsNullOrWhiteSpace(ActionTexts.Result(new ExecutionResult(status, Id, PlanOperation.Apply, [], []), Role, recovery).Title));
+            }
         }
+
+        // Recovery that undoes is recovery succeeding, not the operation failing again (found on the Deck).
+        Assert.Equal(
+            "Recovered: the unfinished apply was undone. Nothing has changed.",
+            ActionTexts.Result(new ExecutionResult(ExecutionStatus.RolledBack, Id, PlanOperation.Apply, [], []), Id, recovery: true).Title);
+        Assert.Equal(
+            "Apply failed and was undone. Nothing has changed.",
+            ActionTexts.Result(new ExecutionResult(ExecutionStatus.RolledBack, Id, PlanOperation.Apply, [], []), Role).Title);
 
         var all = Refusal(RefusalKind.ChoiceNeeded, []) with { AllowedChoices = Enum.GetValues<SetupChoice>() };
         Assert.Equal(Enum.GetValues<SetupChoice>(), ActionTexts.Choices(all, "PPSSPP").Select(c => c.Choice));
@@ -85,14 +97,16 @@ public class ActionTests
         var refusal = Planner.Plan(
             Snap.WithLocalSaves() with { ProcessNamesChecked = ["PPSSPPSDL", "PPSSPPQt"], RunningProcesses = ["PPSSPPSDL"] },
             new ApplyRequest(SetupChoice.Copy)).Refusal!;
-        var view = ActionTexts.Describe(refusal, Role, sandboxGrantPossible: false);
-        Assert.Equal([$"Close {Role} first. SaveTether looked for: PPSSPPSDL, PPSSPPQt."], view.Sentences);
+        var view = ActionTexts.Describe(refusal, Role, App, sandboxGrantPossible: false);
+
+        // The app is closed, not its save folder: found on the Deck as "Close test saves first".
+        Assert.Equal([$"Close {App} first. SaveTether looked for: PPSSPPSDL, PPSSPPQt."], view.Sentences);
         Assert.Equal([RefusalAction.CheckAgain, RefusalAction.AssumeClosed], view.Actions);
         Assert.Contains("appears to be running", view.Details, StringComparison.Ordinal);
 
         // Not enough space, worded from its facts.
         var space = Planner.Plan(Snap.WithLocalSaves() with { FreeBytesAtTarget = 10 }, new ApplyRequest(SetupChoice.Copy)).Refusal!;
-        Assert.Equal([$"Not enough free space at {Snap.Target}: 300 bytes needed, 10 bytes free."], ActionTexts.Describe(space, Role, false).Sentences);
+        Assert.Equal([$"Not enough free space at {Snap.Target}: 300 bytes needed, 10 bytes free."], ActionTexts.Describe(space, Role, App, false).Sentences);
     }
 
     [Fact]
