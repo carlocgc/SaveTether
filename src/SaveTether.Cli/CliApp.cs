@@ -137,6 +137,9 @@ internal static class CliApp
           savetether backup restore <backup-id> [--confirm-replace] [--assume-closed] [--dry-run]
               Put a backup back where it was taken from. What is there now is backed up first.
               --confirm-replace is needed for a backup of a shared folder.
+          savetether backup delete <backup-id> [--confirm-delete]
+              Delete one backup. It cannot be undone, so it asks first, or needs --confirm-delete.
+              The first backup of a folder is usually the only copy from before SaveTether changed it.
 
           savetether recover
               Undo or finish an operation that was interrupted.
@@ -196,6 +199,7 @@ internal static class CliApp
                         Backups = Open().ListBackups(command.FirstPositional),
                     },
                     "backup restore" => Restore(),
+                    "backup delete" => DeleteBackup(),
                     _ => Recover(),
                 };
             }
@@ -478,6 +482,39 @@ internal static class CliApp
             return Single(
                 (ws, confirmed) => ws.PlanRestore(backupId, request with { ConfirmReplace = request.ConfirmReplace || confirmed }),
                 backupId.Split('/')[0]);
+        }
+
+        /// <summary>
+        /// "backup delete": one backup, after a confirmation at a terminal or with --confirm-delete. The first
+        /// backup of a mapping gets a stronger warning, since it is usually the only copy from before SaveTether.
+        /// </summary>
+        private CliOutput DeleteBackup()
+        {
+            var backupId = command.Positionals[0];
+            var workspace = Open();
+            var deletion = workspace.DescribeBackupDeletion(backupId);
+            if (!command.Has("--confirm-delete"))
+            {
+                if (!CanAsk)
+                {
+                    return Failed(ExitRefused, $"Deleting backup '{backupId}' cannot be undone. Add --confirm-delete to go ahead.");
+                }
+
+                var backup = deletion.Backup;
+                var first = deletion.WasFirst
+                    ? $"\nThis is the first backup of {backup.MappingId}: usually the only copy of '{backup.SourcePath}' from before SaveTether changed it."
+                    : string.Empty;
+                var question =
+                    $"Delete backup '{backupId}' ({backup.FileCount} file(s), {OutputWriter.FormatBytes(backup.TotalBytes)}, of '{backup.SourcePath}')?{first}" +
+                    "\nIt cannot be undone.";
+                if (!Confirm(question))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was deleted.");
+                }
+            }
+
+            var deleted = workspace.DeleteBackup(backupId);
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, BackupDeleted = deleted };
         }
 
         private CliOutput Recover()

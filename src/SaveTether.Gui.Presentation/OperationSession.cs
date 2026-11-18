@@ -58,6 +58,9 @@ public sealed class OperationSession : IDisposable
 
     public PlanOutcome PlanRestore(string backupId, RestoreRequest request) => Workspace.PlanRestore(backupId, request);
 
+    /// <summary>"backup delete", after its confirmation. Refused (a <see cref="Core.Backup.BackupException"/>) while an operation is unfinished.</summary>
+    public Core.Backup.BackupDeletion DeleteBackup(string backupId) => Workspace.DeleteBackup(backupId);
+
     /// <summary>The Flatpak grant is offered only when it is all that stands in the way and the app's permissions could be read.</summary>
     public SandboxReach? GrantableSandbox(string mappingId, Refusal refusal)
     {

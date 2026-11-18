@@ -181,6 +181,41 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
     }
 
+    /// <summary>
+    /// Delete one backup (section 9.7, as built): a confirmation worded more strongly for the kept first backup,
+    /// then the core's delete under the lock. Nothing else is touched. Answers whether it was deleted.
+    /// </summary>
+    public async Task<bool> DeleteBackupAsync(BackupRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (!await overlay.ConfirmAsync(BackupsPage.DeleteTitle(row), BackupsPage.DeleteText(row), BackupsPage.DeleteButton(row)))
+        {
+            return false;
+        }
+
+        var session = await BeginAsync("backup delete");
+        if (session is null)
+        {
+            return false;
+        }
+
+        using (session)
+        {
+            try
+            {
+                var deleted = await Task.Run(() => session.DeleteBackup(row.Info.Id));
+                log.Write($"backup delete {row.Info.Id}: done{(deleted.WasFirst ? ", the first backup" : string.Empty)}, {deleted.Remaining} left");
+                return true;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                log.Write($"backup delete {row.Info.Id} refused: {e.Message}");
+                await overlay.InformAsync("Nothing was deleted", e.Message);
+                return false;
+            }
+        }
+    }
+
     private async Task RevertAsync(Subject mapping)
     {
         var role = mapping.Name;

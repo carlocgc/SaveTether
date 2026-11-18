@@ -314,6 +314,24 @@ $.operations[]: object
 $.schema: number
 $: object
 
+## backup-delete
+$.backup_deleted.backup.created_utc: string
+$.backup_deleted.backup.file_count: number
+$.backup_deleted.backup.id: string
+$.backup_deleted.backup.location: string
+$.backup_deleted.backup.mapping_id: string
+$.backup_deleted.backup.reason: string
+$.backup_deleted.backup.source_path: string
+$.backup_deleted.backup.total_bytes: number
+$.backup_deleted.backup: object
+$.backup_deleted.remaining: number
+$.backup_deleted.was_first: boolean
+$.backup_deleted: object
+$.command: string
+$.exit_code: number
+$.schema: number
+$: object
+
 ## backup-list
 $.backups: array
 $.backups[].created_utc: string

@@ -205,6 +205,18 @@ Flags:
 
 `backup list [<id>]`, no flags. `backups[]`: `id` (give it to `backup restore`), `mapping_id`, `created_utc`, `reason` (a backup reason below), `source_path`, `file_count`, `total_bytes`, `location` (the backup's folder; its `data` subfolder is a plain copy).
 
+### `backup delete`
+
+`backup delete <backup-id>`, with `--confirm-delete`. With `--json` nothing is asked, so without `--confirm-delete` it is refused (exit 1) and nothing is deleted. Refused too while an operation is unfinished (exit 3), since recovering it may need its backups. Added 2026-11-18.
+
+`backup_deleted` object, present when the backup was deleted:
+
+| Field | Type | |
+|---|---|---|
+| `backup` | object | The backup that was deleted, with the fields of `backups[]` above. |
+| `was_first` | boolean | It was its mapping's first backup, which retention never removes: usually the only copy of the folder from before SaveTether changed it. |
+| `remaining` | number | How many backups of the mapping are left. |
+
 ## Conflict
 
 The `conflict` object, at the top level for a store refusal and in `app` for `app add`:

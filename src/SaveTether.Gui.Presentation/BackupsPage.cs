@@ -122,6 +122,34 @@ public static class BackupsPage
 
     public const string KeptText = "Kept: the first backup of this folder is never removed.";
 
+    /// <summary>Delete's confirmation title.</summary>
+    public static string DeleteTitle(BackupRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return $"Delete the backup from {row.When}?";
+    }
+
+    /// <summary>
+    /// Delete's confirmation. The kept first backup is worded more strongly: it is usually the only copy of
+    /// the folder from before SaveTether changed it, and nothing else would bring that state back.
+    /// </summary>
+    public static string DeleteText(BackupRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var what = $"{row.Of}, {row.Reason}, {row.Size}. It cannot be undone.";
+        return row.Kept
+            ? $"{what}\n\nThis is the first backup of this folder: usually the only copy of it from before SaveTether changed it. " +
+              "Keep it unless you are sure you will never want that state back."
+            : what;
+    }
+
+    /// <summary>Delete's button in the confirmation: plainer for an ordinary backup, explicit for the kept one.</summary>
+    public static string DeleteButton(BackupRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return row.Kept ? "Delete the first backup" : "Delete";
+    }
+
     /// <summary>The confirmation for a backup of the shared copy (section 9.7), like replace-shared's.</summary>
     public static string RestoreSharedTitle(string role) => $"Restore the shared saves for {role} on every device?";
 
