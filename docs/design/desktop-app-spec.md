@@ -103,6 +103,19 @@ The core's `HealthState` has seven values. Not applied, Replaced and Broken each
 
 "Not applied, no folder set" counts as grey but is listed after everything else, under a collapsed "Not on this device (*n*)" heading, so a device that uses three of ten shared apps is not cluttered.
 
+*As built (2026-11-18):* `AppsPage` (presentation project) holds this table, the grouping and the order; the window shows each row's main action as a button and the others under **More**.
+
+Changes from the table above:
+- **Linked rows** have no main button, as the table says. Revert is under More. The previous build had made Revert the main action, which the table does not.
+- **Opening folders.** Open folder uses `explorer` on Windows and `xdg-open` on Linux.
+- **No device has a folder.** When no device has a folder set for the mapping, the row says "No device has a folder set for it." instead of "Set up on <devices>".
+- **The collapsed section** stays open across checks, and its rows name their app, since there is no app heading above them.
+
+Not built yet:
+- **Backups**, which needs the Backups page.
+- **Find the app again, Add, Add again**, which need Add app.
+- **Opening the other actions by keyboard:** they are a Tab stop (the More button), not the Menu key or Shift+F10 (section 12).
+
 **Stop using here** is `map remove`: refused by the core while applied, so it is only offered when Ready to link. It asks for confirmation: "Forget this device's folder for <role>? Nothing is deleted; the shared copy and other devices are not affected."
 
 The "Folder setting is wrong" row turns the overall state amber, unlike the core's Not applied (decision 4). Keeping it green, as the CLI does, would leave a misconfiguration unnoticed.
@@ -278,6 +291,8 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 For every row in the Ready to link, Not linked or Link missing state, one `PlanApply` with no choice, in name order, each its own operation. A mapping that needs a choice or is refused is skipped, and stays on the page with its reason. Rows that needed no choice are applied after one confirmation listing them all. Afterwards: "<n> linked. <m> need you:" and the list, each opening its own Apply.
 
 This differs from the CLI's `apply --all`, which stops at the first mapping needing a choice. The window can show all of them at once, so it carries on.
+
+*As built (2026-11-18):* all rows are planned in one operation session; the confirmation names those it will link and those that need you first; a run that stops part way ends Apply all, since nothing else may run until it is recovered. The summary names the rows still needing you; each is opened from its own Apply button.
 
 ### 9.5 Recover
 

@@ -65,8 +65,14 @@ public class ActionTests
         {
             foreach (var reason in reasons)
             {
-                MainActions.For(new MappingHealth(Id, state, "/s", "/t", new Note("detail"), reason));
+                var row = AppsPage.Row(Mapping(state, reason));
+                Assert.False(string.IsNullOrWhiteSpace(row.Sentence));
             }
+        }
+
+        foreach (var action in Enum.GetValues<RowAction>())
+        {
+            Assert.False(string.IsNullOrWhiteSpace(AppsPage.Label(action)));
         }
     }
 
@@ -141,7 +147,7 @@ public class ActionTests
         }
 
         Assert.Equal(OverallCondition.AllLinked, StatusCheck.Run(local).Condition);
-        Assert.Equal(MainAction.Revert, MainActions.For(StatusCheck.Run(local).Mappings[0].Health));
+        Assert.Contains(RowAction.Revert, AppsPage.Row(StatusCheck.Run(local).Mappings[0]).Others);
 
         // Revert, in a session of its own.
         var (revert, _) = OperationSession.Begin(local, "revert", new Processes(), null);
@@ -185,21 +191,8 @@ public class ActionTests
         sandbox.AssertCanaryIntact();
     }
 
-    [Fact]
-    public void Each_state_has_the_spec_main_action()
-    {
-        MainAction For(HealthState state, HealthReason? reason = null) => MainActions.For(new MappingHealth(Id, state, "/s", "/t", new Note("d"), reason));
-
-        Assert.Equal(MainAction.Revert, For(HealthState.Ok));
-        Assert.Equal(MainAction.Apply, For(HealthState.NotApplied, HealthReason.NotLinkedYet));
-        Assert.Equal(MainAction.None, For(HealthState.NotApplied, HealthReason.NoSaveFolder));
-        Assert.Equal(MainAction.Apply, For(HealthState.Replaced, HealthReason.FolderHoldsFiles));
-        Assert.Equal(MainAction.Apply, For(HealthState.Replaced, HealthReason.FolderEmpty));
-        Assert.Equal(MainAction.None, For(HealthState.Replaced, HealthReason.FolderMissing));
-        Assert.Equal(MainAction.CheckAgain, For(HealthState.Broken, HealthReason.SharedFolderMissing));
-        Assert.Equal(MainAction.UseThisCopy, For(HealthState.DoubleSeed));
-        Assert.Equal(MainAction.None, For(HealthState.ForeignLink));
-    }
+    private static MappingState Mapping(HealthState state, HealthReason? reason) =>
+        new(Id, "PPSSPP", "savedata", StateWords.For(state, reason), new MappingHealth(Id, state, "/s", "/t", new Note("d"), reason));
 
     private static Refusal Refusal(RefusalKind kind, IReadOnlyList<PrecheckFailure> failures) =>
         new(Id, kind, Classification.NotClassified, new Note("core message"), failures, [], false, null);

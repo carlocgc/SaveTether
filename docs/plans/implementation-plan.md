@@ -436,6 +436,11 @@ Progress:
   - *Tests: every refusal kind, precondition, step, result and setup choice has an app text (a new value without one fails); the choices equal `AllowedChoices` for the first-device and guard cases; and Apply, Revert and Recover run through a session against fixture devices, with the lock refusing the CLI meanwhile.*
   - *On the Deck, with a throwaway device driven by `xdotool`: Apply went through the app-running refusal, "the app is closed", the choice dialog, the confirmation with its steps and the result, leaving the link and the shared copy on disk. Revert left a real folder with the saves. Recover, after a CLI apply killed part way, undid it with the files intact. Two wordings were fixed from this: the app-running sentence named the role instead of the app, and recovery's result read as a failure.*
   - *Still to come: the other row actions, Apply all, Restore and Add app.*
+- *Apps page: built 2026-11-18 (spec sections 5 and 9.4, "As built").*
+  - *What it covers: rows grouped by app with attention first; section 5.1's sentences, including "Set up on <devices>" and a foreign link's target; More with Open folder, Open shared folder, their parents, Stop using here and Details; "Not on this device (n)" collapsed; and Apply all.*
+  - *Tests: the 5.1 table for every state and reason, the grouping and order, Apply all's planning against a fixture device, and Stop using here refused while linked and done when ready.*
+  - *On the Deck, with throwaway devices: the page and its More menu, Open folder (Dolphin opened at the folder), Apply all (linked the row that needed no choice and named the one that did), and Stop using here (the folder was forgotten, its files kept).*
+  - *Fixed from the run: Apply all was hidden with one row left; the collapsed section closed at each check; and its rows did not name their app.*
 
 Exit test: on Windows and on Linux, a new user sets up a device, adds an app and applies it without the CLI; the tray icon turns amber when the sync root is unmounted and green again when it returns.
 

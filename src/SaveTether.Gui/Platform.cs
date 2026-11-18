@@ -127,6 +127,32 @@ internal static class TrayHost
     }
 }
 
+/// <summary>"Open folder": the folder in the desktop's file manager. The path is passed as an argument, never through a shell.</summary>
+internal static class FolderOpener
+{
+    public static void Open(string path, GuiLog log)
+    {
+        try
+        {
+            var start = OperatingSystem.IsWindows()
+                ? new ProcessStartInfo("explorer.exe") { UseShellExecute = false }
+                : Tools.Find("xdg-open") is { } xdgOpen ? new ProcessStartInfo(xdgOpen) { UseShellExecute = false } : null;
+            if (start is null)
+            {
+                log.Write("open folder: xdg-open is not on PATH");
+                return;
+            }
+
+            start.ArgumentList.Add(path);
+            using var process = Process.Start(start);
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            log.Write($"open folder failed for '{path}': {e.Message}");
+        }
+    }
+}
+
 internal static class Tools
 {
     /// <summary>The full path of a program on <c>PATH</c>, or null.</summary>

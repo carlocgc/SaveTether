@@ -127,6 +127,95 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
     }
 
+    /// <summary>"Stop using here" (section 5): <c>map remove</c> after its confirmation. Nothing is deleted.</summary>
+    public async Task StopUsingAsync(MappingState mapping)
+    {
+        var role = $"{mapping.AppName} {mapping.Role}";
+        if (!await overlay.ConfirmAsync($"Stop using {role} here?", AppsPage.StopUsingWarning(role), "Stop using here"))
+        {
+            return;
+        }
+
+        var session = await BeginAsync("map remove");
+        if (session is null)
+        {
+            return;
+        }
+
+        using (session)
+        {
+            try
+            {
+                await Task.Run(() => session.StopUsing(mapping.MappingId));
+                log.Write($"map remove {mapping.MappingId}: done");
+            }
+            catch (StoreException e)
+            {
+                log.Write($"map remove {mapping.MappingId} refused: {e.Problem}: {e.Message}");
+                await overlay.InformAsync("Nothing was changed", e.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Apply all (section 9.4): each row planned with no choice; those that need nothing more are applied after
+    /// one confirmation listing them, each its own operation; the rest are named at the end, to open one by one.
+    /// Unlike the CLI's <c>apply --all</c>, a mapping that needs a choice does not stop the others.
+    /// </summary>
+    public async Task ApplyAllAsync(IReadOnlyList<AppRow> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        var roles = rows.ToDictionary(r => r.Mapping.MappingId, r => $"{r.Mapping.AppName} {r.Mapping.Role}", StringComparer.Ordinal);
+        var session = await BeginAsync("apply all");
+        if (session is null)
+        {
+            return;
+        }
+
+        using (session)
+        {
+            var (plans, needYou) = await Task.Run(() => session.PlanApplyAll(rows.Select(r => r.Mapping.MappingId)));
+            var waiting = needYou.Select(r => roles[r.MappingId]).ToList();
+            var linked = 0;
+            if (plans.Count > 0)
+            {
+                var list = string.Join("\n", plans.Select(p => roles[p.MappingId]));
+                var intro = waiting.Count == 0 ? string.Empty : $"\n\nNot these, which need you first: {string.Join(", ", waiting)}.";
+                if (!await overlay.ConfirmAsync(
+                        plans.Count == 1
+                            ? $"Link {roles[plans[0].MappingId]} on this device to its shared folder?"
+                            : $"Link {plans.Count} on this device to their shared folders?",
+                        $"{list}\n\nEach is backed up first where it has saves.{intro}",
+                        "Apply all", Overlay.OperationDialogTimeout))
+                {
+                    return;
+                }
+
+                foreach (var plan in plans)
+                {
+                    var role = roles[plan.MappingId];
+                    var result = await RunWithProgressAsync(ActionTexts.Confirmation(plan, role).Title, plan, progress => session.Run(plan, progress));
+                    if (result.Status == ExecutionStatus.Completed)
+                    {
+                        linked++;
+                    }
+                    else
+                    {
+                        waiting.Add(role);
+                        await ShowResultAsync(result, role);
+                        if (result.Status == ExecutionStatus.RecoveryNeeded)
+                        {
+                            // Nothing else may run until it is recovered (section 9.3).
+                            break;
+                        }
+                    }
+                }
+            }
+
+            await overlay.InformAsync("Apply all", AppsPage.ApplyAllSummary(linked, waiting));
+        }
+    }
+
     /// <summary>Banner B2's Recover (section 9.5): a confirmation naming what is unfinished, then the core's recovery.</summary>
     public async Task RecoverAsync()
     {
