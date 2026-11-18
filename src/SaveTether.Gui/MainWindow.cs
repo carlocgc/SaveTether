@@ -24,9 +24,16 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _checkedAt = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _banners = new() { Spacing = 8 };
     private readonly StackPanel _rows = new() { Spacing = 2 };
+    private readonly ScrollViewer _body;
+    private readonly Overlay _overlay;
+    private readonly string _localFolder;
+    private readonly Action _checkNow;
+    private SetupView? _setup;
 
     public MainWindow(string localFolder, Action checkNow, Action quit)
     {
+        _localFolder = localFolder;
+        _checkNow = checkNow;
         Title = Texts.AppName;
         Icon = Icons.For(amber: false);
         MinWidth = 800;
@@ -44,7 +51,8 @@ internal sealed class MainWindow : Window
         var header = new StackPanel { Spacing = 4, Children = { _device, _syncRoot, state } };
         var footer = new TextBlock { Text = $"Local folder: {localFolder}", Opacity = 0.6, FontSize = 13 };
 
-        Content = new DockPanel
+        _body = new ScrollViewer { Content = _rows, Margin = new Thickness(0, 12, 0, 12) };
+        _overlay = new Overlay(new DockPanel
         {
             Margin = new Thickness(24),
             Children =
@@ -53,9 +61,10 @@ internal sealed class MainWindow : Window
                 Dock(new Border { Height = 16 }, Avalonia.Controls.Dock.Top),
                 Dock(_banners, Avalonia.Controls.Dock.Top),
                 Dock(footer, Avalonia.Controls.Dock.Bottom),
-                new ScrollViewer { Content = _rows, Margin = new Thickness(0, 12, 0, 12) },
+                _body,
             },
-        };
+        });
+        Content = _overlay;
 
         KeyDown += (_, e) =>
         {
@@ -85,6 +94,18 @@ internal sealed class MainWindow : Window
         _checkedAt.Text = "Checked " + DateTime.Now.ToString("HH:mm", CultureInfo.InvariantCulture);
         Icon = Icons.For((iconState ?? status).IsAmber);
 
+        // Not set up: the setup pages take the place of the rows (section 6). Made once, so a check in the
+        // background does not lose what the owner has typed.
+        if (status.Condition == OverallCondition.NotSetUp)
+        {
+            _banners.Children.Clear();
+            _setup ??= new SetupView(_localFolder, _overlay, _checkNow);
+            _body.Content = _setup;
+            return;
+        }
+
+        _setup = null;
+        _body.Content = _rows;
         _banners.Children.Clear();
         if (Texts.Banner(status) is { } banner)
         {
