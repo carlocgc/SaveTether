@@ -157,6 +157,8 @@ A throwaway device whose apply replaced a shared copy, so it has a backup of eac
 - Restore the "This device" backup while linked: refused, "<role> is linked, so restoring would write into the shared copy. Revert first.", with Cancel and Revert. Revert: its confirmation and result; the list now has a "before reverting" backup.
 - Restore it again: the confirmation names the time and reason; afterwards the file on disk is the backed-up one, and there is a "before restoring" backup.
 - Restore the shared-copy backup: "Restore the shared saves for <role> on every device?" first, then the plan's confirmation; afterwards the shared folder holds the backed-up file.
+- Delete on the first backup (`*`): the confirmation warns that it is usually the only copy from before SaveTether, and its button reads "Delete the first backup". Cancel keeps it. Delete on a later backup: its folder under the backup location is gone, and the list is read again.
+- The CLI: `backup delete <id>` with standard input not a terminal is refused, naming `--confirm-delete`. At a terminal it asks; to answer from a script over SSH, run it under `script -qc "<command>" /dev/null <<< "yes"`, which gives it a terminal. And with `set -e` in a script, an expected refusal (exit 1) ends the script: leave `set -e` out of steps that test refusals.
 
 ### Add app
 

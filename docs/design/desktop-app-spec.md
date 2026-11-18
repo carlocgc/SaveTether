@@ -337,6 +337,8 @@ Choices made while building:
 - **Revert from a restore refusal** ends the restore's operation and starts Revert as its own, with its own confirmation. It is offered only when the core's reason for `restore-destination-unusable` is that the folder is a link; the other reasons (not a folder, its parent gone, a shared folder that is no longer a save folder) are worded as "cannot be restored into as it is now", with copying by hand from Open folder as the way out.
 - **A local restore's confirmation** leads with "The save folder is put back as it was on <time> (<reason>)."
 
+*Delete, added 2026-11-18 at the owner's request* (not in the spec above). Each backup row has **Delete**. It is the core's `DeleteBackup`, which removes the backup's folder through `SafeFs` and refuses while an operation is unfinished, since recovering it may need its backups. The CLI has the same as `backup delete` (`docs/cli-json.md`). The confirmation names the backup and says it cannot be undone. For the kept first backup it adds that this is usually the only copy of the folder from before SaveTether changed it, and its button reads "Delete the first backup". Deleting the first backup is allowed: the owner may need the space. Retention then keeps the next oldest as the first. The list is read again after a delete.
+
 ## 10. Errors outside the tables
 
 - **`StoreException`**: shown in the dialog or page that caused it. Its `StoreProblem` picks the title (`NotFound` "Not found", `Invalid` "Not valid", `Conflict` "Already set up differently", `MappingsApplied` "Revert these first", `NotInitialized` banner B3, `SchemaTooNew` banner B1), and the message is the core's, which must therefore be free of CLI wording (section 13, item 1).
