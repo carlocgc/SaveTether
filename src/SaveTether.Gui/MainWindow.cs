@@ -33,6 +33,7 @@ internal sealed class MainWindow : Window
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly ActionFlow _actions;
     private SetupView? _setup;
+    private bool _notHereOpen;
 
     /// <param name="operate">Runs one operation: the app marks itself busy around it and checks after it.</param>
     public MainWindow(string localFolder, Action checkNow, Action quit, Func<Func<ActionFlow, Task>, Task> operate)
@@ -146,7 +147,8 @@ internal sealed class MainWindow : Window
             && status.Condition is not (OverallCondition.UpdateNeeded or OverallCondition.Unfinished or OverallCondition.SyncRootUnavailable);
         _rows.Children.Clear();
         var page = AppsPage.From(status);
-        if (page.ForApplyAll.Count > 1)
+        // Shown when at least one row is ready to link (section 5); found on the Deck hidden with one left.
+        if (page.ForApplyAll.Count > 0)
         {
             var applyAll = new Button { Content = $"Apply all ({page.ForApplyAll.Count})", IsEnabled = actionsAllowed, Margin = new Thickness(0, 0, 0, 8) };
             applyAll.Click += (_, _) => _ = _operate(flow => flow.ApplyAllAsync(page.ForApplyAll));
@@ -168,16 +170,22 @@ internal sealed class MainWindow : Window
             var list = new StackPanel { Spacing = 2 };
             foreach (var row in page.NotOnThisDevice)
             {
-                list.Children.Add(Row(row, actionsAllowed));
+                // No app heading above these, so each names its app.
+                list.Children.Add(Row(row, actionsAllowed, withApp: true));
             }
 
-            _rows.Children.Add(new Expander
+            // Rebuilt at every check, so whether it is open is kept here: a check must not close it under the owner.
+            var expander = new Expander
             {
                 Header = $"Not on this device ({page.NotOnThisDevice.Count})",
                 Content = list,
+                IsExpanded = _notHereOpen,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 Margin = new Thickness(0, 12, 0, 0),
-            });
+            };
+            expander.Expanded += (_, _) => _notHereOpen = true;
+            expander.Collapsed += (_, _) => _notHereOpen = false;
+            _rows.Children.Add(expander);
         }
 
         if (status.Mappings.Count == 0 && status.Report is not null)
@@ -222,12 +230,13 @@ internal sealed class MainWindow : Window
     /// One row: state, word, the spec's sentence and the folder, the main action as a button, and the others
     /// under "More" as a list opened by click or keyboard, never by hover (section 12).
     /// </summary>
-    private Grid Row(AppRow row, bool actionsAllowed)
+    private Grid Row(AppRow row, bool actionsAllowed, bool withApp = false)
     {
         var mapping = row.Mapping;
+        var name = withApp ? $"{mapping.AppName} {mapping.Role}" : mapping.Role;
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,150,170,*,Auto,Auto"), Margin = new Thickness(0, 4) };
         Add(grid, 0, new Ellipse { Width = 10, Height = 10, Fill = new SolidColorBrush(Icons.ColourOf(mapping.Word.Shade)), Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 1, new TextBlock { Text = mapping.Role, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+        Add(grid, 1, new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
         Add(grid, 2, new TextBlock { Text = mapping.Word.Word, VerticalAlignment = VerticalAlignment.Center });
         Add(grid, 3, new StackPanel
         {

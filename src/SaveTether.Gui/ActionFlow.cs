@@ -182,7 +182,9 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 var list = string.Join("\n", plans.Select(p => roles[p.MappingId]));
                 var intro = waiting.Count == 0 ? string.Empty : $"\n\nNot these, which need you first: {string.Join(", ", waiting)}.";
                 if (!await overlay.ConfirmAsync(
-                        $"Link {plans.Count} on this device to their shared folders?",
+                        plans.Count == 1
+                            ? $"Link {roles[plans[0].MappingId]} on this device to its shared folder?"
+                            : $"Link {plans.Count} on this device to their shared folders?",
                         $"{list}\n\nEach is backed up first where it has saves.{intro}",
                         "Apply all", Overlay.OperationDialogTimeout))
                 {
