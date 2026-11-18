@@ -139,6 +139,17 @@ internal sealed class MainWindow : Window
             _banners.Children.Add(Banner(banner, status.Detail));
         }
 
+        // Banner B5: the entry that starts the app with the session names a program that is gone (section 11).
+        // Read each check; nothing is changed unless the owner presses one of its buttons.
+        if (App.Session.MissingBanner is { } missing)
+        {
+            var fix = new Button { Content = "Fix it" };
+            fix.Click += (_, _) => SetSessionStart(on: true);
+            var off = new Button { Content = "Turn it off" };
+            off.Click += (_, _) => SetSessionStart(on: false);
+            _banners.Children.Add(Banner(missing, null, fix, off));
+        }
+
         if (result.LockHeldBy is { } holder)
         {
             var started = holder.StartedUtc.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
@@ -168,6 +179,9 @@ internal sealed class MainWindow : Window
         var backups = new Button { Content = "Backups" };
         backups.Click += (_, _) => OpenScreen(new BackupsScreen(_localFolder, _operate, CloseScreen, null));
         pageActions.Children.Add(backups);
+        var settings = new Button { Content = "Settings" };
+        settings.Click += (_, _) => OpenScreen(new SettingsScreen(_localFolder, App.Session, _overlay, CloseScreen));
+        pageActions.Children.Add(settings);
         _rows.Children.Add(pageActions);
 
         foreach (var group in page.Groups)
@@ -215,7 +229,7 @@ internal sealed class MainWindow : Window
         return control;
     }
 
-    private static Border Banner(string sentence, string? detail, Button? action = null)
+    private static Border Banner(string sentence, string? detail, params Button[] actions)
     {
         var text = new StackPanel { Spacing = 4, Children = { new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap, FontWeight = FontWeight.SemiBold } } };
         if (detail is not null)
@@ -223,11 +237,15 @@ internal sealed class MainWindow : Window
             text.Children.Add(new TextBlock { Text = detail, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 });
         }
 
-        if (action is not null)
+        if (actions.Length > 0)
         {
-            action.HorizontalAlignment = HorizontalAlignment.Left;
-            action.Margin = new Thickness(0, 6, 0, 0);
-            text.Children.Add(action);
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+            foreach (var action in actions)
+            {
+                row.Children.Add(action);
+            }
+
+            text.Children.Add(row);
         }
 
         return new Border
@@ -294,6 +312,20 @@ internal sealed class MainWindow : Window
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
         actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.StopUsingHere
             or RowAction.FindAppAgain or RowAction.AddHere);
+
+    /// <summary>Banner B5's Fix it (write the entry with this app's path) or Turn it off (remove it); then a check redraws.</summary>
+    private void SetSessionStart(bool on)
+    {
+        if (App.Session.Set(on) is { } problem)
+        {
+            App.Options.Log.Write(problem);
+            _ = _overlay.InformAsync("Nothing was changed", problem);
+            return;
+        }
+
+        App.Options.Log.Write($"start with the session: {(on ? "entry rewritten" : "off")}, from banner B5");
+        _checkNow();
+    }
 
     /// <summary>A page in place of the rows: Add app (section 8) or Backups (section 9.7). Checks in the background keep it.</summary>
     private void OpenScreen(Control screen)

@@ -32,6 +32,12 @@ public sealed record StatusReport(
     string? SyncRootProblem = null)
 {
     public bool SyncRootAvailable => SyncRootProblem is null;
+
+    /// <summary>
+    /// The program the autostart entry starts, when the entry is there and the program is not (desktop-app-spec.md,
+    /// section 11). Set by the front end that reads the entry, not by <see cref="Workspace.Status"/>.
+    /// </summary>
+    public string? AutostartMissing { get; init; }
 }
 
 /// <summary>

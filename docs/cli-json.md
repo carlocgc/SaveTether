@@ -141,6 +141,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `device_file_mismatch` | boolean | The device name now belongs to another install. |
 | `journal_open` | boolean | An operation is unfinished. |
 | `mappings` | array of object | One per mapping. |
+| `autostart_missing` | string | Present only when the desktop app is set to start with the session and the program the entry names is missing: that program's path. `status` only reports it; it does not change the entry. Added 2026-11-18. |
 
 `mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner).
 

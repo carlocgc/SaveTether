@@ -165,6 +165,29 @@ public sealed class SafeFs
     }
 
     /// <summary>
+    /// Deletes the regular file at <paramref name="path"/> and nothing else: a folder, a link or anything else
+    /// is refused, so a link is never followed to delete what it points to. A missing path is not an error.
+    /// Used for files SaveTether wrote itself, such as the autostart entry.
+    /// </summary>
+    public void RemoveFile(string path)
+    {
+        var filePath = RequireAbsolute(path, nameof(path));
+        var kind = Probe(filePath);
+        if (kind == EntryKind.Missing)
+        {
+            return;
+        }
+
+        if (kind != EntryKind.File)
+        {
+            throw new SafeFsException($"Refusing to delete '{filePath}' as a file: it is {Describe(kind)}.");
+        }
+
+        RefuseInsideProtectedRoot(filePath, "delete a file");
+        File.Delete(filePath);
+    }
+
+    /// <summary>
     /// Deletes the tree at <paramref name="path"/>. Links found inside are removed, never entered,
     /// so nothing outside the tree is touched. A missing path is not an error.
     /// </summary>

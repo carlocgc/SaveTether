@@ -138,6 +138,10 @@ public class JsonContractTests
         Record("status-sync-root-unavailable", 0, "status");
         Directory.Move(aside, pc.SyncRoot);
 
+        pc.Autostart = new Startup.AutostartTests.Fixed("/gone/savetether-gui");
+        Record("status-autostart-missing", 0, "status");
+        pc.Autostart = null;
+
         Record("backup-list", 0, "backup", "list");
         Record("revert", 0, "revert", Id);
         CliDevice.Write(pc.Source, "GAME1/save.bin", "changed");

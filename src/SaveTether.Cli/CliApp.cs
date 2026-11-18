@@ -385,7 +385,10 @@ internal static class CliApp
 
         private CliOutput Status()
         {
-            var report = Open().Status(command.FirstPositional);
+            var report = Open().Status(command.FirstPositional) with
+            {
+                AutostartMissing = SaveTether.Core.Startup.Autostart.Check(environment.Autostart).MissingProgram,
+            };
             return new CliOutput
             {
                 Command = command.Name, ExitCode = report.JournalOpen ? ExitRecoveryNeeded : ExitSuccess, Status = report,

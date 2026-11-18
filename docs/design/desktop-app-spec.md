@@ -22,6 +22,8 @@ The design (`save-redirection-design.md`) says *what* SaveTether does and *why*.
 - **Start.** With `--minimized` (used by the autostart entry, section 11) the app starts with the tray icon only. Without it the window opens. Either way it runs a health check at once.
 - **Closing the window** hides it and leaves the tray icon running. The first time this happens, a notification says: "SaveTether is still running in the tray. Quit it from the tray icon's menu." Where there is no tray host (stock GNOME), closing the window quits. Detecting "no tray host" is not reliable on Linux (plan section 5, trial notes), so the rule is: on Linux, the app checks for an `org.kde.StatusNotifierWatcher` owner on the session bus at start; if there is none, closing the window quits (decision 1).
 - **Quit** (tray menu, or Ctrl+Q in the window) is refused while an operation runs: "Wait for the current operation to finish." Operations are journalled transactions; stopping one half way is what `recover` exists for, not something to offer.
+
+  *As built (2026-11-18), the end of the session:* a log off, restart or shut down is never vetoed. Found on the owner's PC: Windows named SaveTether as preventing a restart. When Windows asks, Avalonia closes the windows with the reason `OSShutdown` and refuses the session's end if any stays open, and the app cancelled that close to hide to the tray. Now a close for that reason, or for the app's own shutdown, goes ahead (`WindowClose` in the presentation project): the tray icon is removed and the app quits, logging "session ending". An operation running at that moment is not waited for: the session ends regardless, and its journal leaves it to Recover at the next start.
 - **Log.** The app appends one line per operation, refusal and unexpected error to `gui.log` in the local folder, and keeps the last 1 MB. No paths beyond those already in the local files, no content of save files.
 
 ## 3. Overall state and the tray icon
@@ -357,6 +359,17 @@ Choices made while building:
 
 **Autostart pointing to a missing binary.** The CLI's `status` reads the entry and warns when its path is missing (`autostart_missing: <path>` in `--json`); the app shows banner B5. Neither changes the entry without being asked.
 
+*As built (2026-11-18): Start with the session, banner B5, and About.* The core's `Startup.Autostart` writes, reads and removes the entry; `SessionStart` (presentation project) holds the switch, the rewrite at start and B5's sentence; `SettingsScreen` (the app) is the Settings page, opened by a **Settings** button beside Add app and Backups.
+
+Choices made while building:
+- **The Linux entry** is `savetether.desktop` in `$XDG_CONFIG_HOME/autostart` (`~/.config/autostart` when unset or not absolute), with `Exec="<path>" --minimized`. The path is always quoted and escaped as the Desktop Entry Specification says, so a path with spaces, quotes or `$` survives. It is written atomically and removed through `SafeFs.RemoveFile`, which removes a regular file and refuses a link, so something SaveTether did not write is never deleted through.
+- **The Windows entry** is the value `SaveTether` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, `"<path>" --minimized`. Tests use a key of their own, never the real Run key.
+- **The switch's position** is whether an entry is there, whatever program it names. **The rewrite at start** happens only while an entry is there and names another program; with the switch off nothing is created.
+- **Banner B5** is read at every check. Fix it writes the entry with this app's path; Turn it off removes it. It shows beside a green state: a stale entry does not make the saves unhealthy. Since the app rewrites the entry at start, B5 in the app is seen mostly when the entry is changed while it runs; `status` is where a moved or removed app shows.
+- **About** shows the version as "<version> (<short commit>)", the local folder with Open, and the licence.
+
+Not built yet: the backup location's Change, This device's Set up again, Installing, and the `PATH` option.
+
 ## 12. Keyboard and focus
 
 The app works with the keyboard alone, for accessibility and for the Deck in Desktop Mode, where a controller's Steam Input desktop layout usually stands in for a mouse.
@@ -386,6 +399,8 @@ These come before or with the app, each its own small PR.
 
    *Built 2026-11-17* as `OperationLock` in the core's storage layer, used by the CLI. Section 9.1 describes what was built, including the holder file, the `init` exception and the new `problem` field in `--json`. The app will take the same lock.
 5. **Autostart check** in `status` (section 11), once the app writes entries.
+
+   *Built 2026-11-18* with the app's switch. `StatusReport.AutostartMissing`, set by the CLI from the system's entry (`autostart_missing` in `--json`, present only when set; additive, recorded in `docs/cli-json.md`), and a warning on standard error. `status` only reads the entry.
 6. **Facts as fields.** Where an app sentence above needs a fact the core only has inside a message (not-enough-space's sizes, app-running's process names, a conflict's other folder), the refusal carries it as a field. Found while writing the app's texts; additive.
 
    *Built 2026-11-18.* A `PrecheckFailure` of kind `app-running` has `Processes` (`running`, `looked_for`), and one of kind `not-enough-space` has `Space` (`path`, `needed_bytes`, `free_bytes`). `path` is the folder the message names, not the volume, so the app finds the volume from it; sizes are in bytes, for the app to format. A conflict carries `ConflictFacts`: on `StoreException.Conflict` from `map add`, `map remove` and writing a mapping, and on `AppAddOutcome.Conflict` from `app add`. Its `kind` says which of four it is: `target-differs` (this mapping has another shared folder, given as `target`), `applied-elsewhere` (this mapping is linked at `folder`), `folder-in-use` (another mapping, `mapping_id`, has a save folder at, inside or around this one, given as `folder`) and `target-in-use` (another mapping uses this shared folder, or one that differs only by letter case). In `--json` they are `processes` and `space` on each failure, `conflict` beside `problem` for a store refusal, and `conflict` inside `app` for `app add`. Each appears only when set, so the output is otherwise unchanged. The messages are unchanged.

@@ -46,6 +46,10 @@ The app is three files: `savetether-gui`, `libSkiaSharp.so` and `libHarfBuzzShar
 
 On Windows, a Native AOT publish needs `vswhere.exe` on `PATH`: prepend `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer`.
 
+Run the app from the publish folder, never from `bin\Release\net10.0\win-x64\native\`. That folder holds the compiler's intermediate exe without the native Skia library, so Windows loads whatever `libSkiaSharp.dll` it finds on `PATH`. On the PC that is Git for Windows' old one (88.1), and the app dies at start with "The version of the native libSkiaSharp library (88.1) is incompatible". Windows logs it as an application crash with code `c0000409`, which is how a Native AOT app ends on any unhandled exception: start the exe from a terminal to see the exception on standard error.
+
+**The end of the session on Windows** can be tested without restarting. Start the app against a throwaway local folder, press X, then send `WM_QUERYENDSESSION` (0x11) to every top-level window of the process, as Windows does, with `SendMessageTimeout`. A reply of 0 from any window is a veto: Avalonia's hidden message window answers for the app. Then send `WM_ENDSESSION` (0x16, wParam 1): the process should end, and `gui.log` say "session ending". Windows itself records a real veto in the Application log as event 10001 from Winsrv: "The following application attempted to veto the shutdown".
+
 ## Running the app
 
 The app needs the desktop session's environment, which an SSH shell does not have.
@@ -93,6 +97,8 @@ Then copy the image to the PC to look at it.
 **What it said.** The app writes one line per operation, refusal and unexpected error to `gui.log` in its local folder. An unhandled crash goes to standard error: on the Deck, `journalctl --user -u savetether-gui-<feature>`.
 
 **A page that greys out and stays so** has usually thrown inside work started with `_ = SomethingAsync()`: a task nobody awaits keeps its exception, so nothing is logged or shown. Look for a control read inside `Task.Run` (Avalonia refuses that off the UI thread): read the values first, then start the work. Found on the Deck in Add app.
+
+**Coordinates.** Take them from a capture made after the last change of layout: a banner, a dialog or a page change moves everything below it. A click that lands beside a button does nothing and gives no error, which reads like a bug in the app.
 
 **Helpers.** Two small scripts in the scratch folder save typing: `click.sh x y [wait]` (activate the window, click at window coordinates, wait) and `shot.sh name` (wake the display, activate the window, `spectacle -a` to `/tmp`). With `spectacle -a` on the Deck, the window's client area starts about 65 pixels right and 81 down from the capture's corner (shadow and title bar): subtract that from a point in the capture to get the coordinates to click.
 
@@ -159,6 +165,16 @@ A throwaway device whose apply replaced a shared copy, so it has a backup of eac
 - Restore the shared-copy backup: "Restore the shared saves for <role> on every device?" first, then the plan's confirmation; afterwards the shared folder holds the backed-up file.
 - Delete on the first backup (`*`): the confirmation warns that it is usually the only copy from before SaveTether, and its button reads "Delete the first backup". Cancel keeps it. Delete on a later backup: its folder under the backup location is gone, and the list is read again.
 - The CLI: `backup delete <id>` with standard input not a terminal is refused, naming `--confirm-delete`. At a terminal it asks; to answer from a script over SSH, run it under `script -qc "<command>" /dev/null <<< "yes"`, which gives it a terminal. And with `set -e` in a script, an expected refusal (exit 1) ends the script: leave `set -e` out of steps that test refusals.
+
+### Start with the session
+
+Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME` to a folder under the scratch area in the environment file, check it in the same `case` as `SAVETETHER_HOME`, and pass it to `systemd-run` with `-E XDG_CONFIG_HOME`. List `~/.config/autostart` before and after, and compare. On Windows the switch writes the real Run value: test it only with the owner's leave, and check `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` before and after.
+
+- Settings: the switch is off. Turn it on: `savetether.desktop` appears with `Exec="<the binary>" --minimized`. `savetether status` (with the same `XDG_CONFIG_HOME`) warns about nothing.
+- Make the entry stale (point `Exec` at a missing path with `sed`): `status` warns, and `--json` has `autostart_missing`. In the app, Check now: banner B5. Fix it: the entry names the binary again.
+- Stale again, then restart the app: the entry is rewritten at start, and `gui.log` says so.
+- Stale again, Check now, Turn it off: the entry is gone.
+- Not covered by this flow: logging in for real. That needs the owner's session, so it is done by the owner with the real entry.
 
 ### Add app
 
