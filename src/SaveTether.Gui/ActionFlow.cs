@@ -414,18 +414,30 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             lines.Children.Add(new TextBlock { Text = "Working…" });
         }
 
-        // Progress<T> made here posts each report to the UI thread, and never throws into the executor.
-        var progress = new Progress<StepProgress>(p =>
-        {
-            if (p.Index < marks.Count)
-            {
-                marks[p.Index].Text = p.Status == StepStatus.Done ? "✓" : "…";
-            }
-        });
-
+        // The executor reports from its thread at its own speed; the list shows the reports on this thread at a
+        // pace that can be read, then holds the finished list (section 9.3). Only the display waits.
+        var progress = new PacedProgress();
         using (overlay.ShowBlocking(title, lines))
         {
-            var result = await Task.Run(() => run(progress));
+            var work = Task.Run(() =>
+            {
+                try
+                {
+                    return run(progress);
+                }
+                finally
+                {
+                    progress.Complete();
+                }
+            });
+            await progress.ShowAsync(p =>
+            {
+                if (p.Index < marks.Count)
+                {
+                    marks[p.Index].Text = p.Status == StepStatus.Done ? "✓" : "…";
+                }
+            });
+            var result = await work;
             log.Write($"{result.Operation?.ToString() ?? "recover"} {result.MappingId}: {result.Status}{(result.Error is { } e ? $": {e.Text}" : string.Empty)}");
             return result;
         }
