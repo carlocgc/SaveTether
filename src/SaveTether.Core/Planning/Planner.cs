@@ -99,7 +99,7 @@ public static class Planner
 
             if (s.RunningProcesses.Count > 0 && !assumeClosed)
             {
-                Fail(PrecheckKind.AppRunning, AppRunningMessage(s));
+                failures.Add(AppRunning(s));
             }
 
             if (s.BackupRootProblem is { } problem)
@@ -254,7 +254,7 @@ public static class Planner
         {
             if (s.RunningProcesses.Count > 0 && !request.AssumeClosed)
             {
-                Fail(PrecheckKind.AppRunning, AppRunningMessage(s));
+                failures.Add(AppRunning(s));
             }
 
             if (s.BackupRootProblem is { } problem)
@@ -268,15 +268,27 @@ public static class Planner
 
     internal static readonly Note UnfinishedMessage = new("An earlier operation did not finish.", new NextStep(NextStepKind.Recover));
 
-    internal static string AppRunningMessage(IReadOnlyList<string> running, IReadOnlyList<string> lookedFor) =>
-        $"The app appears to be running ({string.Join(", ", running)}). Close it and try again. " +
-        $"Looked for: {string.Join(", ", lookedFor)}.";
+    internal static PrecheckFailure AppRunning(IReadOnlyList<string> running, IReadOnlyList<string> lookedFor) =>
+        new(
+            PrecheckKind.AppRunning,
+            $"The app appears to be running ({string.Join(", ", running)}). Close it and try again. " +
+            $"Looked for: {string.Join(", ", lookedFor)}.")
+        {
+            Processes = new ProcessFacts(running, lookedFor),
+        };
+
+    /// <param name="what">What needs the space, as the start of the sentence: "The backup", "Restoring".</param>
+    internal static PrecheckFailure NotEnoughSpace(string what, string path, long needed, long free) =>
+        new(PrecheckKind.NotEnoughSpace, $"{what} needs {needed:N0} bytes, but only {free:N0} are free at '{path}'.")
+        {
+            Space = new SpaceFacts(path, needed, free),
+        };
 
     internal static string SyncRootMessage(string syncRoot) =>
         $"'{syncRoot}' is not set up for SaveTether, or is not available. " +
         "If the sync root is on a removable drive, check that it is connected; otherwise wait for the first sync to finish.";
 
-    private static string AppRunningMessage(Snapshot s) => AppRunningMessage(s.RunningProcesses, s.ProcessNamesChecked);
+    private static PrecheckFailure AppRunning(Snapshot s) => AppRunning(s.RunningProcesses, s.ProcessNamesChecked);
 
     private static string SyncRootMessage(Snapshot s) => SyncRootMessage(s.SyncRoot);
 
@@ -311,23 +323,17 @@ public static class Planner
         var failures = new List<PrecheckFailure>();
         if (s.FreeBytesAtSource is { } sourceFree && stagingBytes > sourceFree)
         {
-            failures.Add(new PrecheckFailure(
-                PrecheckKind.NotEnoughSpace,
-                $"Copying the saves back needs {stagingBytes:N0} bytes, but only {sourceFree:N0} are free at '{s.Source}'."));
+            failures.Add(NotEnoughSpace("Copying the saves back", s.Source, stagingBytes, sourceFree));
         }
 
         if (s.FreeBytesAtBackupRoot is { } backupFree && backupBytes > backupFree)
         {
-            failures.Add(new PrecheckFailure(
-                PrecheckKind.NotEnoughSpace,
-                $"The backup needs {backupBytes:N0} bytes, but only {backupFree:N0} are free at '{s.BackupRoot}'."));
+            failures.Add(NotEnoughSpace("The backup", s.BackupRoot, backupBytes, backupFree));
         }
 
         if (s.FreeBytesAtTarget is { } targetFree && targetBytes > targetFree)
         {
-            failures.Add(new PrecheckFailure(
-                PrecheckKind.NotEnoughSpace,
-                $"Copying the saves needs {targetBytes:N0} bytes, but only {targetFree:N0} are free at '{s.Target}'."));
+            failures.Add(NotEnoughSpace("Copying the saves", s.Target, targetBytes, targetFree));
         }
 
         return failures;

@@ -160,6 +160,14 @@ public class CliCommandTests
             Assert.Contains($"savetether map remove {Id}", err, StringComparison.Ordinal);
         }
 
+        // With --json, the store's refusal says what is in the way as fields.
+        var json = pc.Expect(CliApp.ExitRefused, "map", "add", "other.saves", "--target", "other/saves", "--source", pc.AppFolder, "--json").Json();
+        Assert.Equal("conflict", json.GetProperty("problem").GetString());
+        var conflict = json.GetProperty("conflict");
+        Assert.Equal("folder-in-use", conflict.GetProperty("kind").GetString());
+        Assert.Equal(Id, conflict.GetProperty("mapping_id").GetString());
+        Assert.Equal(pc.Source, conflict.GetProperty("folder").GetString());
+
         Assert.Equal(before, File.ReadAllText(deviceFile));
 
         // A sibling folder is fine, and so is the same mapping given its own folder again.
@@ -284,6 +292,12 @@ public class CliCommandTests
         // 1: a precondition. The app is running.
         pc.Running.Add("PPSSPPSDL");
         Assert.Contains("appears to be running", pc.Expect(CliApp.ExitRefused, "apply", Id, "--copy").Err, StringComparison.Ordinal);
+        var running = pc.Expect(CliApp.ExitRefused, "apply", Id, "--copy", "--json")
+            .Operation().GetProperty("refusal").GetProperty("failures")[0];
+        Assert.Equal("app-running", running.GetProperty("kind").GetString());
+        Assert.Equal(["PPSSPPSDL"], running.GetProperty("processes").GetProperty("running").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal(["PPSSPPSDL"], running.GetProperty("processes").GetProperty("looked_for").EnumerateArray().Select(e => e.GetString()));
+        Assert.False(running.TryGetProperty("space", out _));
         Assert.Equal("planned", pc.Ok("apply", Id, "--copy", "--assume-closed", "--dry-run", "--json").Operation().GetProperty("outcome").GetString());
         pc.Running.Clear();
 

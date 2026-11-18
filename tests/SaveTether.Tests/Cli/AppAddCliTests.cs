@@ -394,6 +394,11 @@ public class AppAddCliTests
 
         Assert.Equal("conflict", json.GetProperty("app").GetProperty("problem").GetString());
         Assert.Contains("is already the save folder of 'flash.objects'", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        var conflict = json.GetProperty("app").GetProperty("conflict");
+        Assert.Equal("folder-in-use", conflict.GetProperty("kind").GetString());
+        Assert.Equal("flash.objects", conflict.GetProperty("mapping_id").GetString());
+        Assert.Equal(Path.Combine(install, "saves"), conflict.GetProperty("folder").GetString());
+        Assert.False(conflict.TryGetProperty("target", out _));
         Assert.False(MappingExists(deck, "testapp.saves"));
         Assert.False(DeviceFile(deck).TryGetProperty("apps", out _));
     }
@@ -458,6 +463,10 @@ public class AppAddCliTests
 
         Assert.Equal("conflict", json.GetProperty("app").GetProperty("problem").GetString());
         Assert.Contains("savetether revert testapp.saves", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        var conflict = json.GetProperty("app").GetProperty("conflict");
+        Assert.Equal("applied-elsewhere", conflict.GetProperty("kind").GetString());
+        Assert.Equal("testapp.saves", conflict.GetProperty("mapping_id").GetString());
+        Assert.Equal(Path.Combine(first, "saves"), conflict.GetProperty("folder").GetString());
         Assert.Equal(first, DeviceFile(deck).GetProperty("apps").GetProperty("testapp").GetProperty("install_dir").GetString());
         sandbox.AssertCanaryIntact();
     }
