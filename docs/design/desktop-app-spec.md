@@ -300,6 +300,10 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 | `RolledBack` | "<Operation> failed and was undone. Nothing has changed: <error>." with the executor's messages |
 | `RecoveryNeeded` | Banner B2 appears; the dialog says "<Operation> stopped part way. Recover it before doing anything else." with **Recover** |
 
+*As built (2026-11-18), pacing, asked for by the owner.* An operation takes a few milliseconds, so the step list flashed past, and a quick double click went through a dialog before it could be read. Two minimums now apply, set in `Pacing` (presentation project):
+- **The step list** ticks each step at least 300 ms after the one before, and the finished list stays 800 ms before the result. Only the display waits: the executor runs at its own speed and its journal is closed when it is done; `PacedProgress` replays its reports. A step that really takes longer is ticked as soon as it is done.
+- **Every dialog** ignores its buttons, Escape and Enter for its first 600 ms, then puts focus on the safe button (principle 5). The 10-minute timeout is unchanged.
+
 ### 9.4 Apply all
 
 For every row in the Ready to link, Not linked or Link missing state, one `PlanApply` with no choice, in name order, each its own operation. A mapping that needs a choice or is refused is skipped, and stays on the page with its reason. Rows that needed no choice are applied after one confirmation listing them all. Afterwards: "<n> linked. <m> need you:" and the list, each opening its own Apply.
