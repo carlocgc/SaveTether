@@ -114,6 +114,7 @@ public class ProcessAndLogTests
             log.Write($"{i} {line}");
         }
 
+        Assert.NotEqual(0xEF, File.ReadAllBytes(log.Path)[0]);
         var text = File.ReadAllText(log.Path, Encoding.UTF8);
         Assert.True(text.Length <= GuiLog.MaxBytes, text.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Assert.Contains("1099 ", text, StringComparison.Ordinal);

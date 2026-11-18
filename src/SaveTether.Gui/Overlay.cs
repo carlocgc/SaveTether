@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 
 namespace SaveTether.Gui;
 
@@ -56,8 +58,27 @@ internal sealed class Overlay : Panel
         };
         var layer = new Grid { Background = new SolidColorBrush(Colors.Black, 0.45), Children = { card } };
 
+        // Escape is caught at the window, on the way down, so it cancels wherever focus is: disabling the page
+        // can leave focus on nothing, and then a key event never passes through the dialog. Found on the Deck.
+        var window = TopLevel.GetTopLevel(this);
+
+        void OnKey(object? sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                Close(false);
+            }
+        }
+
         void Close(bool result)
         {
+            if (answer.Task.IsCompleted)
+            {
+                return;
+            }
+
+            window?.RemoveHandler(KeyDownEvent, OnKey);
             Children.Remove(layer);
             _page.IsEnabled = true;
             answer.TrySetResult(result);
@@ -65,18 +86,13 @@ internal sealed class Overlay : Panel
 
         cancel.Click += (_, _) => Close(false);
         confirm.Click += (_, _) => Close(true);
-        layer.KeyDown += (_, e) =>
-        {
-            if (e.Key == Key.Escape)
-            {
-                e.Handled = true;
-                Close(false);
-            }
-        };
+        window?.AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
 
         _page.IsEnabled = false;
         Children.Add(layer);
-        cancel.AttachedToVisualTree += (_, _) => cancel.Focus(NavigationMethod.Tab);
+
+        // Focus moves to the safe button once the dialog is laid out; before that it cannot take focus.
+        Dispatcher.UIThread.Post(() => cancel.Focus(NavigationMethod.Tab), DispatcherPriority.Loaded);
         return answer.Task;
     }
 }

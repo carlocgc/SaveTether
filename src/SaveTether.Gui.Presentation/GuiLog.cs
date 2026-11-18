@@ -13,6 +13,8 @@ public sealed class GuiLog(string folder, TimeProvider? time = null)
     public const string FileName = "gui.log";
     public const long MaxBytes = 1024 * 1024;
 
+    private static readonly UTF8Encoding NoByteOrderMark = new(encoderShouldEmitUTF8Identifier: false);
+
     private readonly Lock _gate = new();
 
     public string Path => System.IO.Path.Combine(folder, FileName);
@@ -27,7 +29,8 @@ public sealed class GuiLog(string folder, TimeProvider? time = null)
             try
             {
                 Directory.CreateDirectory(folder);
-                File.AppendAllText(Path, line, Encoding.UTF8);
+                // Encoding.UTF8 would start a new file with a byte-order mark: found on the Deck.
+                File.AppendAllText(Path, line, NoByteOrderMark);
                 if (new FileInfo(Path).Length > MaxBytes)
                 {
                     Trim();
