@@ -45,6 +45,13 @@ public class AddAppFlowTests
         Assert.Equal(CatalogStatus.Found, flow.Detect("testapp"));
         deck.Ok("app", "add", "testapp");
         Assert.Equal(CatalogStatus.Added, flow.Detect("testapp"));
+
+        // "Stop using here" on every folder of the app: no longer Added, though the device file still
+        // remembers how it was found (found by the owner with Cemu).
+        deck.Ok("map", "remove", "testapp.saves");
+        Assert.Equal(CatalogStatus.Added, flow.Detect("testapp"));
+        deck.Ok("map", "remove", "testapp.states");
+        Assert.Equal(CatalogStatus.Found, flow.Detect("testapp"));
         foreach (var status in Enum.GetValues<CatalogStatus>())
         {
             Assert.False(string.IsNullOrWhiteSpace(AddAppFlow.Label(status)));

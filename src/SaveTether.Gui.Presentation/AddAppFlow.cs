@@ -125,8 +125,10 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     public CatalogStatus Detect(string appId)
     {
         var workspace = Open();
+        // Added means a folder of the app is set on this device (section 8), not that the device file remembers
+        // how the app was found: "Stop using here" drops the folder and keeps that record (found by the owner).
         var device = workspace.Shared.TryReadDevice(workspace.DeviceName);
-        if (device?.Apps?.ContainsKey(appId) == true)
+        if (device?.Paths.Keys.Any(id => id.StartsWith(appId + ".", StringComparison.Ordinal)) == true)
         {
             return CatalogStatus.Added;
         }
