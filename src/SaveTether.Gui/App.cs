@@ -232,19 +232,42 @@ internal sealed class App : Application
 
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (_closeQuits)
+        var cause = e.CloseReason switch
         {
-            Quit();
-            return;
-        }
+            WindowCloseReason.OSShutdown => CloseCause.SessionEnding,
+            WindowCloseReason.ApplicationShutdown => CloseCause.AppShutdown,
+            _ => CloseCause.Owner,
+        };
+        switch (WindowClose.Decide(cause, trayPresent: !_closeQuits))
+        {
+            case CloseAction.LetClose:
+                // Never a veto of a log off, restart or shutdown (found on the owner's PC: Windows named SaveTether
+                // as blocking a restart). The process ends with the session; an operation cut short is Recover's.
+                if (cause == CloseCause.SessionEnding)
+                {
+                    Log.Write(_busy ? "session ending during an operation: Recover finishes it at the next start" : "session ending: quitting");
+                    _tray?.Dispose();
+                    _tray = null;
+                    _desktop.Shutdown();
+                }
 
-        // Closing hides the window; the tray icon keeps running.
-        e.Cancel = true;
-        _window!.Hide();
-        if (!_toldAboutTray)
-        {
-            _toldAboutTray = true;
-            Notifier.Show(Texts.StillRunningInTray, Log);
+                return;
+
+            case CloseAction.Quit:
+                Quit();
+                return;
+
+            default:
+                // Closing hides the window; the tray icon keeps running.
+                e.Cancel = true;
+                _window!.Hide();
+                if (!_toldAboutTray)
+                {
+                    _toldAboutTray = true;
+                    Notifier.Show(Texts.StillRunningInTray, Log);
+                }
+
+                return;
         }
     }
 }

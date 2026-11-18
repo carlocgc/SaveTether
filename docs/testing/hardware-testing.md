@@ -46,6 +46,10 @@ The app is three files: `savetether-gui`, `libSkiaSharp.so` and `libHarfBuzzShar
 
 On Windows, a Native AOT publish needs `vswhere.exe` on `PATH`: prepend `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer`.
 
+Run the app from the publish folder, never from `bin\Release\net10.0\win-x64\native\`. That folder holds the compiler's intermediate exe without the native Skia library, so Windows loads whatever `libSkiaSharp.dll` it finds on `PATH`. On the PC that is Git for Windows' old one (88.1), and the app dies at start with "The version of the native libSkiaSharp library (88.1) is incompatible". Windows logs it as an application crash with code `c0000409`, which is how a Native AOT app ends on any unhandled exception: start the exe from a terminal to see the exception on standard error.
+
+**The end of the session on Windows** can be tested without restarting. Start the app against a throwaway local folder, press X, then send `WM_QUERYENDSESSION` (0x11) to every top-level window of the process, as Windows does, with `SendMessageTimeout`. A reply of 0 from any window is a veto: Avalonia's hidden message window answers for the app. Then send `WM_ENDSESSION` (0x16, wParam 1): the process should end, and `gui.log` say "session ending". Windows itself records a real veto in the Application log as event 10001 from Winsrv: "The following application attempted to veto the shutdown".
+
 ## Running the app
 
 The app needs the desktop session's environment, which an SSH shell does not have.
