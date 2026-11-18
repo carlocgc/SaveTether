@@ -145,9 +145,39 @@ internal sealed class MainWindow : Window
         var actionsAllowed = result.LockHeldBy is null
             && status.Condition is not (OverallCondition.UpdateNeeded or OverallCondition.Unfinished or OverallCondition.SyncRootUnavailable);
         _rows.Children.Clear();
-        foreach (var mapping in status.Mappings)
+        var page = AppsPage.From(status);
+        if (page.ForApplyAll.Count > 1)
         {
-            _rows.Children.Add(Row(mapping, actionsAllowed));
+            var applyAll = new Button { Content = $"Apply all ({page.ForApplyAll.Count})", IsEnabled = actionsAllowed, Margin = new Thickness(0, 0, 0, 8) };
+            applyAll.Click += (_, _) => _ = _operate(flow => flow.ApplyAllAsync(page.ForApplyAll));
+            _rows.Children.Add(applyAll);
+        }
+
+        foreach (var group in page.Groups)
+        {
+            _rows.Children.Add(new TextBlock { Text = group.AppName, FontSize = 17, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 10, 0, 2) });
+            foreach (var row in group.Rows)
+            {
+                _rows.Children.Add(Row(row, actionsAllowed));
+            }
+        }
+
+        // Set up on other devices and not wanted here is normal, so these are listed last and collapsed (section 5.1).
+        if (page.NotOnThisDevice.Count > 0)
+        {
+            var list = new StackPanel { Spacing = 2 };
+            foreach (var row in page.NotOnThisDevice)
+            {
+                list.Children.Add(Row(row, actionsAllowed));
+            }
+
+            _rows.Children.Add(new Expander
+            {
+                Header = $"Not on this device ({page.NotOnThisDevice.Count})",
+                Content = list,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                Margin = new Thickness(0, 12, 0, 0),
+            });
         }
 
         if (status.Mappings.Count == 0 && status.Report is not null)
@@ -188,33 +218,95 @@ internal sealed class MainWindow : Window
         };
     }
 
-    private Grid Row(MappingState mapping, bool actionsAllowed)
+    /// <summary>
+    /// One row: state, word, the spec's sentence and the folder, the main action as a button, and the others
+    /// under "More" as a list opened by click or keyboard, never by hover (section 12).
+    /// </summary>
+    private Grid Row(AppRow row, bool actionsAllowed)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,240,200,*,Auto"), Margin = new Thickness(0, 4) };
+        var mapping = row.Mapping;
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,150,170,*,Auto,Auto"), Margin = new Thickness(0, 4) };
         Add(grid, 0, new Ellipse { Width = 10, Height = 10, Fill = new SolidColorBrush(Icons.ColourOf(mapping.Word.Shade)), Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 1, new TextBlock { Text = $"{mapping.AppName} {mapping.Role}", FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+        Add(grid, 1, new TextBlock { Text = mapping.Role, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
         Add(grid, 2, new TextBlock { Text = mapping.Word.Word, VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 3, new TextBlock { Text = mapping.Health.Source ?? string.Empty, Opacity = 0.75, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
-
-        var action = MainActions.For(mapping.Health);
-        if (action != MainAction.None)
+        Add(grid, 3, new StackPanel
         {
-            var button = new Button { Content = MainActions.Label(action), IsEnabled = actionsAllowed || action == MainAction.CheckAgain, Margin = new Thickness(12, 0, 0, 0) };
-            AutomationProperties.SetName(button, $"{MainActions.Label(action)} {mapping.AppName} {mapping.Role}");
-            button.Click += (_, _) =>
+            VerticalAlignment = VerticalAlignment.Center,
+            Children =
             {
-                _ = action switch
-                {
-                    MainAction.Apply => _operate(flow => flow.ApplyAsync(mapping, useThisCopy: false)),
-                    MainAction.UseThisCopy => _operate(flow => flow.ApplyAsync(mapping, useThisCopy: true)),
-                    MainAction.Revert => _operate(flow => flow.RevertAsync(mapping)),
-                    _ => Task.Run(_checkNow),
-                };
-            };
+                new TextBlock { Text = row.Sentence, TextWrapping = TextWrapping.Wrap },
+                new TextBlock { Text = mapping.Health.Source ?? string.Empty, Opacity = 0.65, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis },
+            },
+        });
+
+        var role = $"{mapping.AppName} {mapping.Role}";
+        if (row.Main is { } main)
+        {
+            var button = new Button { Content = AppsPage.Label(main), IsEnabled = Allowed(main, actionsAllowed), Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            AutomationProperties.SetName(button, $"{AppsPage.Label(main)}: {role}");
+            button.Click += (_, _) => Do(main, row);
             Add(grid, 4, button);
         }
 
+        if (row.Others.Count > 0)
+        {
+            var menu = new MenuFlyout();
+            foreach (var other in row.Others)
+            {
+                var item = new MenuItem { Header = AppsPage.Label(other), IsEnabled = Allowed(other, actionsAllowed) };
+                item.Click += (_, _) => Do(other, row);
+                menu.Items.Add(item);
+            }
+
+            var more = new Button { Content = "More", Flyout = menu, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            AutomationProperties.SetName(more, $"More actions: {role}");
+            Add(grid, 5, more);
+        }
+
         return grid;
+    }
+
+    /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
+    private static bool Allowed(RowAction action, bool actionsAllowed) =>
+        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.StopUsingHere);
+
+    private void Do(RowAction action, AppRow row)
+    {
+        var mapping = row.Mapping;
+        var log = App.Options.Log;
+        switch (action)
+        {
+            case RowAction.Apply:
+                _ = _operate(flow => flow.ApplyAsync(mapping, useThisCopy: false));
+                break;
+            case RowAction.UseThisCopy:
+                _ = _operate(flow => flow.ApplyAsync(mapping, useThisCopy: true));
+                break;
+            case RowAction.Revert:
+                _ = _operate(flow => flow.RevertAsync(mapping));
+                break;
+            case RowAction.StopUsingHere:
+                _ = _operate(flow => flow.StopUsingAsync(mapping));
+                break;
+            case RowAction.CheckAgain:
+                _checkNow();
+                break;
+            case RowAction.OpenFolder when mapping.Health.Source is { } source:
+                FolderOpener.Open(source, log);
+                break;
+            case RowAction.OpenFolderParent when System.IO.Path.GetDirectoryName(mapping.Health.Source) is { } parent:
+                FolderOpener.Open(parent, log);
+                break;
+            case RowAction.OpenSharedFolder:
+                FolderOpener.Open(mapping.Health.Target, log);
+                break;
+            case RowAction.OpenSharedFolderParent when System.IO.Path.GetDirectoryName(mapping.Health.Target) is { } sharedParent:
+                FolderOpener.Open(sharedParent, log);
+                break;
+            case RowAction.Details:
+                _ = _overlay.InformAsync($"{mapping.AppName} {mapping.Role}: {mapping.Word.Word}", mapping.Health.Detail.Text);
+                break;
+        }
     }
 
     /// <summary>The flow the window's operations run through.</summary>

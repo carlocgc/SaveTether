@@ -6,51 +6,6 @@ using SaveTether.Core.Storage;
 
 namespace SaveTether.Gui.Presentation;
 
-/// <summary>What a mapping's row offers as its main action (desktop-app-spec.md, section 5.1). This part covers the operations.</summary>
-public enum MainAction
-{
-    None,
-
-    /// <summary>Plan and run an apply: Ready to link, Not linked, Link missing.</summary>
-    Apply,
-
-    /// <summary>Plan and run a revert: Linked.</summary>
-    Revert,
-
-    /// <summary>Apply with replace-shared on a linked folder: the way out of a double seed.</summary>
-    UseThisCopy,
-
-    /// <summary>Run a health check: a shared folder that may not have synced yet.</summary>
-    CheckAgain,
-}
-
-/// <summary>Section 5.1's main actions, for the states whose action is an operation or a check.</summary>
-public static class MainActions
-{
-    public static MainAction For(MappingHealth health)
-    {
-        ArgumentNullException.ThrowIfNull(health);
-        return (health.State, health.Reason) switch
-        {
-            (HealthState.Ok, _) => MainAction.Revert,
-            (HealthState.NotApplied, HealthReason.NotLinkedYet) => MainAction.Apply,
-            (HealthState.Replaced, HealthReason.FolderHoldsFiles or HealthReason.FolderEmpty) => MainAction.Apply,
-            (HealthState.Broken, _) => MainAction.CheckAgain,
-            (HealthState.DoubleSeed, _) => MainAction.UseThisCopy,
-            _ => MainAction.None,
-        };
-    }
-
-    public static string Label(MainAction action) => action switch
-    {
-        MainAction.Apply => "Apply",
-        MainAction.Revert => "Revert",
-        MainAction.UseThisCopy => "Use this device's copy",
-        MainAction.CheckAgain => "Check again",
-        _ => string.Empty,
-    };
-}
-
 /// <summary>
 /// One operation from the window (desktop-app-spec.md, section 7): it holds the operation lock from the
 /// first plan to the result, so a plan cannot go stale behind a dialog, and releases it when disposed.
@@ -120,6 +75,34 @@ public sealed class OperationSession : IDisposable
     public bool RevokeSandbox(SandboxGrant grant) => Workspace.RevokeSandbox(grant);
 
     public ExecutionResult Run(Plan plan, IProgress<StepProgress>? progress) => Workspace.Run(plan, progress);
+
+    /// <summary>"Stop using here": the core's <c>map remove</c>. Its refusal (the folder is linked) is a <see cref="StoreException"/>.</summary>
+    public void StopUsing(string mappingId) => Workspace.MapRemove(mappingId);
+
+    /// <summary>
+    /// Apply all's first half (section 9.4): each mapping planned with no choice, in the order given. Those
+    /// that plan can all be run after one confirmation; the others need the owner, each with why.
+    /// </summary>
+    public (IReadOnlyList<Plan> Plans, IReadOnlyList<Refusal> NeedYou) PlanApplyAll(IEnumerable<string> mappingIds)
+    {
+        ArgumentNullException.ThrowIfNull(mappingIds);
+        var plans = new List<Plan>();
+        var needYou = new List<Refusal>();
+        foreach (var id in mappingIds)
+        {
+            var outcome = Workspace.PlanApply(id, new ApplyRequest());
+            if (outcome.Plan is { } plan)
+            {
+                plans.Add(plan);
+            }
+            else
+            {
+                needYou.Add(outcome.Refusal!);
+            }
+        }
+
+        return (plans, needYou);
+    }
 
     public ExecutionResult Recover(IProgress<StepProgress>? progress) => Workspace.Recover(progress);
 

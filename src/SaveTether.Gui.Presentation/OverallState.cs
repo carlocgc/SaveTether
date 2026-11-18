@@ -1,3 +1,4 @@
+using SaveTether.Core.FileSystem;
 using SaveTether.Core.Health;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
@@ -42,7 +43,14 @@ public enum OverallCondition
 /// <summary>One mapping as the window and the notifications show it.</summary>
 /// <param name="AppName">The app's name from its definition, or the part of the mapping ID before the dot.</param>
 /// <param name="Role">The part of the mapping ID after the dot.</param>
-public sealed record MappingState(string MappingId, string AppName, string Role, StateWord Word, MappingHealth Health);
+public sealed record MappingState(string MappingId, string AppName, string Role, StateWord Word, MappingHealth Health)
+{
+    /// <summary>For a mapping with no folder on this device: the devices that have one set (section 5.1, "Set up on &lt;devices&gt;").</summary>
+    public IReadOnlyList<string> SetUpOn { get; init; } = [];
+
+    /// <summary>For a save folder that is a link elsewhere (Retargeted, Foreign link): where it points.</summary>
+    public string? LinkTarget { get; init; }
+}
 
 /// <summary>The result of one check: the state of the device, as section 3 and 5.1 show it.</summary>
 /// <param name="Detail">The core's message, for the conditions that come from one.</param>
@@ -89,8 +97,15 @@ public static class StatusCheck
 
             var workspace = Workspace.Open(local, NoProcesses.Instance);
             var report = workspace.Status();
+            var others = report.SyncRootAvailable ? OtherDevicesPaths(workspace) : [];
             var mappings = report.Mappings
-                .Select(m => new MappingState(m.MappingId, AppName(workspace, m.MappingId), RoleOf(m.MappingId), StateWords.For(m.State, m.Reason), m))
+                .Select(m => new MappingState(m.MappingId, AppName(workspace, m.MappingId), RoleOf(m.MappingId), StateWords.For(m.State, m.Reason), m)
+                {
+                    SetUpOn = m.Reason == HealthReason.NoSaveFolder
+                        ? others.Where(d => d.Value.Contains(m.MappingId)).Select(d => d.Key).Order(StringComparer.Ordinal).ToList()
+                        : [],
+                    LinkTarget = m.State is HealthState.Retargeted or HealthState.ForeignLink ? LinkTargetOf(m.Source) : null,
+                })
                 .OrderBy(m => m.Word.NeedsAttention ? 0 : 1)
                 .ThenBy(m => m.AppName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(m => m.MappingId, StringComparer.Ordinal)
@@ -128,6 +143,39 @@ public static class StatusCheck
         catch (UnauthorizedAccessException)
         {
             return appId;
+        }
+    }
+
+    /// <summary>Each other device's mappings with a folder set. A device file that cannot be read is left out.</summary>
+    private static Dictionary<string, HashSet<string>> OtherDevicesPaths(Workspace workspace)
+    {
+        var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var name in workspace.Shared.ListDeviceNames().Where(n => n != workspace.DeviceName))
+        {
+            try
+            {
+                if (workspace.Shared.TryReadDevice(name) is { } device)
+                {
+                    result[name] = device.Paths.Keys.ToHashSet(StringComparer.Ordinal);
+                }
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        return result;
+    }
+
+    private static string? LinkTargetOf(string? source)
+    {
+        try
+        {
+            return source is not null && SafeFs.Probe(source) is EntryKind.Symlink or EntryKind.Junction ? SafeFs.ReadLinkTarget(source) : null;
+        }
+        catch (IOException)
+        {
+            return null;
         }
     }
 
