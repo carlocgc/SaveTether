@@ -21,9 +21,25 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
     private readonly LocalStore _local = new(localFolder);
 
-    public async Task ApplyAsync(MappingState mapping, bool useThisCopy)
+    public Task ApplyAsync(MappingState mapping, bool useThisCopy)
     {
-        var role = $"{mapping.AppName} {mapping.Role}";
+        ArgumentNullException.ThrowIfNull(mapping);
+        return ApplyAsync(new Subject(mapping.MappingId, mapping.AppName, mapping.Role), useThisCopy);
+    }
+
+    /// <summary>Apply for each mapping just added (section 8, "Apply it now?"): each its own operation, in turn.</summary>
+    public async Task ApplyAddedAsync(string appName, IReadOnlyList<string> mappingIds)
+    {
+        ArgumentNullException.ThrowIfNull(mappingIds);
+        foreach (var id in mappingIds)
+        {
+            await ApplyAsync(new Subject(id, appName, id.Contains('.', StringComparison.Ordinal) ? id[(id.IndexOf('.', StringComparison.Ordinal) + 1)..] : id), useThisCopy: false);
+        }
+    }
+
+    private async Task ApplyAsync(Subject mapping, bool useThisCopy)
+    {
+        var role = mapping.Name;
         if (useThisCopy && !await overlay.ConfirmAsync(
                 "Make this device's copy the one every device keeps?",
                 "No files change; the other devices' claims are marked as replaced. Do this only if this device's saves are the ones to keep.",
@@ -89,9 +105,11 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
     }
 
-    public async Task RevertAsync(MappingState mapping)
+    public async Task RevertAsync(MappingState state)
     {
-        var role = $"{mapping.AppName} {mapping.Role}";
+        ArgumentNullException.ThrowIfNull(state);
+        var mapping = new Subject(state.MappingId, state.AppName, state.Role);
+        var role = mapping.Name;
         var session = await BeginAsync("revert");
         if (session is null)
         {
@@ -251,7 +269,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     }
 
     /// <summary>A refusal with the actions it allows. Answers the action chosen, or null to stop.</summary>
-    private async Task<RefusalAction?> HandleRefusalAsync(OperationSession session, MappingState mapping, string role, Refusal refusal)
+    private async Task<RefusalAction?> HandleRefusalAsync(OperationSession session, Subject mapping, string role, Refusal refusal)
     {
         var grant = await Task.Run(() => session.GrantableSandbox(mapping.MappingId, refusal));
         var view = ActionTexts.Describe(refusal, role, mapping.AppName, grant is not null);
@@ -299,7 +317,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     }
 
     /// <summary>The choice dialog (section 9.2): the comparison, then exactly the allowed choices, none selected at first.</summary>
-    private async Task<SetupChoice?> ChooseAsync(Refusal refusal, MappingState mapping, string role)
+    private async Task<SetupChoice?> ChooseAsync(Refusal refusal, Subject mapping, string role)
     {
         var body = new StackPanel { Spacing = 10 };
         if (refusal.Comparison is { } comparison)
@@ -442,6 +460,12 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 await overlay.InformAsync("Access not removed", $"'{grant.RemoveCommand}' did not succeed. The app can still write there.");
             }
         }
+    }
+
+    /// <summary>The mapping an action is about, as the dialogs name it: "Eden saves".</summary>
+    private sealed record Subject(string MappingId, string AppName, string Role)
+    {
+        public string Name => $"{AppName} {Role}";
     }
 
     private static string Label(RefusalAction action, string app) => action switch

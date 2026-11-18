@@ -50,6 +50,12 @@ public sealed record MappingState(string MappingId, string AppName, string Role,
 
     /// <summary>For a save folder that is a link elsewhere (Retargeted, Foreign link): where it points.</summary>
     public string? LinkTarget { get; init; }
+
+    /// <summary>True when the catalog has a usable definition for the app, so Add app can find it (section 8).</summary>
+    public bool HasDefinition { get; init; }
+
+    /// <summary>The part of the mapping ID before the dot: the app's ID in the catalog.</summary>
+    public string AppId => MappingId.Split('.')[0];
 }
 
 /// <summary>The result of one check: the state of the device, as section 3 and 5.1 show it.</summary>
@@ -99,12 +105,17 @@ public static class StatusCheck
             var report = workspace.Status();
             var others = report.SyncRootAvailable ? OtherDevicesPaths(workspace) : [];
             var mappings = report.Mappings
-                .Select(m => new MappingState(m.MappingId, AppName(workspace, m.MappingId), RoleOf(m.MappingId), StateWords.For(m.State, m.Reason), m)
+                .Select(m =>
                 {
-                    SetUpOn = m.Reason == HealthReason.NoSaveFolder
-                        ? others.Where(d => d.Value.Contains(m.MappingId)).Select(d => d.Key).Order(StringComparer.Ordinal).ToList()
-                        : [],
-                    LinkTarget = m.State is HealthState.Retargeted or HealthState.ForeignLink ? LinkTargetOf(m.Source) : null,
+                    var (name, defined) = AppOf(workspace, m.MappingId);
+                    return new MappingState(m.MappingId, name, RoleOf(m.MappingId), StateWords.For(m.State, m.Reason), m)
+                    {
+                        HasDefinition = defined,
+                        SetUpOn = m.Reason == HealthReason.NoSaveFolder
+                            ? others.Where(d => d.Value.Contains(m.MappingId)).Select(d => d.Key).Order(StringComparer.Ordinal).ToList()
+                            : [],
+                        LinkTarget = m.State is HealthState.Retargeted or HealthState.ForeignLink ? LinkTargetOf(m.Source) : null,
+                    };
                 })
                 .OrderBy(m => m.Word.NeedsAttention ? 0 : 1)
                 .ThenBy(m => m.AppName, StringComparer.OrdinalIgnoreCase)
@@ -129,20 +140,17 @@ public static class StatusCheck
         }
     }
 
-    private static string AppName(Workspace workspace, string mappingId)
+    /// <summary>The app's name from its definition, and whether there is a usable one; the ID and false otherwise.</summary>
+    private static (string Name, bool Defined) AppOf(Workspace workspace, string mappingId)
     {
         var appId = mappingId.Split('.')[0];
         try
         {
-            return workspace.Definitions.Find(appId)?.Definition?.Name ?? appId;
+            return workspace.Definitions.Find(appId)?.Definition is { } definition ? (definition.Name, true) : (appId, false);
         }
-        catch (IOException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            return appId;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return appId;
+            return (appId, false);
         }
     }
 
