@@ -330,7 +330,7 @@ public static class ActionTexts
         _ => "Apply",
     };
 
-    private static string Size(long bytes) => bytes switch
+    public static string Size(long bytes) => bytes switch
     {
         >= 1L << 30 => $"{bytes / (double)(1L << 30):0.0} GiB",
         >= 1L << 20 => $"{bytes / (double)(1L << 20):0.0} MiB",

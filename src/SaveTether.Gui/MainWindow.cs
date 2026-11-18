@@ -33,6 +33,7 @@ internal sealed class MainWindow : Window
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly ActionFlow _actions;
     private SetupView? _setup;
+    private AddAppScreen? _addApp;
     private bool _notHereOpen;
 
     /// <param name="operate">Runs one operation: the app marks itself busy around it and checks after it.</param>
@@ -116,13 +117,15 @@ internal sealed class MainWindow : Window
         if (status.Condition == OverallCondition.NotSetUp)
         {
             _banners.Children.Clear();
+            _addApp = null;
             _setup ??= new SetupView(_localFolder, _overlay, _checkNow);
             _body.Content = _setup;
             return;
         }
 
+        // Add app stays open through checks in the background, like setup: it is rebuilt only by the owner.
         _setup = null;
-        _body.Content = _rows;
+        _body.Content = (Control?)_addApp ?? _rows;
         _banners.Children.Clear();
         if (status.Condition == OverallCondition.Unfinished)
         {
@@ -147,13 +150,21 @@ internal sealed class MainWindow : Window
             && status.Condition is not (OverallCondition.UpdateNeeded or OverallCondition.Unfinished or OverallCondition.SyncRootUnavailable);
         _rows.Children.Clear();
         var page = AppsPage.From(status);
-        // Shown when at least one row is ready to link (section 5); found on the Deck hidden with one left.
+
+        // The page's actions (section 5): Add app, and Apply all when at least one row is ready to link
+        // (found on the Deck hidden with one left).
+        var pageActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 8) };
+        var addApp = new Button { Content = "Add app", IsEnabled = actionsAllowed };
+        addApp.Click += (_, _) => OpenAddApp(null);
+        pageActions.Children.Add(addApp);
         if (page.ForApplyAll.Count > 0)
         {
-            var applyAll = new Button { Content = $"Apply all ({page.ForApplyAll.Count})", IsEnabled = actionsAllowed, Margin = new Thickness(0, 0, 0, 8) };
+            var applyAll = new Button { Content = $"Apply all ({page.ForApplyAll.Count})", IsEnabled = actionsAllowed };
             applyAll.Click += (_, _) => _ = _operate(flow => flow.ApplyAllAsync(page.ForApplyAll));
-            _rows.Children.Add(applyAll);
+            pageActions.Children.Add(applyAll);
         }
+
+        _rows.Children.Add(pageActions);
 
         foreach (var group in page.Groups)
         {
@@ -277,7 +288,22 @@ internal sealed class MainWindow : Window
 
     /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
-        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.StopUsingHere);
+        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.StopUsingHere
+            or RowAction.FindAppAgain or RowAction.AddHere);
+
+    /// <summary>Add app (section 8) in place of the rows: page 1, or page 2 for one app.</summary>
+    private void OpenAddApp(string? appId)
+    {
+        _addApp = new AddAppScreen(_localFolder, _overlay, _operate, CloseAddApp, appId);
+        _body.Content = _addApp;
+    }
+
+    private void CloseAddApp()
+    {
+        _addApp = null;
+        _body.Content = _rows;
+        _checkNow();
+    }
 
     private void Do(RowAction action, AppRow row)
     {
@@ -299,6 +325,9 @@ internal sealed class MainWindow : Window
                 break;
             case RowAction.CheckAgain:
                 _checkNow();
+                break;
+            case RowAction.FindAppAgain or RowAction.AddHere:
+                OpenAddApp(mapping.AppId);
                 break;
             case RowAction.OpenFolder when mapping.Health.Source is { } source:
                 FolderOpener.Open(source, log);
