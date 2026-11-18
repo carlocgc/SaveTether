@@ -13,7 +13,7 @@ namespace SaveTether.Tests.Cli;
 public class AppAddCliTests
 {
     /// <summary>A definition with two Linux installs, both under home, and roles on and off by default.</summary>
-    private const string TestApp = """
+    internal const string TestApp = """
         {
           "schema": 1,
           "id": "testapp",
@@ -35,7 +35,7 @@ public class AppAddCliTests
     private static string SharedDefinitions(CliDevice device) =>
         Path.Combine(device.SyncRoot, "savetether", ".savetether", DefinitionCatalog.SharedFolderName);
 
-    private static void ShareDefinition(CliDevice device, string id, string text)
+    internal static void ShareDefinition(CliDevice device, string id, string text)
     {
         Directory.CreateDirectory(SharedDefinitions(device));
         File.WriteAllText(Path.Combine(SharedDefinitions(device), id + ".jsonc"), text);

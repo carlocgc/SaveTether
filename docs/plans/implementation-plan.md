@@ -423,6 +423,10 @@ Toolkit trial, 2026-11-17. A throwaway window-and-tray app on the branch `spike/
 | Start with the session | Opt-in autostart entry (XDG `.desktop`, `HKCU\...\Run`), re-written with the current path at each start; `status` warns when it points to a missing binary | Generated entries compared with expected text; install and remove on real hardware |
 | Release archives | Both binaries in each platform's archive; the app offers to move them to the per-user location | Archive contents checked in CI |
 
+Progress:
+- *Operation lock: done 2026-11-17 (PR #36), with the other core changes of the app spec's section 13, items 1 to 4 and 6 to 7 (PRs #33 to #38). Item 5 waits for the app to write autostart entries.*
+- *JSON contract freeze: done 2026-11-18 in `docs/cli-json.md`. `JsonContractTests` checks the output against `json-shapes.txt`: a recorded path that goes or changes type fails as a breaking change, and a new one fails until it is recorded and documented. Further tests check that every recorded field, every enum value the output can hold and every exit code is named in the document. The recordings now also cover `app add`, `app list`, a precondition with its facts, a store conflict and status with the sync root unavailable.*
+
 Exit test: on Windows and on Linux, a new user sets up a device, adds an app and applies it without the CLI; the tray icon turns amber when the sync root is unmounted and green again when it returns.
 
 ## 6. Phase 4: Decky plugin and detection
