@@ -24,6 +24,16 @@ Code: `src/SaveTether.Core` (all logic), `src/SaveTether.Cli`, `src/SaveTether.G
 - Every delete, move or link goes through `SafeFs` (a test fails otherwise). The app holds no logic of its own: it calls the core, as the CLI does.
 - No new dependency without the owner's approval. Avalonia's build telemetry is switched off in `Directory.Build.targets`; keep it so.
 
+## Recording what you learn
+
+What a session learns about testing or developing SaveTether is written down in the same PR, so the next session starts with it:
+
+- How to test, tool and platform quirks, a new feature's test flow: `docs/testing/hardware-testing.md`.
+- Where the build differs from the spec, and why: the spec's "As built" note for that section.
+- What was built, tested and found: the plan's progress entry and hardware checklist.
+- A change to how work is done here: this file. Keep it short; it is an index, loaded into every session.
+- Hosts, users, keys and other private details: the owner's private notes, never this public repository.
+
 ## Test machines
 
 A Linux Mint box (builds and tests on Linux) and the owner's Steam Deck (the real target). How to reach them is in the owner's private notes, not in this public repository. `docs/testing/hardware-testing.md` says what each is for, what may be changed on it, and how to run, drive and capture the app there. The Deck holds real saves: use throwaway folders under `~/sttest` with a guarded `SAVETETHER_HOME`, and touch its real setup only with the owner's leave.
