@@ -516,6 +516,26 @@ $.status.sync_root_available: boolean
 $.status: object
 $: object
 
+## status-autostart-missing
+$.command: string
+$.exit_code: number
+$.schema: number
+$.status.autostart_missing: string
+$.status.device_file_mismatch: boolean
+$.status.device_name: string
+$.status.journal_open: boolean
+$.status.mappings: array
+$.status.mappings[].detail: string
+$.status.mappings[].mapping_id: string
+$.status.mappings[].source: string
+$.status.mappings[].state: string
+$.status.mappings[].target: string
+$.status.mappings[]: object
+$.status.sync_root: string
+$.status.sync_root_available: boolean
+$.status: object
+$: object
+
 ## status-sync-root-unavailable
 $.command: string
 $.exit_code: number

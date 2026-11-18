@@ -21,6 +21,9 @@ internal sealed class CliEnvironment
 
     public TimeProvider Time { get; init; } = TimeProvider.System;
 
+    /// <summary>Where the desktop app's autostart entry is, for status to check. Null where there is none.</summary>
+    public SaveTether.Core.Startup.IAutostartStore? Autostart { get; init; } = SaveTether.Core.Startup.Autostart.ForSystem();
+
     /// <summary>Where answers to prompts are read from. Only used when <see cref="Interactive"/>.</summary>
     public TextReader? Input { get; init; }
 
