@@ -48,6 +48,7 @@ internal sealed class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             _desktop = desktop;
+            Dispatcher.UIThread.UnhandledException += OnUnhandledException;
             _monitor = HealthMonitor.For(new LocalStore(Options.LocalFolder));
             _closeQuits = !TrayHost.Present();
             if (!_closeQuits)
@@ -161,6 +162,24 @@ internal sealed class App : Application
         _tray.Clicked += (_, _) => ShowWindow();
         _headline.Header = "Checking";
         TrayIcon.SetIcons(this, [_tray]);
+    }
+
+    /// <summary>
+    /// An exception the app did not expect, from a click or a dialog (desktop-app-spec.md, section 10): logged
+    /// with its stack, shown in words, and the app keeps running. A health check follows, since the journal,
+    /// not the app, decides whether anything is unfinished.
+    /// </summary>
+    private void OnUnhandledException(object? sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        e.Handled = true;
+        var error = e.Exception is System.Reflection.TargetInvocationException { InnerException: { } inner } ? inner : e.Exception;
+        Log.Write($"unexpected error: {error}");
+        if (_window is not null)
+        {
+            _ = _window.ShowUnexpectedErrorAsync(error.Message);
+        }
+
+        CheckNow();
     }
 
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)

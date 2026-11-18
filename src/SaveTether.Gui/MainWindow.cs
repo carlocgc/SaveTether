@@ -83,6 +83,12 @@ internal sealed class MainWindow : Window
         _headline.Text = "Checking";
     }
 
+    /// <summary>Section 10's "anything else": the app keeps running, and the details are in gui.log.</summary>
+    public Task ShowUnexpectedErrorAsync(string message) =>
+        _overlay.InformAsync(
+            "Something went wrong",
+            $"Something went wrong: {message}\n\nSaveTether is still running. The details are in gui.log in {_localFolder}.");
+
     /// <summary>Shows one check's result. <paramref name="iconState"/> is what the tray shows, which may lag while another process works.</summary>
     public void Show(CheckResult result, OverallStatus? iconState)
     {

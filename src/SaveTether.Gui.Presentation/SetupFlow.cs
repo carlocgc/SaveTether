@@ -41,8 +41,12 @@ public sealed record SyncFolderCheck(SyncFolderFinding Finding, string Path, IRe
 }
 
 /// <summary>A device already set up in the sync folder, as step 2 lists it.</summary>
-/// <param name="BackupRoot">Where that device keeps its backups, from its file.</param>
-public sealed record ExistingDevice(string Name, string BackupRoot);
+/// <param name="BackupRoot">Where that device keeps its backups, from its file. Null when the file cannot be read.</param>
+/// <param name="Problem">Why its file cannot be read, when it cannot. Such a device cannot be taken over.</param>
+public sealed record ExistingDevice(string Name, string? BackupRoot, string? Problem = null)
+{
+    public bool CanTakeOver => Problem is null;
+}
 
 /// <summary>How setup ended: done, or refused at a step, with the core's reason. Nothing is written when refused.</summary>
 public sealed record SetupOutcome(InitResult? Result, SetupStep? FailedAt, string? Error)
@@ -78,7 +82,7 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
 
     /// <summary>The backup location step 3 starts with: the device file's when taking over, otherwise the default.</summary>
     public string SuggestedBackupRoot =>
-        TakeOver && ExistingDevices().FirstOrDefault(d => d.Name == DeviceName) is { } device ? device.BackupRoot : defaultBackupRoot;
+        TakeOver && ExistingDevices().FirstOrDefault(d => d.Name == DeviceName) is { BackupRoot: { } root } ? root : defaultBackupRoot;
 
     /// <summary>
     /// A sentence for a backup location that does not exist and will not be created, as the core treats one
@@ -138,11 +142,25 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
             return [];
         }
 
+        // One device's file that cannot be read must not hide the others: it is listed with its problem.
         var shared = new SharedStore(check.Path);
-        return check.Devices
-            .Select(name => shared.TryReadDevice(name) is { } file ? new ExistingDevice(name, file.BackupRoot) : null)
-            .OfType<ExistingDevice>()
-            .ToList();
+        var devices = new List<ExistingDevice>();
+        foreach (var name in check.Devices)
+        {
+            try
+            {
+                if (shared.TryReadDevice(name) is { } file)
+                {
+                    devices.Add(new ExistingDevice(name, file.BackupRoot));
+                }
+            }
+            catch (IOException e)
+            {
+                devices.Add(new ExistingDevice(name, null, e.Message));
+            }
+        }
+
+        return devices;
     }
 
     /// <summary>A name from the machine's host name, lowercased, with characters outside a-z, 0-9, '-' and '_' dropped.</summary>
@@ -195,9 +213,9 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
     public void ChooseTakeOver(string name)
     {
         RequireSyncFolder();
-        if (ExistingDevices().All(d => d.Name != name))
+        if (ExistingDevices().FirstOrDefault(d => d.Name == name) is not { CanTakeOver: true })
         {
-            throw new InvalidOperationException($"No device named '{name}' is set up in this sync folder.");
+            throw new InvalidOperationException($"No device named '{name}' that can be taken over is set up in this sync folder.");
         }
 
         DeviceName = name;

@@ -96,6 +96,39 @@ public class SetupFlowTests
     }
 
     [Fact]
+    public void Devices_from_the_other_system_are_listed_and_one_unreadable_file_hides_nothing()
+    {
+        // As found on the Deck: a Windows PC's file beside the Deck's crashed step 2.
+        using var sandbox = new Sandbox();
+        var deck = new CliDevice(sandbox, "deck");
+        deck.Ok("init", "--sync-root", deck.SyncRoot, "--device", "deck", "--create-root");
+        var devices = Path.Combine(deck.SyncRoot, "savetether", ".savetether", "devices");
+        File.WriteAllText(
+            Path.Combine(devices, "desktop.json"),
+            """
+            { "schema": 2, "device_name": "desktop", "install_id": "ab", "backup_root": "C:\\Users\\me\\SaveTether\\backups",
+              "paths": { "cemu.save": { "source": "E:\\LaunchBox\\Emulators\\CEMU\\Cemu\\mlc01\\usr\\save" } },
+              "apps": { "cemu": { "install": "portable", "install_dir": "E:\\LaunchBox\\Emulators\\CEMU\\Cemu" } } }
+            """);
+        File.WriteAllText(Path.Combine(devices, "broken.json"), "{ not json");
+
+        var (flow, _) = NewFlow(sandbox, "steamdeck", "reinstall");
+        flow.CheckSyncFolder(deck.SyncRoot);
+        var listed = flow.ExistingDevices();
+
+        Assert.Equal(["broken", "deck", "desktop"], listed.Select(d => d.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(@"C:\Users\me\SaveTether\backups", listed.Single(d => d.Name == "desktop").BackupRoot);
+        var broken = listed.Single(d => d.Name == "broken");
+        Assert.False(broken.CanTakeOver);
+        Assert.NotNull(broken.Problem);
+        Assert.Throws<InvalidOperationException>(() => flow.ChooseTakeOver("broken"));
+
+        // Taking over the Linux device still works with the Windows one beside it.
+        flow.ChooseTakeOver("deck");
+        Assert.True(flow.Finish(flow.SuggestedBackupRoot).Succeeded);
+    }
+
+    [Fact]
     public void A_taken_over_backup_location_that_is_not_there_is_noted_and_not_created()
     {
         using var sandbox = new Sandbox();

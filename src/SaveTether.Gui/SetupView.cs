@@ -89,6 +89,17 @@ internal sealed class SetupView : UserControl
             children.Add(new TextBlock { Text = "Set up again after a reinstall? Take over this device's old name:", TextWrapping = TextWrapping.Wrap });
             foreach (var device in existing)
             {
+                if (!device.CanTakeOver)
+                {
+                    children.Add(new TextBlock
+                    {
+                        Text = $"{device.Name}: its file cannot be read, so it cannot be taken over. {device.Problem}",
+                        TextWrapping = TextWrapping.Wrap,
+                        Opacity = 0.8,
+                    });
+                    continue;
+                }
+
                 var takeOver = new Button { Content = "Take over" };
                 takeOver.Click += async (_, _) =>
                 {

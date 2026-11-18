@@ -20,12 +20,17 @@ internal sealed class Overlay : Panel
         Children.Add(page);
     }
 
+    /// <summary>Tells something that needs no choice; closed with OK or Escape.</summary>
+    public Task InformAsync(string title, string text) => Show(title, text, confirmLabel: null);
+
     /// <summary>Asks, and answers true only for the confirming button.</summary>
-    public Task<bool> ConfirmAsync(string title, string text, string confirmLabel)
+    public Task<bool> ConfirmAsync(string title, string text, string confirmLabel) => Show(title, text, confirmLabel);
+
+    private Task<bool> Show(string title, string text, string? confirmLabel)
     {
         var answer = new TaskCompletionSource<bool>();
-        var cancel = new Button { Content = "Cancel" };
-        var confirm = new Button { Content = confirmLabel };
+        var cancel = new Button { Content = confirmLabel is null ? "OK" : "Cancel" };
+        var confirm = new Button { Content = confirmLabel, IsVisible = confirmLabel is not null };
         var card = new Border
         {
             MaxWidth = 560,

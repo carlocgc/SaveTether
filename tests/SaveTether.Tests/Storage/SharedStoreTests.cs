@@ -247,6 +247,47 @@ public class SharedStoreTests
     }
 
     [Fact]
+    public void A_device_file_written_on_the_other_system_is_valid_here()
+    {
+        // Found on the Deck: the Windows PC's file, with its install folder as E:\..., was refused on Linux.
+        using var sandbox = new Sandbox();
+        var store = NewStore(sandbox);
+        var file = Path.Combine(store.MetaRoot, "devices", "desktop.json");
+        string Device(string installDir) =>
+            "{ \"schema\": 2, \"device_name\": \"desktop\", \"install_id\": \"ab\", \"backup_root\": \"C:\\\\Users\\\\me\\\\Backups\", " +
+            "\"paths\": { \"cemu.save\": { \"source\": \"E:\\\\Cemu\\\\save\" } }, " +
+            $"\"apps\": {{ \"cemu\": {{ \"install\": \"portable\", \"install_dir\": {System.Text.Json.JsonSerializer.Serialize(installDir)} }} }} }}";
+
+        foreach (var absolute in new[] { @"E:\LaunchBox\Emulators\CEMU\Cemu", "e:/games/cemu", "/home/deck/Applications/Cemu", @"\\nas\games\cemu" })
+        {
+            File.WriteAllText(file, Device(absolute));
+            Assert.Equal(absolute, store.ReadDevice("desktop").Apps!["cemu"].InstallDir);
+        }
+
+        foreach (var relative in new[] { "games/cemu", @"games\cemu", "E:games" })
+        {
+            File.WriteAllText(file, Device(relative));
+            AssertProblem(StoreProblem.Invalid, () => store.ReadDevice("desktop"));
+        }
+    }
+
+    [Theory]
+    [InlineData(@"C:\Games", true)]
+    [InlineData("c:/games", true)]
+    [InlineData("/home/deck", true)]
+    [InlineData(@"\\server\share", true)]
+    [InlineData("games", false)]
+    [InlineData(@"games\x", false)]
+    [InlineData("E:x", false)]
+    [InlineData("C:", false)]
+    [InlineData(@"\\", false)]
+    [InlineData("", false)]
+    public void A_path_is_absolute_on_either_system(string path, bool expected)
+    {
+        Assert.Equal(expected, PathRules.IsAbsoluteOnAnySystem(path));
+    }
+
+    [Fact]
     public void Seed_markers_round_trip_and_supersede_without_deleting()
     {
         using var sandbox = new Sandbox();
