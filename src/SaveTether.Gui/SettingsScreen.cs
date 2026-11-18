@@ -56,7 +56,10 @@ internal sealed class SettingsScreen : UserControl
         }
 
         page.Children.Add(Heading("About"));
-        var version = typeof(SettingsScreen).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        // The build stamps "<version>+<commit>"; the commit is shortened as git shows it.
+        var stamped = typeof(SettingsScreen).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        var parts = stamped.Split('+', 2);
+        var version = parts.Length == 2 ? $"{parts[0]} ({parts[1][..Math.Min(7, parts[1].Length)]})" : stamped;
         page.Children.Add(new TextBlock { Text = $"SaveTether {version}" });
         var open = new Button { Content = "Open" };
         open.Click += (_, _) => FolderOpener.Open(localFolder, App.Options.Log);
