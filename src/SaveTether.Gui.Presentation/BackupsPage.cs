@@ -129,11 +129,14 @@ public static class BackupsPage
         "What is in the shared folder now is backed up on this device first. Then it is emptied and filled from this backup. " +
         "The change reaches every device through the sync tool.";
 
-    /// <summary>A local restore's confirmation sentence, above the plan's steps.</summary>
+    /// <summary>
+    /// A local restore's confirmation sentence, above the plan's. The plan's own sentences say a backup is
+    /// taken first, so this does not (it said it twice on the Deck).
+    /// </summary>
     public static string RestoreLocalText(BackupRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
-        return $"The save folder is put back as it was on {row.When} ({row.Reason}). What is in it now is backed up first.";
+        return $"The save folder is put back as it was on {row.When} ({row.Reason}).";
     }
 
     /// <summary>Listing backups checks no processes.</summary>

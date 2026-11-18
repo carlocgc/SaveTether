@@ -113,8 +113,9 @@ Changes from the table above:
 
 *As built (2026-11-18), with Add app:* **Find the app again** (Folder gone) and **Add** (Not on this device) open Add app's page 2 for the row's app. Both are offered only when the catalog has a usable definition for the app (`MappingState.HasDefinition`); a mapping made by hand with `map add` has none, so its row keeps no main action there, as Add app could only refuse it.
 
+*As built (2026-11-18), with the Backups page:* **Backups** is under More on Linked, Not linked and Two shared copies, as the table lists it.
+
 Not built yet:
-- **Backups**, which needs the Backups page.
 - **Add again** on "Folder setting is wrong".
 - **Opening the other actions by keyboard:** they are a Tab stop (the More button), not the Menu key or Shift+F10 (section 12).
 
@@ -179,8 +180,7 @@ Choices made while building:
 
 Built since: the other row actions except Backups, and Apply all (section 5's notes); Add app (section 8's notes), which takes the lock only for Add.
 
-Not built yet:
-- Backups and Restore.
+Built since: Backups and Restore (section 9.7's notes).
 
 ## 8. Add app
 
@@ -327,6 +327,15 @@ After a revert, when the core says a Flatpak grant is no longer needed (`Sandbox
 - A list grouped by mapping: time, reason (`pre-apply` "before linking", `pre-revert` "before reverting", `pre-restore` "before restoring", `baseline` "first backup", `snapshot` "snapshot"), whether it is of this device's folder or of the shared copy, size and file count. A filter by app. "Open folder" opens the backup's data folder: a backup is a plain tree (5.12) and can always be copied back by hand.
 - **Restore**: `PlanRestore`. A refusal of kind `restore-destination-unusable` because the folder is a link: "<Role> is linked, so restoring would write into the shared copy. Revert first." with **Revert**. `backup-unusable`: "This backup is incomplete or damaged, so it cannot be restored." The first backup of a mapping is marked "Kept" (retention never removes it, 5.12).
 - A backup of the shared copy needs a confirmation like the replace confirmation: "Restore the shared saves for <role> on every device?"
+
+*As built (2026-11-18).* `BackupsPage` (presentation project) groups and words the list; `BackupsScreen` (the app) shows it in place of the Apps page, opened by the page's **Backups** button or a row's More → **Backups**, which starts filtered to that row's app. The app filter is shown only when more than one app has backups. Restore runs through `ActionFlow.RestoreAsync`, an operation like Apply; the list is read again after it, since a restore takes a backup of what it replaces.
+
+Choices made while building:
+- **Shared copy or this device** is worked out from where the backup was taken: inside the sync folder is the shared copy. The core's list has no field for it.
+- **Kept** marks each mapping's oldest backup, the one retention keeps, with an asterisk and a footnote.
+- **The shared-copy confirmation** is asked before the lock is taken, as Use this device's copy is; the core then plans with the confirmation given. If the core still asks (it should not), the same confirmation is shown again under the lock.
+- **Revert from a restore refusal** ends the restore's operation and starts Revert as its own, with its own confirmation. It is offered only when the core's reason for `restore-destination-unusable` is that the folder is a link; the other reasons (not a folder, its parent gone, a shared folder that is no longer a save folder) are worded as "cannot be restored into as it is now", with copying by hand from Open folder as the way out.
+- **A local restore's confirmation** leads with "The save folder is put back as it was on <time> (<reason>)."
 
 ## 10. Errors outside the tables
 
