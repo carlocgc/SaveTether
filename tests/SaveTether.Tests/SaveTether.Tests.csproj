@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SaveTether.Core\SaveTether.Core.csproj" />
     <ProjectReference Include="..\..\src\SaveTether.Cli\SaveTether.Cli.csproj" />
+    <ProjectReference Include="..\..\src\SaveTether.Gui.Presentation\SaveTether.Gui.Presentation.csproj" />
   </ItemGroup>
 
 </Project>

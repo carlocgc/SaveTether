@@ -127,6 +127,45 @@ public sealed class OperationLock : IDisposable
         }
     }
 
+    /// <summary>
+    /// Who holds the lock, when it is another process that is still running; otherwise null. Reads only:
+    /// it does not try the lock, since even holding it for a moment could make another process's
+    /// operation refuse. It goes by the holder file, so it is right while the holder runs. A process ID
+    /// reused since then is not taken for the holder: that process started after the holder file was written.
+    /// </summary>
+    public static LockHolder? HeldByAnotherProcess(LocalStore local)
+    {
+        if (TryReadHolder(local) is not { } holder || holder.ProcessId == Environment.ProcessId)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(holder.ProcessId);
+            if (process.HasExited)
+            {
+                return null;
+            }
+
+            // A second's slack: the holder file is written just after its process starts at the earliest.
+            return process.StartTime.ToUniversalTime() <= holder.StartedUtc.UtcDateTime.AddSeconds(1) ? holder : null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // Its start time cannot be read (another user's process): count it as the holder, which only delays the icon.
+            return holder;
+        }
+    }
+
     /// <summary>The refusal when another process holds the lock.</summary>
     public static string RunningMessage(LockHolder? holder) =>
         holder is null

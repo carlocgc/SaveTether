@@ -6,7 +6,7 @@ namespace SaveTether.Cli;
 internal sealed class CliEnvironment
 {
     /// <summary>Overrides where this device's local files are kept.</summary>
-    public const string HomeVariable = "SAVETETHER_HOME";
+    public const string HomeVariable = SaveTether.Core.Storage.LocalStore.HomeVariable;
 
     /// <summary>This device's own folder: bootstrap, state, journal, and by default the backups.</summary>
     public required string LocalFolder { get; init; }
@@ -34,26 +34,8 @@ internal sealed class CliEnvironment
 
     public static CliEnvironment FromSystem() => new()
     {
-        LocalFolder = FindLocalFolder(),
+        LocalFolder = SaveTether.Core.Storage.LocalStore.DefaultFolder(),
         Input = Console.In,
         Interactive = !Console.IsInputRedirected && !Console.IsOutputRedirected,
     };
-
-    private static string FindLocalFolder()
-    {
-        if (Environment.GetEnvironmentVariable(HomeVariable) is { Length: > 0 } home)
-        {
-            return Path.GetFullPath(home);
-        }
-
-        if (OperatingSystem.IsWindows())
-        {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SaveTether");
-        }
-
-        var data = Environment.GetEnvironmentVariable("XDG_DATA_HOME") is { Length: > 0 } xdg && Path.IsPathFullyQualified(xdg)
-            ? xdg
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
-        return Path.Combine(data, "savetether");
-    }
 }

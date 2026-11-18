@@ -25,6 +25,32 @@ public sealed class LocalStore
 
     public string Folder { get; }
 
+    /// <summary>Overrides where this device's local files are kept, for every front end.</summary>
+    public const string HomeVariable = "SAVETETHER_HOME";
+
+    /// <summary>
+    /// This device's own folder, as every front end finds it: <see cref="HomeVariable"/> when set,
+    /// otherwise <c>%LOCALAPPDATA%\SaveTether</c> on Windows and <c>$XDG_DATA_HOME/savetether</c>
+    /// (by default <c>~/.local/share/savetether</c>) elsewhere.
+    /// </summary>
+    public static string DefaultFolder()
+    {
+        if (Environment.GetEnvironmentVariable(HomeVariable) is { Length: > 0 } home)
+        {
+            return Path.GetFullPath(home);
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SaveTether");
+        }
+
+        var data = Environment.GetEnvironmentVariable("XDG_DATA_HOME") is { Length: > 0 } xdg && Path.IsPathFullyQualified(xdg)
+            ? xdg
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
+        return Path.Combine(data, "savetether");
+    }
+
     /// <summary>Null when this device has not been set up with "init" yet.</summary>
     public BootstrapFile? TryReadBootstrap() =>
         JsonFiles.TryRead(Path.Combine(Folder, BootstrapName), StorageJsonContext.Default.BootstrapFile, BootstrapFile.CurrentSchema);
