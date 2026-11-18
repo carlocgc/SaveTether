@@ -57,12 +57,18 @@ internal sealed class Overlay : Panel
         var layer = Layer(title, body, buttonRow);
         var window = TopLevel.GetTopLevel(this);
         DispatcherTimer? timer = null;
+        var ready = false;
 
         // Escape is caught at the window, on the way down, so it works wherever focus is: disabling the page
         // can leave focus on nothing, and then a key event never passes through the dialog. Found on the Deck.
+        // Before the dialog has been shown for its minimum, Escape and Enter are swallowed, not passed on.
         void OnKey(object? sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape)
+            if (!ready && e.Key is Key.Escape or Key.Enter or Key.Space)
+            {
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
             {
                 e.Handled = true;
                 Close(safe);
@@ -98,8 +104,22 @@ internal sealed class Overlay : Panel
         _page.IsEnabled = false;
         Children.Add(layer);
 
-        // Focus moves to the safe button once the dialog is laid out; before that it cannot take focus.
-        Dispatcher.UIThread.Post(() => safe.Focus(NavigationMethod.Tab), DispatcherPriority.Loaded);
+        // The buttons answer only once the dialog has been on screen for its minimum, so a double click or a
+        // held key cannot pass it unread. Then focus moves to the safe button: a disabled one cannot take it.
+        buttonRow.IsEnabled = false;
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                if (answer.Task.IsCompleted)
+                {
+                    return;
+                }
+
+                ready = true;
+                buttonRow.IsEnabled = true;
+                safe.Focus(NavigationMethod.Tab);
+            },
+            Presentation.Pacing.DialogMinimum);
         return answer.Task;
     }
 
