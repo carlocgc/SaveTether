@@ -351,7 +351,13 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
 
             case AppAddProblem.NotInstalled:
             {
-                var sentences = outcome.Candidates.Select(c => $"{c.Id}: {c.Reason?.Text ?? "not found."}").ToList();
+                // The core's reason for an install that needs a value names its token ("{install_dir} needs..."): the
+                // window says it in words, since the field for it is right below (found on the Deck). Details keep the core's.
+                var sentences = outcome.Candidates
+                    .Select(c => c.Problem == ResolveProblem.NeedsValue
+                        ? $"{c.Id}: can only be looked for once you give its location below."
+                        : $"{c.Id}: {c.Reason?.Text ?? "not found."}")
+                    .ToList();
                 var installs = definition?.Installs.Where(i => i.Os.Contains(environment.Os)).ToList() ?? [];
                 var wanting = next.Contains(NextStepKind.GiveNewLocation)
                     ? installs

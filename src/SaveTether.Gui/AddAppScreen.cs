@@ -210,16 +210,21 @@ internal sealed class AddAppScreen : UserControl
                 if (fields.Count > 0)
                 {
                     var look = new Button { Content = "Look again", IsDefault = true };
-                    look.Click += (_, _) => _ = PlanAsync(() =>
+                    look.Click += (_, _) =>
                     {
-                        AddAppView? last = null;
-                        foreach (var (field, box) in fields)
+                        // Read here, on the UI thread: a control cannot be read from the planning thread (found on the Deck).
+                        var typed = fields.Select(f => (f.Field, Text: f.Box.Text)).ToList();
+                        _ = PlanAsync(() =>
                         {
-                            last = _flow.SetLocation(field, box.Text);
-                        }
+                            AddAppView? last = null;
+                            foreach (var (field, text) in typed)
+                            {
+                                last = _flow.SetLocation(field, text);
+                            }
 
-                        return last!;
-                    });
+                            return last!;
+                        });
+                    };
                     content.Add(Buttons(back, look));
                 }
                 else
@@ -272,7 +277,11 @@ internal sealed class AddAppScreen : UserControl
             var box = new CheckBox { IsChecked = role.Ticked, Content = lines };
             AutomationProperties.SetName(box, $"Share {role.RoleId}");
             var roleId = role.RoleId;
-            box.IsCheckedChanged += (_, _) => _ = PlanAsync(() => _flow.SetRole(roleId, box.IsChecked == true));
+            box.IsCheckedChanged += (_, _) =>
+            {
+                var ticked = box.IsChecked == true;
+                _ = PlanAsync(() => _flow.SetRole(roleId, ticked));
+            };
             yield return box;
         }
 
@@ -334,7 +343,11 @@ internal sealed class AddAppScreen : UserControl
         }
     });
 
-    /// <summary>Runs a read or Add off the UI thread. A refusal from the core is shown on the page instead of ending the flow.</summary>
+    /// <summary>
+    /// Runs a read or Add off the UI thread. A refusal from the core is shown on the page instead of ending the
+    /// flow. Anything else is section 10's unexpected error: logged with its stack and said, since the callers
+    /// do not await this and an exception would otherwise vanish with the page left disabled (found on the Deck).
+    /// </summary>
     private async Task<T?> Guard<T>(Func<T> work)
         where T : class
     {
@@ -342,13 +355,16 @@ internal sealed class AddAppScreen : UserControl
         {
             return await Task.Run(work);
         }
-        catch (Exception e) when (e is StoreException or IOException or UnauthorizedAccessException)
+        catch (Exception e)
         {
-            App.Options.Log.Write($"add app: {e.GetType().Name}: {e.Message}");
+            var expected = e is StoreException or IOException or UnauthorizedAccessException;
+            App.Options.Log.Write(expected ? $"add app: {e.GetType().Name}: {e.Message}" : $"unexpected error: {e}");
             var back = new Button { Content = "Back to apps" };
             back.Click += (_, _) => Leave();
             _page.IsEnabled = true;
-            _page.Content = Page("Add app cannot go on", [e.Message], Buttons(back));
+            _page.Content = expected
+                ? Page("Add app cannot go on", [e.Message], Buttons(back))
+                : Page("Something went wrong", [$"Something went wrong: {e.Message}", "SaveTether is still running. The details are in gui.log."], Buttons(back));
             return null;
         }
     }

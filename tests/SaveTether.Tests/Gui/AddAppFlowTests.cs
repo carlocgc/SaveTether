@@ -133,6 +133,10 @@ public class AddAppFlowTests
         var view = flow.Start("testapp");
         Assert.Equal("Test App was not found on this device.", view.Title);
         Assert.Contains(view.Sentences, s => s.StartsWith("native: No folder at", StringComparison.Ordinal));
+
+        // An install that needs a value is said in words, not with the core's token (found on the Deck).
+        Assert.Contains("portable: can only be looked for once you give its location below.", view.Sentences);
+        Assert.DoesNotContain(view.Sentences, s => s.Contains("{install_dir}", StringComparison.Ordinal));
         Assert.Equal([LocationField.InstallFolder], view.Fields.Select(f => f.Field));
 
         view = flow.SetLocation(LocationField.InstallFolder, "relative/folder");
