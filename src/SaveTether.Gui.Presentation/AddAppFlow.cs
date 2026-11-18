@@ -51,7 +51,7 @@ public enum AddAppPage
 }
 
 /// <summary>One role of the chosen install, ticked or not, with what the plan found for it.</summary>
-/// <param name="Unticked">Why a role that is off by default is off, for the label beside its checkbox.</param>
+/// <param name="Unticked">Why a role is off by default, for the label beside its checkbox. Null for a default role.</param>
 /// <param name="Planned">The plan's measurements, when the role is in the plan.</param>
 /// <param name="Notes">The definition's note for the role.</param>
 public sealed record RoleChoice(string RoleId, RoleClass Class, bool Ticked, string? Unticked, AppRolePlan? Planned, string? Notes);
@@ -417,11 +417,12 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         _ => message ?? "It is already set up differently.",
     };
 
+    /// <summary>Shown whether ticked or not, so it says "by default": a ticked role read "Off: ..." on the Deck.</summary>
     private static string WhyOff(RoleClass roleClass) => roleClass switch
     {
-        RoleClass.Cache => "Off: a cache, which the app rebuilds by itself.",
-        RoleClass.Media => "Off: screenshots and recordings, which can be large.",
-        _ => "Off unless you choose it.",
+        RoleClass.Cache => "Off by default: a cache, which the app rebuilds by itself.",
+        RoleClass.Media => "Off by default: screenshots and recordings, which can be large.",
+        _ => "Off by default.",
     };
 
     private List<(LocationField Field, string? Value)> FieldsFor(IEnumerable<InstallDefinition> installs, AppDefinition? definition, AppAddRequest request)

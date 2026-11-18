@@ -67,7 +67,7 @@ public class AddAppFlowTests
         Assert.Equal(["A quirk the owner should read."], view.Quirks);
         Assert.Equal(["saves", "states", "shots"], view.Roles.Select(r => r.RoleId));
         Assert.Equal([true, true, false], view.Roles.Select(r => r.Ticked));
-        Assert.Equal("Off: screenshots and recordings, which can be large.", view.Roles[2].Unticked);
+        Assert.Equal("Off by default: screenshots and recordings, which can be large.", view.Roles[2].Unticked);
         Assert.Equal("1 file, 5 bytes", AddAppFlow.SizeOf(view.Roles[0].Planned!));
         Assert.Equal("not there yet", AddAppFlow.SizeOf(view.Roles[1].Planned!));
         Assert.True(view.CanAdd);
