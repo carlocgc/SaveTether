@@ -36,6 +36,13 @@ public enum StoreProblem
     /// <summary>Another SaveTether process holds the operation lock (<see cref="OperationLock"/>).</summary>
     [JsonStringEnumMemberName("operation-running")]
     OperationRunning,
+
+    /// <summary>
+    /// A new sync root was given while mappings on this device are still linked into the old one.
+    /// <see cref="StoreException.Next"/> holds a Revert step for each.
+    /// </summary>
+    [JsonStringEnumMemberName("mappings-applied")]
+    MappingsApplied,
 }
 
 /// <summary>A SaveTether file could not be read or written. <see cref="Problem"/> says why.</summary>

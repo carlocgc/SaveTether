@@ -110,6 +110,9 @@ public sealed partial class Workspace
                 $"'{request.DeviceName}' is not a valid device name. Use lowercase letters, digits, '-' and '_', for example 'deck'.");
         }
 
+        // Before anything is written: a refusal here must leave the device as it was.
+        var notes = GuardSyncRootChange(local, shared.SyncRoot);
+
         var createdRoot = false;
         if (!shared.IsInitialized)
         {
@@ -142,7 +145,6 @@ public sealed partial class Workspace
             shared.WriteDevice(device);
         }
 
-        var notes = new List<Note>();
         if (SafeFs.Probe(PathRules.ResolveAll(backupRoot)) != EntryKind.Directory)
         {
             // A location the owner did not name here may be on a drive that is not connected.
@@ -171,6 +173,85 @@ public sealed partial class Workspace
             NewDevice: existing is null, TookOver: existing is not null && !alreadyOurs,
             shared.ListDeviceNames(), notes);
     }
+
+    /// <summary>
+    /// "init" with a sync root other than this device's: refused while any of its save folders is
+    /// still a link into the old sync root whose shared folder is there (desktop-app-spec.md,
+    /// decision 9). Those links would point into a folder the device no longer tracks, so they are
+    /// reverted first. A link whose shared folder cannot be reached holds no saves, and cannot be
+    /// reverted, so it does not block; it comes back as a note.
+    /// </summary>
+    /// <remarks>
+    /// The save folders come from this device's own record of what it applied, which is local and so
+    /// readable with the old sync root unmounted, and from its file in the old sync root when that is
+    /// readable, in case the record was lost.
+    /// </remarks>
+    private static List<Note> GuardSyncRootChange(LocalStore local, string newSyncRoot)
+    {
+        if (local.TryReadBootstrap() is not { } known || SameFolder(known.SyncRoot, newSyncRoot))
+        {
+            return [];
+        }
+
+        var sources = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (id, applied) in local.ReadState().Mappings)
+        {
+            sources[id] = applied.Source;
+        }
+
+        var oldShared = new SharedStore(known.SyncRoot);
+        if (oldShared.IsInitialized && oldShared.TryReadDevice(known.DeviceName) is { } device)
+        {
+            foreach (var (id, path) in device.Paths)
+            {
+                sources.TryAdd(id, path.Source);
+            }
+        }
+
+        var oldRoot = PathRules.ResolveAll(known.SyncRoot);
+        var linked = new List<string>();
+        var notes = new List<Note>();
+        foreach (var (id, source) in sources)
+        {
+            if (!Path.IsPathFullyQualified(source) || !IsLink(source))
+            {
+                continue;
+            }
+
+            var target = SafeFs.ReadLinkTarget(source);
+            if (!PathRules.IsSameOrInside(target, known.SyncRoot) && !PathRules.IsSameOrInside(target, oldRoot))
+            {
+                continue; // Not a link into the old sync root, so not one this change strands.
+            }
+
+            if (SafeFs.Probe(PathRules.ResolveAll(target)) == EntryKind.Directory)
+            {
+                linked.Add(id);
+            }
+            else
+            {
+                notes.Add(
+                    $"'{source}' ({id}) is still a link to '{target}' in the old sync folder, which cannot be reached, " +
+                    "so it holds none of the saves. Delete the link by hand before using that save folder again.");
+            }
+        }
+
+        if (linked.Count > 0)
+        {
+            throw new StoreException(
+                StoreProblem.MappingsApplied,
+                new Note(
+                    $"This device uses the sync folder '{known.SyncRoot}', and {string.Join(", ", linked)} " +
+                    $"{(linked.Count == 1 ? "is" : "are")} linked into it. Changing the sync folder now would leave " +
+                    $"{(linked.Count == 1 ? "that link" : "those links")} pointing into a folder this device no longer uses. Nothing was changed.",
+                    linked.Select(id => new NextStep(NextStepKind.Revert, id)).ToList()));
+        }
+
+        return notes;
+    }
+
+    private static bool SameFolder(string a, string b) =>
+        PathRules.AreSame(a, b) || PathRules.AreSame(PathRules.ResolveAll(a), PathRules.ResolveAll(b));
 
     /// <summary>"map add": the shared mapping, if it is new, and this device's save folder for it.</summary>
     /// <param name="entryDepth">How many levels down one game's saves sit (design 5.13), or null to leave it as it is.</param>
