@@ -35,6 +35,69 @@ public class CliCommandTests
     }
 
     [Fact]
+    public void A_new_sync_folder_is_refused_while_a_mapping_is_linked_into_the_old_one()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", Id, "--copy");
+        var newRoot = sandbox.Dir("pc", "sync2");
+
+        // Init again with the same sync folder is still fine.
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", "pc");
+
+        var refused = pc.Expect(CliApp.ExitRefused, "init", "--sync-root", newRoot, "--device", "pc", "--create-root", "--json").Json();
+        Assert.Equal("mappings-applied", refused.GetProperty("problem").GetString());
+        Assert.Contains($"savetether revert {Id}", refused.GetProperty("error").GetString(), StringComparison.Ordinal);
+
+        // Nothing was written: no SaveTether folder in the new place, and the device still uses the old one.
+        Assert.Empty(Directory.GetFileSystemEntries(newRoot));
+        Assert.Equal(pc.SyncRoot, pc.Ok("status", "--json").Json().GetProperty("status").GetProperty("sync_root").GetString());
+        Assert.True(pc.IsLinked);
+
+        // Losing the local record does not hide the link: the old sync folder's device file names it.
+        File.Delete(Path.Combine(pc.LocalFolder, "state.json"));
+        Assert.Equal(
+            "mappings-applied",
+            pc.Expect(CliApp.ExitRefused, "init", "--sync-root", newRoot, "--device", "pc", "--create-root", "--json")
+                .Json().GetProperty("problem").GetString());
+        Assert.Empty(Directory.GetFileSystemEntries(newRoot));
+
+        // Reverted, it goes ahead.
+        pc.Ok("revert", Id);
+        pc.Ok("init", "--sync-root", newRoot, "--device", "pc", "--create-root");
+        Assert.Equal(newRoot, pc.Ok("status", "--json").Json().GetProperty("status").GetProperty("sync_root").GetString());
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_link_into_an_old_sync_folder_that_is_gone_does_not_block_a_new_one()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", Id, "--copy");
+
+        // The old sync folder moves for good, as when its drive letter changes. The link cannot be reverted now.
+        var moved = sandbox.At("pc", "sync-moved");
+        Directory.Move(pc.SyncRoot, moved);
+        var newRoot = sandbox.Dir("pc", "sync2");
+
+        var init = pc.Ok("init", "--sync-root", newRoot, "--device", "pc", "--create-root", "--json").Json().GetProperty("init");
+        var note = Assert.Single(init.GetProperty("notes").EnumerateArray()).GetString();
+        Assert.Contains($"({Id}) is still a link", note, StringComparison.Ordinal);
+        Assert.Contains("cannot be reached", note, StringComparison.Ordinal);
+
+        // The link is left as it was: SaveTether deletes nothing here.
+        Assert.True(pc.IsLinked);
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, CliDevice.FilesIn(Path.Combine(moved, "savetether", "ppsspp", "SAVEDATA")));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void A_shared_folder_set_up_only_in_part_still_takes_devices_and_mappings()
     {
         // Found on the Deck: a .savetether folder holding only definitions, with no devices or mappings folder.
