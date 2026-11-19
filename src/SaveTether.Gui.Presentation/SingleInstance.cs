@@ -9,7 +9,7 @@ namespace SaveTether.Gui.Presentation;
 /// One copy of the app per user and local folder (desktop-app-spec.md, section 2). The first copy holds
 /// <c>gui.lock</c> with no sharing, as the operation lock does, so the operating system frees it however
 /// the process ends. It listens on a local socket; a second copy finds the lock taken, asks the first to
-/// show its window, and exits.
+/// show its window, and exits. A newer copy that is to update the installed app asks the first to quit instead.
 /// </summary>
 /// <remarks>
 /// One mechanism on both systems, where the spec named a mutex and a named pipe for Windows: .NET's
@@ -21,6 +21,7 @@ public sealed class SingleInstance : IDisposable
 {
     public const string LockName = "gui.lock";
     private const string ShowMessage = "show\n";
+    private const string QuitMessage = "quit\n";
     private const int MaxSocketPath = 100;
 
     private readonly FileStream _lock;
@@ -28,19 +29,20 @@ public sealed class SingleInstance : IDisposable
     private readonly string _socketPath;
     private readonly CancellationTokenSource _stop = new();
 
-    private SingleInstance(FileStream lockHandle, Socket listener, string socketPath, Action onShow)
+    private SingleInstance(FileStream lockHandle, Socket listener, string socketPath, Action onShow, Action? onQuit)
     {
         _lock = lockHandle;
         _listener = listener;
         _socketPath = socketPath;
-        _ = Task.Run(() => ListenAsync(onShow, _stop.Token));
+        _ = Task.Run(() => ListenAsync(onShow, onQuit, _stop.Token));
     }
 
     /// <summary>
     /// Becomes the one copy, or returns null when another copy already is. <paramref name="onShow"/> runs on
-    /// a background thread each time another copy asks for the window.
+    /// a background thread each time another copy asks for the window; <paramref name="onQuit"/> when one asks this
+    /// copy to quit, to update it.
     /// </summary>
-    public static SingleInstance? TryClaim(string localFolder, Action onShow)
+    public static SingleInstance? TryClaim(string localFolder, Action onShow, Action? onQuit = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(localFolder);
         ArgumentNullException.ThrowIfNull(onShow);
@@ -72,17 +74,22 @@ public sealed class SingleInstance : IDisposable
             throw;
         }
 
-        return new SingleInstance(handle, listener, socketPath, onShow);
+        return new SingleInstance(handle, listener, socketPath, onShow, onQuit);
     }
 
     /// <summary>Asks the copy that holds the lock to show its window. False when none answered.</summary>
-    public static bool SignalExisting(string localFolder)
+    public static bool SignalExisting(string localFolder) => Send(localFolder, ShowMessage);
+
+    /// <summary>Asks the copy that holds the lock to quit, as it would from its tray menu. False when none answered.</summary>
+    public static bool RequestQuit(string localFolder) => Send(localFolder, QuitMessage);
+
+    private static bool Send(string localFolder, string message)
     {
         try
         {
             using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             socket.Connect(new UnixDomainSocketEndPoint(SocketPath(localFolder)));
-            socket.Send(Encoding.ASCII.GetBytes(ShowMessage));
+            socket.Send(Encoding.ASCII.GetBytes(message));
             return true;
         }
         catch (SocketException)
@@ -122,7 +129,7 @@ public sealed class SingleInstance : IDisposable
         return Path.Combine(folder, $"savetether-{hash}.sock");
     }
 
-    private async Task ListenAsync(Action onShow, CancellationToken stop)
+    private async Task ListenAsync(Action onShow, Action? onQuit, CancellationToken stop)
     {
         var buffer = new byte[16];
         while (!stop.IsCancellationRequested)
@@ -131,9 +138,14 @@ public sealed class SingleInstance : IDisposable
             {
                 using var client = await _listener.AcceptAsync(stop).ConfigureAwait(false);
                 var read = await client.ReceiveAsync(buffer, SocketFlags.None, stop).ConfigureAwait(false);
-                if (Encoding.ASCII.GetString(buffer, 0, read) == ShowMessage)
+                var message = Encoding.ASCII.GetString(buffer, 0, read);
+                if (message == ShowMessage)
                 {
                     onShow();
+                }
+                else if (message == QuitMessage)
+                {
+                    onQuit?.Invoke();
                 }
             }
             catch (OperationCanceledException)

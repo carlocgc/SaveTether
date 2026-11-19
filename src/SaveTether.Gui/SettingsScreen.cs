@@ -61,7 +61,7 @@ internal sealed class SettingsScreen : UserControl, IScreen
 
         page.Children.Add(Heading("About"));
         // The build stamps "<version>+<commit>"; the commit is shortened as git shows it.
-        var stamped = typeof(SettingsScreen).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        var stamped = Program.Version;
         var parts = stamped.Split('+', 2);
         var version = parts.Length == 2 ? $"{parts[0]} ({parts[1][..Math.Min(7, parts[1].Length)]})" : stamped;
         page.Children.Add(new TextBlock { Text = $"SaveTether {version}" });
