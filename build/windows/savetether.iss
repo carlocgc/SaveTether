@@ -76,6 +76,9 @@ const
     someone who had put the folder on Path by hand keeps it. }
   MarkerKey = 'Software\SaveTether';
   MarkerValue = 'AddedToPath';
+  { The exact text appended to Path (the folder, with the ';' before it when one was needed), so uninstalling puts
+    Path back as it was, character for character, while nothing has changed it since. }
+  AddedTextValue = 'AddedToPathText';
 
 { One Path entry, compared without letter case or a trailing backslash. }
 function SameFolder(Entry, Folder: string): Boolean;
@@ -133,18 +136,20 @@ end;
 { Adds the folder, and notes that it did. A folder already on Path is left as it is, with no note. }
 procedure AddToPath(Folder: string);
 var
-  Paths: string;
+  Paths, Added: string;
 begin
   Paths := ReadUserPath();
   if PathHas(Paths, Folder) then
     Exit;
+  Added := Folder;
   if (Paths <> '') and (Paths[Length(Paths)] <> ';') then
-    Paths := Paths + ';';
-  WriteUserPath(Paths + Folder);
+    Added := ';' + Folder;
+  WriteUserPath(Paths + Added);
   RegWriteStringValue(HKCU, MarkerKey, MarkerValue, Folder);
+  RegWriteStringValue(HKCU, MarkerKey, AddedTextValue, Added);
 end;
 
-procedure RemoveFromPath(Folder: string);
+procedure RemoveFromPath(Folder, Added: string);
 var
   Paths, Rest, Entry, Kept: string;
   Cut: Integer;
@@ -152,6 +157,18 @@ begin
   Paths := ReadUserPath();
   if not PathHas(Paths, Folder) then
     Exit;
+  { Path unchanged at its end since the install: take off exactly what was appended. }
+  if (Added <> '') and (Length(Paths) >= Length(Added))
+    and (CompareText(Copy(Paths, Length(Paths) - Length(Added) + 1, Length(Added)), Added) = 0) then
+  begin
+    Kept := Copy(Paths, 1, Length(Paths) - Length(Added));
+    if Kept = '' then
+      RegDeleteValue(HKCU, EnvironmentKey, 'Path')
+    else
+      WriteUserPath(Kept);
+    Exit;
+  end;
+  { Changed since: take out the entry wherever it now is. }
   Kept := '';
   Rest := Paths;
   while Rest <> '' do
@@ -189,15 +206,18 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  Started, Added: string;
+  Started, Marked, Added: string;
 begin
   if CurUninstallStep = usPostUninstall then
   begin
     { Only an entry this installer added; one put there by hand stays. }
-    if RegQueryStringValue(HKCU, MarkerKey, MarkerValue, Added) and SameFolder(Added, ExpandConstant('{app}')) then
+    if RegQueryStringValue(HKCU, MarkerKey, MarkerValue, Marked) and SameFolder(Marked, ExpandConstant('{app}')) then
     begin
-      RemoveFromPath(ExpandConstant('{app}'));
+      if not RegQueryStringValue(HKCU, MarkerKey, AddedTextValue, Added) then
+        Added := '';
+      RemoveFromPath(ExpandConstant('{app}'), Added);
       RegDeleteValue(HKCU, MarkerKey, MarkerValue);
+      RegDeleteValue(HKCU, MarkerKey, AddedTextValue);
       RegDeleteKeyIfEmpty(HKCU, MarkerKey);
     end;
     { The app's "Start with the session" entry, when it starts the copy being removed: it would point at nothing. }

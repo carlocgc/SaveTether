@@ -78,6 +78,10 @@ try {
         Assert-That ($null -eq $pathAfter) 'no user Path, as before'
     }
     else {
+        if ($null -eq $pathAfter -or $pathAfter.Value -ne $pathBefore.Value) {
+            Write-Host "Path before: [$($pathBefore.Value)] ($($pathBefore.Kind))"
+            Write-Host "Path after:  [$(if ($pathAfter) { $pathAfter.Value })] ($(if ($pathAfter) { $pathAfter.Kind }))"
+        }
         Assert-That ($null -ne $pathAfter -and $pathAfter.Value -eq $pathBefore.Value) 'user Path as before'
         Assert-That ($pathAfter.Kind -eq $pathBefore.Kind) "user Path's type as before ($($pathBefore.Kind))"
     }
