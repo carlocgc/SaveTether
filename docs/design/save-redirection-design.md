@@ -293,7 +293,7 @@ A `winpath` location is the one cross-OS trick: on Windows it resolves natively,
 - `"prefix": { "lutris": "<slug>" }` for a Lutris game. The prefix path is read from that game's Lutris config **[K]**.
 - `"prefix": { "path": "..." }` set in that device's config file, as the fallback.
 
-Games with platform cloud saves are out of scope. Where the tool can tell (the Ludusavi manifest records this per game **[K]**), it warns before managing one.
+Games with platform cloud saves are in scope, decided by the owner on 2026-11-19: the same game bought from another store, or on disc, has no cloud saves. A definition notes which stores' copies have cloud saves (the Ludusavi manifest records this per game **[V]**); nothing is refused. Earlier, from 2026-11-12, such games were out of scope.
 
 Shape, abbreviated. Links are the only mechanism (5.13), so a role does not name one.
 
@@ -364,7 +364,7 @@ Every problem in a file is reported, each as `file(line): message`, so a mistake
 
 `definitions/definition.schema.json` is a JSON Schema of the same format, for editors that offer completion and checking. The loader is what decides; a test keeps the two agreeing on which fields and values exist.
 
-**Where definitions come from.** Decided by the owner on 2026-11-17. Definitions in the repository's `definitions/` folder are built into the binary; Cemu is the only one so far, because it is the only one whose paths were used on both devices. The owner's own go in `<sync root>/savetether/.savetether/definitions/<app-id>.jsonc`, so one written on any device reaches every device through the sync tool. A shared file replaces the built-in one with the same ID. Only the file for the app being added is read, so a mistake in another file does not stop it. `app list` shows both kinds.
+**Where definitions come from.** Decided by the owner on 2026-11-17. Definitions in the repository's `definitions/` folder are built into the binary; Cemu is the only one so far, because it is the only one whose paths were used on both devices. The owner's own go in `<sync root>/savetether/.savetether/definitions/<app-id>.jsonc`, so one written on any device reaches every device through the sync tool. A shared file replaces the built-in one with the same ID. A third source, imported definitions converted from the Ludusavi manifest, comes with plan phase 3.5 (decided 2026-11-19): built in, labelled unverified, and used only for an ID that neither a shared nor a verified built-in definition has. Only the file for the app being added is read, so a mistake in another file does not stop it. `app list` shows both kinds.
 
 **Adding an app.** `app add <app>` reads only, works out a plan, and writes only when every role can be added:
 
@@ -559,7 +559,9 @@ The device file gains `apps` for that record, and with it `schema: 2`. As with m
 
 So the code and format are freely usable, but the data inherits PCGamingWiki's terms: attribution, non-commercial, share-alike. For a free open-source tool that is workable if you follow three rules. Download the manifest on the user's machine at run time, as Ludusavi does, and do not ship it inside releases. Never copy its entries into SaveTether's own definitions, which keeps your definitions free of the share-alike and non-commercial terms. Credit PCGamingWiki and Ludusavi in the UI and README. This is my reading, not legal advice; a short note to Ludusavi's maintainer would settle whether other tools already do this.
 
-What it gives you: save locations for PC games as Windows paths with placeholders, which map onto the `winpath` and prefix resolution above, plus the per-game cloud flag. What it does not give you: emulators (not covered at all), and probably thin coverage of obscure visual novels and Flash games **[I]**. It lists files to *back up*, which can be individual files among other content, so an entry is a starting hint for a link, not a ready-made mapping. Plan on it as an optional detection aid in phase 3, not a foundation.
+What it gives you: save locations for PC games as Windows paths with placeholders, which map onto the `winpath` and prefix resolution above, plus the per-game cloud flag. What it does not give you: probably thin coverage of obscure visual novels and Flash games **[I]**, and only some emulators: Cemu, Dolphin, RetroArch, PCSX2, RPCS3, PPSSPP and Ryujinx have entries, DuckStation, melonDS, Citra and xemu do not **[V, 2026-11-19]** (this paragraph first said emulators were not covered at all). It lists files to *back up*, which can be individual files among other content, so an entry is a starting hint for a link, not a ready-made mapping.
+
+**Revised by the owner on 2026-11-19: imported definitions.** The manifest is converted in CI into SaveTether definitions by rules that keep only folders safe to link, and the result is built in as a third, unverified source (plan section 5a, with the trial's numbers). On the licence, the reading above is revised: the manifest's MIT licence is the permission to redistribute it, on condition that its copyright and licence notice go with every copy, so the notice ships with the converted file. What MIT cannot settle is any right PCGamingWiki holds, which Ludusavi could not grant either; a save path is a fact, and Ludusavi has published this data under MIT for years. So the notice ships, PCGamingWiki is credited in the notices and in About, and a note to Ludusavi's maintainer is a courtesy that does not block a release. This is a reading, not legal advice.
 
 ### 5.3 Apply and revert
 
@@ -718,7 +720,7 @@ If step 2 is skipped, `apply` finds a foreign link at S and refuses, so a leftov
 
 ### 5.9 Open-source setup
 
-- **Licence.** MIT for the code, matching the neighbouring tools (Ludusavi MIT, Decky BSD-3-Clause **[K]**) and the likely dependencies (.NET and Avalonia are MIT **[K]**). Apache-2.0 is equally fine if you want the patent grant. GPL-3.0 buys little here and becomes mandatory only if you copy code from a GPL project such as EmuDeck. Definitions as CC0 or MIT, authored independently of PCGamingWiki.
+- **Licence.** MIT for the code, matching the neighbouring tools (Ludusavi MIT, Decky BSD-3-Clause **[K]**) and the likely dependencies (.NET and Avalonia are MIT **[K]**). Apache-2.0 is equally fine if you want the patent grant. GPL-3.0 buys little here and becomes mandatory only if you copy code from a GPL project such as EmuDeck. Definitions as CC0 or MIT, authored independently of PCGamingWiki. Imported definitions (5.2, revised 2026-11-19) are converted from the Ludusavi manifest and carry its MIT notice; they are kept apart from the verified ones.
 - **Definitions repository.** Separate repo, one JSON-with-comments file per app, JSON Schema checked in CI, a required "tested on" line per install variant in each pull request, and its own version number. The app downloads a signed or hash-pinned release of it, so definitions update without an app release. Until there is a second contributor, keep it as a folder in the main repo.
 - **Builds.** GitHub Actions, the three-target matrix, release artefacts built only from tags, checksums published. Deterministic builds are on by default in .NET; byte-identical reproducibility across machines is a stretch goal, not a launch requirement.
 - **Signing.** Unsigned Windows binaries trigger SmartScreen warnings. Options **[K, prices approximate and unverified]**: SignPath Foundation (free for qualifying open-source projects, by application), Microsoft's cloud signing service (around US$10 a month, with country and identity restrictions), or a conventional certificate (a few hundred US dollars a year, hardware-token bound). An EV certificate no longer buys instant reputation. A CLI installed through Scoop or winget sidesteps most of the problem.
@@ -734,7 +736,8 @@ If step 2 is skipped, `apply` finds a foreign link at S and refuses, so a leftov
 | 1 | CLI: `init`, `map add/remove`, `status`, `apply` (including `--all`), `revert`, `backup list/restore`, `recover`. Link mechanism only. Journal, backups, the setup choices and guard with the comparison (5.3, 5.4), shared per-device config (5.6), all six invariants, the test suite in 5.8. Absolute paths, entered with `map add`. No definitions, no detection, no config redirects, no adoption of old links. Specified in 5.12 | one real mapping seeded on Windows, joined on the Deck, reverted and re-applied; a wiped device (simulated by deleting the local folder and the links) restored with `init` and `apply --all`; status clean on both |
 | 2 | Entry depth (5.13). Definition format and tokens, path resolver including Lutris and non-Steam prefixes, `app add`, Flatpak precheck, retention of the backups taken before each operation. (Optional snapshots and a scheduled login check were dropped on 2026-11-17) | a device restored after its SD card ID or install folder changed, with no hand edits |
 | 3 | Desktop app for Windows and Linux: a window for managing apps and links, and a tray icon showing health (5.14). JSON contract freeze for the CLI | a new user sets up a device, adds an app and applies it without the CLI, on both systems; the tray turns amber when a link breaks |
-| 4 | Decky plugin, status first (5.11). Detection, with the Ludusavi manifest as an optional hint source | status of every mapping readable in Game Mode; Recover and a choice-free Apply work from the controller |
+| 3.5 | Definitions converted from the Ludusavi manifest, built in as an unverified source; detection with the found list ordered by recent saves; verified definitions for the emulators the manifest lacks. Added 2026-11-19 (plan section 5a) | a game with no hand-written definition is found, applied and its saves load on the other device, on Windows and on the Deck |
+| 4 | Decky plugin, status first (5.11). (Detection moved to phase 3.5 on 2026-11-19) | status of every mapping readable in Game Mode; Recover and a choice-free Apply work from the controller |
 | 5 | Public release: CI matrix, signing, package manifests, definitions repo split, contributor docs | first outside definition merged |
 | Later | Steam Frame support; optional sync-tool integrations, each a separate opt-in module the core never depends on (for Syncthing: folder-idle check before apply, listing and resolving conflict files, generated ignore patterns) | |
 
@@ -926,7 +929,7 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 | Eden under EmuDeck uses `storage/eden` or still `storage/yuzu` | `ls` on the Deck |
 | Yuzu-family save paths embed a profile ID stored under `nand/system`, which is why that folder must be synced | inspect `nand/user/save` on both devices |
 | .NET's recursive directory delete does not descend junctions | irrelevant by design (invariant 1 bans it), but the canary test proves the tool's own routine |
-| Run-time download of the Ludusavi manifest by a free tool is within PCGamingWiki's terms | ask Ludusavi's maintainer; read the licence deed for the version PCGamingWiki uses |
+| Redistributing data converted from the Ludusavi manifest is within PCGamingWiki's terms. Revised 2026-11-19: the manifest's MIT licence covers redistribution; the open part is only PCGamingWiki's own rights (5.2) | read the licence deed for the version PCGamingWiki uses; a courtesy note to Ludusavi's maintainer |
 | Signing prices and eligibility | each provider's current pricing page |
 | Flash games store saves under a `#SharedObjects` folder whose first subfolder has a random name per install, so the same game has a different path on each device. The resolver would need a wildcard step, and Ruffle or a standalone projector may store them elsewhere again | look at where two of your Flash games save on both devices |
 | Visual novels mostly save beside the executable or under AppData inside the prefix, in a directory of their own | check the two you already link; then two more |
@@ -947,7 +950,7 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 | Name | SaveTether |
 | Design | A: link manager, CLI core, thin UIs |
 | Mechanisms | `link` (junction on Windows, symlink on Linux) and `config`. No copy-around-launch, no bind mounts |
-| Scope | Apps and games without platform cloud saves: emulators, visual novels, Flash games, including Lutris on the Deck |
+| Scope | Emulators, visual novels, Flash games and other PC games, including Lutris on the Deck. Games with platform cloud saves were out of scope until 2026-11-19, when the owner brought them in: a copy from another store has no cloud saves (5.2) |
 | Sync tool | The user's choice. The core has no sync-tool code; Syncthing integration is a possible later opt-in module. Decided 2026-11-12 |
 | Backups | Tool's own local store is the safety net: a verified backup before each apply, revert and restore, with retention. Host versioning is the user's business. Optional local snapshots dropped 2026-11-17 |
 | Defaults | Saves and save states on. Screenshots and other media off |
@@ -959,7 +962,7 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 | Licence | MIT. Decided 2026-11-12 |
 | Switch (yuzu family) targets | One app folder per emulator (`savetether/yuzu/`, `savetether/eden/`, `savetether/citron/`, ...), not one shared Switch folder. Decided 2026-11-12 |
 | Config mechanism | Deferred on 2026-11-12, after phase 1 (5.13). Links are the only mechanism. Apps whose save-path setting was changed by hand are set back to their default folder by hand and then linked |
-| Definition file format | JSON with comments, read by the built-in parser, so no third-party dependency. YAML with YamlDotNet was approved on 2026-11-12 and dropped on 2026-11-13 before it was built (5.2) |
+| Definition file format | JSON with comments, read by the built-in parser, so no third-party dependency. YAML with YamlDotNet was approved on 2026-11-12 and dropped on 2026-11-13 before it was built (5.2). On 2026-11-19 the owner approved YamlDotNet for the CI converter of the Ludusavi manifest only; neither shipped program uses it (plan section 5a) |
 | Test framework | xUnit (test project only). Decided 2026-11-12 |
 | CLI argument parsing | Hand-written, no dependency. Decided 2026-11-12 |
 | Branch flow | Feature branches with PRs straight to `main`; a `development` branch is added in phase 4. Decided 2026-11-12 |
@@ -974,7 +977,7 @@ These do not block phase 1. Each is taken up at the phase named.
 |---|---|---|
 | Backup location on the Deck | Internal storage, `~/.local/share/savetether/backups`, configurable through `backup_root`. The precheck refuses a backup root that is not present, the same way it checks the sync root | If internal space runs short. An SD card works but is removable |
 | Name availability | Not checked beyond the earlier web search | Before the phase 4 public release |
-| Contacting Ludusavi's maintainer | No use of the manifest | Before phase 3 |
+| Contacting Ludusavi's maintainer | A courtesy note, not a permission request (5.2, revised 2026-11-19); a release is not held for a reply | Before the first release with imported definitions |
 
 **Switch profile note.** Yuzu-family save paths embed the profile ID held in `nand/system` **[I, section 6]**. If two devices have different profiles, the same game saves under different folders. Map the emulator's `system` folder as well as `save`, or make sure both devices use the same profile, before relying on Switch saves syncing.
 
