@@ -42,6 +42,10 @@ WizardStyle=modern
 LicenseFile={#SourceDir}\LICENSE
 ; The app's icon (build/render-icon.cs), for the installer itself.
 SetupIconFile=..\..\src\SaveTether.Gui\Assets\savetether.ico
+; The wizard's side picture (first and last pages) and corner picture (the others), also from build/render-icon.cs,
+; one per display scale: Inno Setup picks the nearest.
+WizardImageFile=wizard-164x314.bmp,wizard-192x386.bmp,wizard-246x459.bmp,wizard-328x604.bmp
+WizardSmallImageFile=wizard-small-55x55.bmp,wizard-small-64x68.bmp,wizard-small-83x80.bmp,wizard-small-110x106.bmp
 UninstallDisplayName=SaveTether
 UninstallDisplayIcon={app}\savetether-gui.exe
 ; A running SaveTether is closed before its files are replaced or removed. It quits when Windows asks
