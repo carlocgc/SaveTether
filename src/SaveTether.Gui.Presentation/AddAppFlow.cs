@@ -85,6 +85,12 @@ public sealed record AddAppView(
 public sealed record AddAppResult(IReadOnlyList<string> Added, string? Refused, AddAppView? Changed)
 {
     public bool Succeeded => Added.Count > 0;
+
+    /// <summary>The mappings added whose folder was already a link, as when an app added and applied before is added again.</summary>
+    public IReadOnlyList<string> AlreadyLinked { get; init; } = [];
+
+    /// <summary>The mappings added that Apply still has to link.</summary>
+    public IReadOnlyList<string> ToApply => Added.Except(AlreadyLinked, StringComparer.Ordinal).ToList();
 }
 
 /// <summary>
@@ -237,7 +243,10 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 }
 
                 session.Workspace.AddApp(plan);
-                return new AddAppResult(plan.Roles.Select(r => r.MappingId).ToList(), null, null);
+                return new AddAppResult(plan.Roles.Select(r => r.MappingId).ToList(), null, null)
+                {
+                    AlreadyLinked = plan.Roles.Where(r => r.IsLink).Select(r => r.MappingId).ToList(),
+                };
             }
             catch (StoreException e)
             {
@@ -253,10 +262,26 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     /// <summary>"&lt;App&gt; added. Apply it now?"</summary>
     public static string AddedQuestion(string appName) => $"{appName} added. Apply it now?";
 
-    public static string AddedText(IReadOnlyList<string> mappingIds)
+    /// <summary>"&lt;App&gt; added", when every folder was already linked and there is nothing to ask.</summary>
+    public static string AddedTitle(string appName) => $"{appName} added";
+
+    public static string AddedText(IReadOnlyList<string> mappingIds, IReadOnlyList<string>? alreadyLinked = null)
     {
         ArgumentNullException.ThrowIfNull(mappingIds);
-        return $"Added {string.Join(", ", mappingIds)}. Nothing is linked yet: Apply links each, asking first where this device already has saves.";
+        var linked = alreadyLinked ?? [];
+        var toApply = mappingIds.Except(linked, StringComparer.Ordinal).ToList();
+        var added = $"Added {string.Join(", ", mappingIds)}.";
+        if (linked.Count == 0)
+        {
+            return $"{added} Nothing is linked yet: Apply links each, asking first where this device already has saves.";
+        }
+
+        // A folder that is already a link needs no Apply (the CLI says the same); whether the link is
+        // SaveTether's and healthy is what the Apps page shows.
+        var already = $"Already linked here: {string.Join(", ", linked)}.";
+        return toApply.Count == 0
+            ? $"{added} {already} There is nothing to apply; the Apps page shows whether each link is healthy."
+            : $"{added} {already} Apply links {string.Join(", ", toApply)}, asking first where this device already has saves.";
     }
 
     public static string FieldLabel(LocationField field) => field switch

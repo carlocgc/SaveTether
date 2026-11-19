@@ -352,12 +352,20 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
         App.Options.Log.Write($"app add {view.AppId}: added {string.Join(", ", result.Added)}");
         Leave();
+        var text = AddAppFlow.AddedText(result.Added, result.AlreadyLinked);
+        if (result.ToApply.Count == 0)
+        {
+            // Every folder was already a link (the app was added and applied before): nothing to ask.
+            await _overlay.InformAsync(AddAppFlow.AddedTitle(view.AppName), text);
+            return;
+        }
+
         var notNow = new Button { Content = "Not now" };
         var apply = new Button { Content = "Apply" };
-        var pressed = await _overlay.ShowAsync(AddAppFlow.AddedQuestion(view.AppName), Overlay.Body(AddAppFlow.AddedText(result.Added)), [notNow, apply], notNow);
+        var pressed = await _overlay.ShowAsync(AddAppFlow.AddedQuestion(view.AppName), Overlay.Body(text), [notNow, apply], notNow);
         if (pressed == apply)
         {
-            await actions.ApplyAddedAsync(view.AppName, result.Added);
+            await actions.ApplyAddedAsync(view.AppName, result.ToApply);
         }
     });
 
