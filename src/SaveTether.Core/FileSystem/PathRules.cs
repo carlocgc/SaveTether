@@ -19,6 +19,42 @@ public static class PathRules
     }
 
     /// <summary>
+    /// True on Windows when <paramref name="path"/> is on a network drive: a <c>\\server\share</c> path, its
+    /// long form <c>\\?\UNC\...</c>, or a drive letter mapped to a share. A Windows junction cannot point there,
+    /// so neither can a link SaveTether makes. Always false elsewhere: a Linux symbolic link into a mounted share
+    /// works. Looks at the path and the drive's type only; nothing on the share is read.
+    /// </summary>
+    public static bool IsOnNetworkDrive(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // \\?\C:\... and \\.\C:\... are the long forms of a local path, not network paths.
+        var local = path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\\.\", StringComparison.Ordinal) ? path[4..] : path;
+        if (local.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        try
+        {
+            return Path.GetPathRoot(local) is { Length: > 0 } root && new DriveInfo(root).DriveType == DriveType.Network;
+        }
+        catch (Exception e) when (e is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// True when <paramref name="path"/> is absolute on Windows or on Linux, whichever this machine is. For a
     /// path in a shared file written by another device: a Windows device's <c>E:\Games</c> is a good value
     /// when read on the Deck, though only that device can use it. Relative paths are refused on both.

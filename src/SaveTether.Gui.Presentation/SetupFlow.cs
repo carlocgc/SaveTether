@@ -20,6 +20,9 @@ public enum SyncFolderFinding
     /// <summary>The path is empty or not absolute.</summary>
     NotAPath,
 
+    /// <summary>On Windows, the folder is on a network drive, where no link SaveTether makes can point.</summary>
+    NetworkDrive,
+
     /// <summary>Nothing is there. On a drive or share that is not connected, say.</summary>
     Missing,
 
@@ -106,6 +109,14 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
         }
 
         path = PathRules.Normalize(Path.GetFullPath(path));
+
+        // Before looking at the folder: on Windows nothing could be linked into a share, and probing one that is
+        // not there can stall. The core's init refuses it too; saying so here keeps it at step 1.
+        if (PathRules.IsOnNetworkDrive(path))
+        {
+            return _syncFolder = new SyncFolderCheck(SyncFolderFinding.NetworkDrive, path, [], Workspace.NetworkSyncRootMessage(path));
+        }
+
         if (SafeFs.Probe(PathRules.ResolveAll(path)) != EntryKind.Directory)
         {
             return _syncFolder = new SyncFolderCheck(
