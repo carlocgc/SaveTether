@@ -91,9 +91,23 @@ public sealed partial class Workspace
         return new Workspace(local, bootstrap, processes, time, faults, flatpak);
     }
 
+    /// <summary>
+    /// Why a sync root on a network drive is refused on Windows, where every link SaveTether makes is a junction
+    /// and a junction can only point to a local drive. The way out is a local copy that a sync tool keeps in step.
+    /// </summary>
+    public static string NetworkSyncRootMessage(string syncRoot) =>
+        $"'{syncRoot}' is on a network drive. On Windows, SaveTether links save folders with junctions, which can only point to a local drive, " +
+        "so no save folder could be linked there. Use a folder on a local drive, and keep it in step with the share or the other devices with a sync tool.";
+
     /// <summary>The device names that have a file in the sync root, for "init" to offer.</summary>
     public static IReadOnlyList<string> ExistingDevices(string syncRoot)
     {
+        // Not looked at on Windows: Init refuses it, and probing a share that is not there stalls first.
+        if (PathRules.IsOnNetworkDrive(syncRoot))
+        {
+            return [];
+        }
+
         var shared = new SharedStore(syncRoot);
         return shared.IsInitialized ? shared.ListDeviceNames() : [];
     }
@@ -107,6 +121,12 @@ public sealed partial class Workspace
     {
         ArgumentNullException.ThrowIfNull(local);
         ArgumentNullException.ThrowIfNull(request);
+
+        // First, and by the path alone: probing a share that is not there can stall on a network timeout.
+        if (PathRules.IsOnNetworkDrive(request.SyncRoot))
+        {
+            throw new StoreException(StoreProblem.Invalid, NetworkSyncRootMessage(request.SyncRoot));
+        }
 
         var shared = new SharedStore(request.SyncRoot);
         if (!Identifiers.IsValidDeviceName(request.DeviceName))

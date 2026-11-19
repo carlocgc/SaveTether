@@ -140,6 +140,9 @@ On Next the app checks the folder and shows one of:
 | `savetether/.savetether/` exists | "This sync folder is already set up for SaveTether, on: <device names>." | Next |
 | the folder exists but has no SaveTether folder | "This sync folder is not set up for SaveTether yet." and the two cases below | **This is my first device** (create-root), or Back |
 | the folder does not exist | "<path> does not exist. If it is on a drive or a network share, connect it." | Back |
+| on Windows, the folder is on a network drive *(added 2026-11-19)* | "<path> is on a network drive. On Windows, SaveTether links save folders with junctions, which can only point to a local drive, so no save folder could be linked there. Use a folder on a local drive, and keep it in step with the share or the other devices with a sync tool." | Back |
+
+*As built (2026-11-19), the network-drive row:* checked first, from the path and the drive's type alone (`PathRules.IsOnNetworkDrive`), since probing a share that is not reachable can stall for seconds. The core's `Init` refuses the same, so the CLI's `init` does too; before this, a network sync folder was accepted at setup and refused only at the first apply. On Linux a symbolic link into a mounted share works, so nothing is refused there. `docs/sharing.md` describes the ways to share the folder.
 
 "This is my first device" asks for confirmation: "Only do this on the first device. If SaveTether is set up on another device, wait until the sync tool has delivered the SaveTether folder here instead; setting it up twice creates two separate setups." This is the GUI form of 5.3 invariant 5's protection against an empty mount point.
 

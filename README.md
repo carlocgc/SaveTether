@@ -18,7 +18,7 @@
 
 SaveTether is a folder redirection tool. It moves an app's save folder into a single folder you choose and leaves a link in its place, so the app reads and writes exactly where it always did.
 
-The point is to share that folder between machines. Put it under a sync tool you already use, such as [Syncthing](https://syncthing.net/), and a PC and a Steam Deck play from the same saves. SaveTether does no syncing itself; it sets up and looks after the links at each end.
+The point is to share that folder between machines. Put it under a sync tool you already use, such as [Syncthing](https://syncthing.net/), and a PC and a Steam Deck play from the same saves. SaveTether does no syncing itself; it sets up and looks after the links at each end. A cloud storage folder, or a network share on Linux, can work too: see [ways to share the folder](docs/sharing.md).
 
 ```mermaid
 flowchart LR
@@ -87,6 +87,7 @@ savetether apply ppsspp.savedata
 
 | | |
 |---|---|
+| [Ways to share the folder](docs/sharing.md) | Sync tools, cloud folders, network shares, and what each needs |
 | [Command line reference](docs/cli.md) | Every command and option, with examples and workflows |
 | [JSON output](docs/cli-json.md) | The `--json` contract for scripts |
 | [Design](docs/design/save-redirection-design.md) | What SaveTether guarantees, and why it works the way it does |
