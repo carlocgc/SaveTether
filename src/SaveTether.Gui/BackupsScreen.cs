@@ -152,9 +152,8 @@ internal sealed class BackupsScreen : UserControl
 
     private StackPanel Page(IEnumerable<Control> content)
     {
-        var back = new Button { Content = "Back to apps" };
-        back.Click += (_, _) => _close();
         var page = new StackPanel { Spacing = 8 };
+        page.Children.Add(Navigation.BackRow("Back to apps", _close));
         page.Children.Add(new TextBlock { Text = "Backups", FontSize = 22, FontWeight = FontWeight.SemiBold });
         page.Children.Add(new TextBlock { Text = BackupsPage.Intro, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) });
         foreach (var control in content)
@@ -162,7 +161,6 @@ internal sealed class BackupsScreen : UserControl
             page.Children.Add(control);
         }
 
-        page.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0), Children = { back } });
         return page;
     }
 

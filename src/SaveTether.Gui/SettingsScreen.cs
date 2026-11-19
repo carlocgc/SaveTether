@@ -17,6 +17,7 @@ internal sealed class SettingsScreen : UserControl
     public SettingsScreen(string localFolder, SessionStart session, Overlay overlay, Action close)
     {
         var page = new StackPanel { Spacing = 10, MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Left };
+        page.Children.Add(Navigation.BackRow("Back to apps", close));
         page.Children.Add(new TextBlock { Text = "Settings", FontSize = 22, FontWeight = FontWeight.SemiBold });
 
         page.Children.Add(Heading("Start with the session"));
@@ -71,9 +72,6 @@ internal sealed class SettingsScreen : UserControl
         });
         page.Children.Add(Note("MIT licence."));
 
-        var back = new Button { Content = "Back to apps", Margin = new Thickness(0, 12, 0, 0) };
-        back.Click += (_, _) => close();
-        page.Children.Add(back);
         Content = page;
     }
 
