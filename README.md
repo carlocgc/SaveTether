@@ -57,7 +57,7 @@ Native binary (needs the platform's native toolchain: Visual Studio C++ build to
 dotnet publish src/SaveTether.Cli -c Release -r linux-x64
 ```
 
-Use `win-x64` or `linux-arm64` for the other targets.
+Use `win-x64` or `linux-arm64` for the other targets. The desktop app is `src/SaveTether.Gui`, published the same way. It needs the native libraries its publish folder holds beside it (Skia, HarfBuzz, and ANGLE on Windows), so run it from that folder, not from `bin/`. To build the package a release ships, publish both, then run `build/package.sh` (see [docs/releasing.md](docs/releasing.md)).
 
 On Windows, if publishing fails with `'vswhere.exe' is not recognized`, put Visual Studio's installer folder on `PATH` for that shell first:
 
