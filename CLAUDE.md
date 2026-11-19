@@ -10,6 +10,7 @@ SaveTether redirects game save folders into a synced folder, so several devices 
 | The desktop app: every screen, state and refusal | `docs/design/desktop-app-spec.md`; "As built" notes record where the build differs |
 | What is built, what is next, the hardware checklist | `docs/plans/implementation-plan.md` (section 5 is the desktop app, section 8 the checklist) |
 | Every CLI command, for people, with examples | `docs/cli.md` |
+| Ways to share the sync folder, and what each needs | `docs/sharing.md` |
 | The `--json` contract | `docs/cli-json.md`, checked by `JsonContractTests` |
 | How to test on the real machines, and the test flow for each feature | `docs/testing/hardware-testing.md` |
 | Releasing | `docs/releasing.md` |
