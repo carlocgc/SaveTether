@@ -26,6 +26,7 @@ The release workflow builds with the version from the tag, so a binary always re
 
 4. The release workflow (`.github/workflows/release.yml`) checks the tag is on `main`, builds and tests all three targets with that version, checks each binary reports it, and publishes a GitHub release with:
    - `savetether-v0.1.0-win-x64.zip`
+   - `savetether-v0.1.0-win-x64-setup.exe`, the Windows installer
    - `savetether-v0.1.0-linux-x64.tar.gz`
    - `savetether-v0.1.0-linux-arm64.tar.gz`
    - `SHA256SUMS.txt`
@@ -35,7 +36,9 @@ The release workflow builds with the version from the tag, so a binary always re
    - the desktop app, `savetether-gui`, with the native libraries it loads from beside itself: `libSkiaSharp` and `libHarfBuzzSharp` (`.so` on Linux, `.dll` on Windows), and on Windows `av_libglesv2.dll` (ANGLE);
    - `README.md` and `LICENSE`.
 
-   `build/package.sh` builds a package from the two publish folders, leaving out debug symbols. `build/check-package.sh` compares it with this exact list, and on Linux checks that both programs are executable. CI runs both on every pull request, so a package that would ship without a library, or with a stray file, fails there first. A change to what the app needs beside it (a new native library, say) updates the list in `build/check-package.sh`, here, and `Installer.PackageFiles` in the core, which the app's install offer copies; a test keeps the last two equal. The release notes are generated from the pull requests merged since the previous tag. Debug symbols, the CLI's and the app's, are kept as workflow artifacts for 30 days, not attached to the release.
+   `build/package.sh` builds a package from the two publish folders, leaving out debug symbols. `build/check-package.sh` compares it with this exact list, and on Linux checks that both programs are executable. CI runs both on every pull request, so a package that would ship without a library, or with a stray file, fails there first. A change to what the app needs beside it (a new native library, say) updates the list in `build/check-package.sh`, here, `Installer.PackageFiles` in the core (the Linux self-install; a test keeps it equal to the Linux list), and the `[Files]` of `build/windows/savetether.iss` and the list in `build/check-installer.ps1`.
+
+   The Windows installer is built from the checked zip by `build/build-installer.ps1` with Inno Setup 6, which the Windows job installs when the runner image lacks it. CI then installs and uninstalls it on the runner with `build/check-installer.ps1`. Never change the `AppId` in `savetether.iss`: it is what lets a newer installer update an installed one. The release notes are generated from the pull requests merged since the previous tag. Debug symbols, the CLI's and the app's, are kept as workflow artifacts for 30 days, not attached to the release.
 
 A tag with a suffix, such as `v0.2.0-rc.1`, publishes a prerelease and may be on any branch. Running the workflow by hand ("Run workflow" in the Actions tab, with a version) builds and uploads the packages as workflow artifacts and publishes nothing; it is available once the workflow file is on the default branch.
 

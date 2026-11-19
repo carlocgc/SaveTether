@@ -61,7 +61,7 @@ Download the package for your platform from the [latest release](https://github.
 
 Each holds the desktop app (`savetether-gui`), the command line (`savetether`), and the libraries the app needs beside it. Keep the files together. `SHA256SUMS.txt` on the release page lets you check the download.
 
-The first time the desktop app starts from where you unpacked it, it offers to install itself for your user, and you can delete the unpacked files afterwards. On Windows it goes to `%LOCALAPPDATA%\Programs\SaveTether`, with an option to make the `savetether` command available in terminals. On Linux the app goes to `~/.local/lib/savetether`, the `savetether` command and a `savetether-gui` link to `~/.local/bin`, and SaveTether is added to the app menu. Starting a newer unpacked version later offers to update the installed one.
+**Windows:** run `savetether-<version>-win-x64-setup.exe` instead to install SaveTether for your user, without administrator rights: it goes to `%LOCALAPPDATA%\Programs\SaveTether`, with a Start menu entry, an option to make the `savetether` command available in terminals, and an entry in Settings > Apps to uninstall it. A newer installer updates it. **Linux:** the first time the desktop app starts from where you unpacked it, it offers to install itself for your user: the app goes to `~/.local/lib/savetether`, the `savetether` command and a `savetether-gui` link to `~/.local/bin`, and SaveTether is added to the app menu; you can delete the unpacked files afterwards. Starting a newer unpacked version offers to update it, and Settings > Uninstall (or `savetether uninstall`) removes it.
 
 ## Quick start
 
