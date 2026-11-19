@@ -46,7 +46,7 @@ flowchart LR
 ## Limits
 
 - **One machine in use at a time.** Playing offline is fine; let the sync tool finish before switching machines. Two machines writing the same saves at once is left to the sync tool's conflict handling.
-- **Early days.** It is tested on the author's Windows PC, Linux box and Steam Deck with Cemu, Eden, PPSSPP and a Lutris game, and has a large automated test suite, but has not yet been used by anyone else. Keep your own backup of saves you care about.
+- **Early days.** It is tested on Windows, Linux and the Steam Deck with Cemu, Eden, PPSSPP and a Lutris game, and has a large automated test suite. SaveTether backs up before every change, but keep your own backup of saves you care about too.
 - **Few built-in app definitions.** Only Cemu ships with one. Any other folder can be added by path, or described in a definition of your own.
 
 ## Install
