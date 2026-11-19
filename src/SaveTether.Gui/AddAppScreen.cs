@@ -485,9 +485,10 @@ internal sealed class AddAppScreen : UserControl
             advanced.Children.Add(new TextBlock { Text = "Entry depth", FontWeight = FontWeight.SemiBold });
             advanced.Children.Add(new TextBlock
             {
-                Text = "Where one item starts: one game's saves, or one mod. When this device and the shared folder both have files, "
-                    + "SaveTether copies only whole items the other side lacks, never parts of one. 1 when each item is a folder "
-                    + "directly inside the folder to share. 2 when items sit one level down, as in Cemu's save folder (title group, then title).",
+                Text = "When you link a folder that already holds files, and the shared folder has files too (for example Cemu saves on "
+                    + "a second PC), Apply can add the folders the shared copy doesn't have. Entry depth says how deep to look for them: "
+                    + "1 when each game or mod is a folder directly inside, 2 when they sit one level down, as in Cemu's save folder "
+                    + "(title group, then title). A folder the shared copy already has is left as it is.",
                 TextWrapping = TextWrapping.Wrap,
                 Opacity = 0.75,
                 FontSize = 13,
