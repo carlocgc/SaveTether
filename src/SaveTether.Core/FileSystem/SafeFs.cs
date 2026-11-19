@@ -194,7 +194,7 @@ public sealed class SafeFs
     public void DeleteTree(string path, SharedDataDeletion sharedData = SharedDataDeletion.Forbidden)
     {
         var root = RequireAbsolute(path, nameof(path));
-        if (sharedData != SharedDataDeletion.ExplicitlyConfirmed)
+        if (sharedData == SharedDataDeletion.Forbidden)
         {
             RefuseInsideProtectedRoot(root, "delete");
         }

@@ -33,6 +33,12 @@ public enum SharedDataDeletion
 
     /// <summary>The owner explicitly confirmed replacing shared data (design 5.3, invariant 2).</summary>
     ExplicitlyConfirmed,
+
+    /// <summary>
+    /// A failed apply undoing its own copy into the shared folder: only files still identical to the copy it made,
+    /// and folders that copy left empty (design 5.3, invariant 2's second exception).
+    /// </summary>
+    UndoingOwnCopy,
 }
 
 /// <summary>What <see cref="SafeFs.CopyTree"/> does with a link found inside the source.</summary>

@@ -135,6 +135,12 @@ public class PrecheckTests
     }
 
     [Fact]
+    public void A_network_folder_to_link_is_refused_before_any_step()
+    {
+        Assert.Equal([PrecheckKind.SourceNotLocal], Failures(Snap.WithLocalSaves() with { SourceOnLocalVolume = false }));
+    }
+
+    [Fact]
     public void Every_failure_is_reported_together()
     {
         var snapshot = Snap.WithLocalSaves() with

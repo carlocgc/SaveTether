@@ -238,6 +238,13 @@ public static class Planner
             Fail(PrecheckKind.TargetNotLocal, $"The shared folder '{s.Target}' is on a network drive. A Windows junction can only point to a local drive.");
         }
 
+        if (!s.SourceOnLocalVolume)
+        {
+            Fail(
+                PrecheckKind.SourceNotLocal,
+                $"The folder '{s.Source}' is on a network drive. On Windows SaveTether can only link a folder on a local drive, because a junction cannot be made on a network drive.");
+        }
+
         if (s.Sandbox is { CanReach: false } sandbox)
         {
             Fail(

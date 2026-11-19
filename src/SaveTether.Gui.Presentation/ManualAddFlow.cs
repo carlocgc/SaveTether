@@ -1,4 +1,5 @@
 using System.Text;
+using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
@@ -283,6 +284,10 @@ public sealed class ManualAddFlow(LocalStore local)
         else if (!Path.IsPathFullyQualified(ExpandHome(folder)))
         {
             problems.Add((ManualField.SaveFolder, $"'{folder}' is not a full path. Give the whole path, or choose the folder."));
+        }
+        else if (PathRules.IsOnNetworkDrive(ExpandHome(folder)))
+        {
+            problems.Add((ManualField.SaveFolder, "This folder is on a network drive. On Windows SaveTether can only link a folder on a local drive."));
         }
         else if (!Directory.Exists(ExpandHome(folder)))
         {

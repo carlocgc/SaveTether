@@ -52,6 +52,10 @@ public enum AppAddProblem
     /// <summary>The change contradicts what is recorded: another target, or the role is applied elsewhere.</summary>
     [JsonStringEnumMemberName("conflict")]
     Conflict,
+
+    /// <summary>A role's folder is on a network drive, where Windows cannot make a junction.</summary>
+    [JsonStringEnumMemberName("not-local")]
+    NotLocal,
 }
 
 /// <summary>One install of the app, and whether it was found here.</summary>
@@ -267,6 +271,11 @@ public sealed partial class Workspace
             var mappingId = role.MappingIdFor(definition.Id);
             var target = role.MappingTargetFor(definition.Id);
             var source = PathRules.Normalize(resolved.Path!);
+            if (PathRules.IsOnNetworkDrive(source))
+            {
+                return AppAddOutcome.Refuse(AppAddProblem.NotLocal, $"Role '{role.Id}': {NetworkFolderMessage(source)}", candidates);
+            }
+
             var mapping = Shared.TryReadMapping(mappingId);
             if (mapping is not null && mapping.Target != target)
             {

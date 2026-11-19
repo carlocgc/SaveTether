@@ -245,7 +245,7 @@ Every value `--json` can print, by field. A test checks that each value in the c
 
 **Refusal kind** (`refusal.kind`): `precondition`, `choice-needed`, `choice-not-allowed`, `confirmation-needed`, `not-arrived`, `foreign-link`, `broken-link`.
 
-**Precondition kind** (`failures[].kind`): `sync-root-not-initialized`, `unfinished-operation`, `target-outside-data-root`, `source-inside-sync-root`, `paths-overlap`, `source-parent-missing`, `source-unusable`, `target-unusable`, `app-running`, `backup-location-unusable`, `target-not-local`, `not-enough-space`, `sandbox-cannot-reach`, `not-applied`, `backup-unusable`, `restore-destination-unusable`.
+**Precondition kind** (`failures[].kind`): `sync-root-not-initialized`, `unfinished-operation`, `target-outside-data-root`, `source-inside-sync-root`, `paths-overlap`, `source-parent-missing`, `source-unusable`, `target-unusable`, `app-running`, `backup-location-unusable`, `target-not-local`, `source-not-local` (the folder to link is on a network drive, on Windows), `not-enough-space`, `sandbox-cannot-reach`, `not-applied`, `backup-unusable`, `restore-destination-unusable`.
 
 **Entry presence** (`comparison.entries[].presence`): `only-local`, `only-shared`, `identical`, `different`.
 
@@ -261,7 +261,7 @@ Every value `--json` can print, by field. A test checks that each value in the c
 
 **Backup reason** (`backups[].reason`): `pre-apply`, `pre-revert`, `pre-restore`, `baseline`, `snapshot` (this version never takes one; it is listed because a backup folder may hold one made by a test build).
 
-**App add problem** (`app.problem`): `unknown-app`, `invalid-definition`, `unknown-install`, `not-installed`, `install-choice-needed`, `unknown-role`, `unresolved`, `conflict`.
+**App add problem** (`app.problem`): `unknown-app`, `invalid-definition`, `unknown-install`, `not-installed`, `install-choice-needed`, `unknown-role`, `unresolved`, `conflict`, `not-local` (a role's folder is on a network drive, on Windows).
 
 **Role class** (`app.plan.roles[].class`): `save`, `system`, `state`, `cache`, `mod`, `media`.
 

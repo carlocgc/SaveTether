@@ -297,6 +297,11 @@ public sealed partial class Workspace
         }
 
         var newSource = PathRules.Normalize(source);
+        if (PathRules.IsOnNetworkDrive(newSource))
+        {
+            throw new StoreException(StoreProblem.Invalid, NetworkFolderMessage(newSource) + " Nothing was changed.");
+        }
+
         if (SourceOverlap(mappingId, newSource, SourcesOf(device)) is { } overlap)
         {
             throw new StoreException(overlap.Message, overlap.Facts);
@@ -350,6 +355,14 @@ public sealed partial class Workspace
         Shared.WriteDevice(device with { Paths = new Dictionary<string, DevicePath>(device.Paths) { [mappingId] = path } });
         return new MapResult(mapping, path, created, depthChanged);
     }
+
+    /// <summary>
+    /// Why a folder to link on a network drive is refused on Windows: a junction cannot be made there, so an apply
+    /// would copy the folder into the shared copy and then fail. Refused when the folder is added, before anything is written.
+    /// </summary>
+    public static string NetworkFolderMessage(string folder) =>
+        $"The folder '{folder}' is on a network drive. On Windows SaveTether can only link a folder on a local drive, " +
+        "because a junction cannot be made on a network drive.";
 
     /// <summary>"map remove": drops this device's entry only. The shared mapping stays for the other devices.</summary>
     public DevicePath MapRemove(string mappingId)

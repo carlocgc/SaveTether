@@ -216,10 +216,85 @@ public class ExecutorTests
         Assert.False(world.Journal.IsOpen);
         Assert.Empty(world.Local.ReadState().Mappings);
 
-        // Invariant 2: what was already copied into the shared folder stays, and is reported.
-        Assert.Equal(before, ExecWorld.Files(world.Target));
-        Assert.Contains(result.Messages, m => m.Text.Contains(world.Target, StringComparison.Ordinal));
+        // The copy this apply made into the shared folder, which held nothing before, is undone with it
+        // (invariant 2's second exception), so the next apply is a first-device choice again.
+        Assert.Equal(EntryKind.Missing, SafeFs.Probe(world.Target));
+        Assert.DoesNotContain("except in the shared folder", result.Error?.Text, StringComparison.Ordinal);
         Assert.Single(result.BackupIds);
+    }
+
+    /// <summary>After the copy into the shared folder: changes one copied file and adds one, as a sync tool might.</summary>
+    private sealed class ChangeSharedAfterCopy(string target) : IFaultHook
+    {
+        public void At(FaultPoint point, int stepIndex, PlanStep planStep)
+        {
+            if (planStep.Kind == StepKind.CopyIntoTarget && point == FaultPoint.AfterStep)
+            {
+                File.WriteAllText(Path.Combine(target, "GAME2", "save.bin"), "changed meanwhile");
+                Directory.CreateDirectory(Path.Combine(target, "GAME9"));
+                File.WriteAllText(Path.Combine(target, "GAME9", "save.bin"), "arrived from elsewhere");
+            }
+
+            if (planStep.Kind == StepKind.CreateLink && point == FaultPoint.BeforeStep)
+            {
+                throw new IOException("injected failure");
+            }
+        }
+    }
+
+    [Fact]
+    public void Undoing_a_copy_keeps_what_changed_or_arrived_in_the_shared_folder_and_says_so()
+    {
+        using var world = new ExecWorld();
+        world.LocalSave("GAME1/save.bin", "one");
+        world.LocalSave("GAME2/save.bin", "two");
+        var plan = ExecWorld.Planned(world.PlanApply(new ApplyRequest(SetupChoice.Copy)));
+
+        var result = world.Executor(new ChangeSharedAfterCopy(world.Target)).Run(plan);
+
+        Assert.Equal(ExecutionStatus.RolledBack, result.Status);
+        // GAME1 was still the copy, so it went; GAME2 changed and GAME9 arrived, so both stayed.
+        Assert.Equal(
+            new Dictionary<string, string> { ["GAME2/save.bin"] = "changed meanwhile", ["GAME9/save.bin"] = "arrived from elsewhere" },
+            ExecWorld.Files(world.Target));
+        Assert.Contains("except in the shared folder", result.Error?.Text, StringComparison.Ordinal);
+        Assert.Contains(result.Messages, m => m.Text.Contains("GAME2/save.bin", StringComparison.Ordinal));
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one", ["GAME2/save.bin"] = "two" }, ExecWorld.Files(world.Source));
+    }
+
+    [Fact]
+    public void Undoing_add_missing_removes_only_the_entries_it_added()
+    {
+        using var world = new ExecWorld();
+        world.LocalSave("GAME1/save.bin", "mine");
+        world.LocalSave("GAME2/save.bin", "only-here");
+        world.SharedSave("GAME1/save.bin", "theirs");
+        world.SharedSave("GAME3/save.bin", "only-there");
+        var plan = ExecWorld.Planned(world.PlanApply(new ApplyRequest(SetupChoice.AddMissing)));
+
+        var result = world.Executor(new FailAt(StepKind.CreateLink, FaultPoint.BeforeStep)).Run(plan);
+
+        Assert.Equal(ExecutionStatus.RolledBack, result.Status);
+        Assert.Equal(
+            new Dictionary<string, string> { ["GAME1/save.bin"] = "theirs", ["GAME3/save.bin"] = "only-there" },
+            ExecWorld.Files(world.Target));
+        Assert.DoesNotContain("except in the shared folder", result.Error?.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Recovery_after_a_crash_after_the_copy_undoes_the_copy_too()
+    {
+        using var world = new ExecWorld();
+        world.LocalSave("GAME1/save.bin", "one");
+        var plan = ExecWorld.Planned(world.PlanApply(new ApplyRequest(SetupChoice.Copy)));
+        var copyStep = plan.Steps.ToList().FindIndex(s => s.Kind == StepKind.CopyIntoTarget);
+
+        Assert.Throws<SimulatedCrashException>(() => world.Executor(new CrashAt(copyStep, FaultPoint.AfterStep)).Run(plan));
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, ExecWorld.Files(world.Target));
+
+        Assert.Equal(ExecutionStatus.RolledBack, world.Executor().Recover().Status);
+        Assert.Equal(EntryKind.Missing, SafeFs.Probe(world.Target));
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, ExecWorld.Files(world.Source));
     }
 
     [Fact]
