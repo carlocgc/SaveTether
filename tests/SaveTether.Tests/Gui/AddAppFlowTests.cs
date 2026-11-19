@@ -106,6 +106,40 @@ public class AddAppFlowTests
     }
 
     [Fact]
+    public void Adding_an_app_again_whose_folders_are_linked_does_not_say_nothing_is_linked()
+    {
+        // Found by the owner with Cemu: adding an app already added and applied said "Nothing is linked yet".
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        CliDevice.Write(Path.Combine(deck.Home, "native", "data"), "saves/slot1.sav", "12345");
+        deck.Ok("app", "add", "testapp");
+        deck.Ok("apply", "testapp.saves", "--copy");
+
+        var view = flow.Start("testapp");
+        Assert.Equal("already a link", AddAppFlow.SizeOf(view.Roles[0].Planned!));
+        var result = flow.Add(view);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(["testapp.saves"], result.AlreadyLinked);
+        Assert.Equal(["testapp.states"], result.ToApply);
+        var text = AddAppFlow.AddedText(result.Added, result.AlreadyLinked);
+        Assert.DoesNotContain("Nothing is linked", text, StringComparison.Ordinal);
+        Assert.Contains("Already linked here: testapp.saves.", text, StringComparison.Ordinal);
+        Assert.Contains("Apply links testapp.states", text, StringComparison.Ordinal);
+
+        // With every folder linked, there is nothing to apply.
+        deck.Ok("apply", "testapp.states", "--copy");
+        result = flow.Add(flow.Start("testapp"));
+        Assert.Equal(["testapp.saves", "testapp.states"], result.AlreadyLinked);
+        Assert.Empty(result.ToApply);
+        Assert.Equal(
+            "Added testapp.saves, testapp.states. Already linked here: testapp.saves, testapp.states. There is nothing to apply; the Apps page shows whether each link is healthy.",
+            AddAppFlow.AddedText(result.Added, result.AlreadyLinked));
+        Assert.All(StatusCheck.Run(new LocalStore(deck.LocalFolder)).Mappings, m => Assert.Equal(HealthState.Ok, m.Health.State));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void Two_installs_found_are_picked_between_and_never_guessed()
     {
         using var sandbox = new Sandbox();

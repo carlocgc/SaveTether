@@ -25,7 +25,7 @@ There is no .NET on the Deck. Build on the Mint box and copy the binaries over t
    case "$SAVETETHER_HOME" in "$HOME"/sttest/*) ;; *) echo "SAVETETHER_HOME is not the scratch folder"; exit 1;; esac
    ```
 
-2. **Throwaway sync folders too.** A test device gets its own sync folder under the scratch area, set up with `init --create-root`. Never point a test device at the real sync folder, which syncs to every device.
+2. **Throwaway sync folders too.** A test device gets its own sync folder under the scratch area, set up with `init --create-root` (which creates the `savetether` folder inside it, not the sync folder itself: `mkdir` that first). Never point a test device at the real sync folder, which syncs to every device.
 3. **Clean up after.** Stop what was started, remove the scratch folder, and check that the real setup is unchanged: `savetether status` before and after, compared. Run that check in a fresh shell, not one that sourced the test's environment file: with `SAVETETHER_HOME` still set, `status` reads the scratch folder just removed and says the device is not set up.
 4. **Name the process exactly.** `pgrep -x savetether-gui`, never `pgrep -f`/`pkill -f` with a pattern that also matches the remote `bash -c` command line: that kills the SSH session itself.
 5. **Do not leave windows behind** on the owner's screen. If a test opens one that cannot be closed remotely (see "Driving the app"), say so.
@@ -91,7 +91,7 @@ Find coordinates from a capture of the window: subtract the capture's margin and
 
 **Seeing it.**
 
-- **Deck:** `spectacle -b -n -a -o /tmp/shot.png` captures the active window. A blank white image means the display is asleep: wake it first with `xdotool mousemove_relative 1 0`. Menus and other popups are separate windows that `-a` leaves out: capture the whole screen with `-f` and crop to the app window's geometry before looking. That also keeps the rest of the owner's desktop out of view.
+- **Deck:** `spectacle -b -n -a -o /tmp/shot.png` captures the active window. A blank white image means the display is asleep: wake it first with `xdotool mousemove_relative 1 0`. A copy started from a scratch folder first asks "Install SaveTether for this user?": press Not now, since Install writes to the real `~/.local`. Menus and other popups are separate windows that `-a` leaves out: capture the whole screen with `-f` and crop to the app window's geometry before looking. That also keeps the rest of the owner's desktop out of view.
 - **Mint:** the screen is usually locked, so a full-screen capture shows the lock screen. Capture the window itself: `import -window $(xwininfo -root -tree | grep '"SaveTether"' | awk '{print $1}' | head -1) /tmp/shot.png`.
 
 Then copy the image to the PC to look at it.
@@ -189,6 +189,7 @@ A throwaway device, and a shared definition in its sync folder's `.savetether/de
 - Add app: page 1 lists the apps and labels each; typing in Search filters them.
 - Open the test app: "was not found", the native install's reason, and only the Install folder field. Give the portable folder, Look again: the plan, with the default roles ticked and sized, an off-by-default role saying why, the quirks.
 - Tick and untick a role: the page is made again each time. Add: "Apply it now?" with Not now focused. Apply: the ordinary Apply flow; on disk the link and the shared copy; the row Linked.
+- Add the app again with one role applied: the dialog names it under "Already linked here" and Apply goes to the other role only. With every role applied: "<App> added" with OK alone, nothing to apply.
 - Rename the install folder, Check now: Folder gone with Find the app again. It opens page 2 with "may have moved" and the old folder prefilled. Give the new one: "already a link". Add, Not now: the row is Linked at the new folder.
 
 ### Add a folder by hand
