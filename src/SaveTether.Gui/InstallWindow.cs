@@ -20,7 +20,7 @@ internal sealed class InstallWindow : Window
     public InstallWindow()
     {
         Title = Texts.AppName;
-        Icon = Icons.For(amber: false);
+        Icon = Icons.App;
         Width = 600;
         SizeToContent = SizeToContent.Height;
         CanResize = false;

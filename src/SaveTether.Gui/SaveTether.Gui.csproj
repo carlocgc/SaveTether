@@ -12,7 +12,15 @@
     <RootNamespace>SaveTether.Gui</RootNamespace>
     <PublishAot>true</PublishAot>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <!-- The program's own icon, in Explorer, the Start menu and Settings > Apps. Drawn by build/render-icon.cs. -->
+    <ApplicationIcon>Assets\savetether.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\savetether.ico" LogicalName="savetether.ico" />
+    <EmbeddedResource Include="Assets\savetether.png" LogicalName="savetether.png" />
+    <EmbeddedResource Include="Assets\savetether-tray.png" LogicalName="savetether-tray.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.5" />

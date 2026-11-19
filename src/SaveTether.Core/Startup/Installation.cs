@@ -73,7 +73,10 @@ public static class Installer
     /// <summary>The Linux package's programs and libraries (docs/releasing.md), which an install copies.</summary>
     public static IReadOnlyList<string> PackageFiles { get; } = ["savetether-gui", "savetether", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
 
-    private static readonly string[] Extras = ["LICENSE", "README.md"];
+    /// <summary>Copied when the package has them: the licence, the readme, and the icon the menu entry shows.</summary>
+    private static readonly string[] Extras = ["LICENSE", "README.md", IconFile];
+
+    private const string IconFile = "savetether.png";
 
     /// <summary>Whether to offer anything, for the app running from <paramref name="runningFolder"/>.</summary>
     public static InstallCheck Inspect(string runningFolder, InstallLayout layout, string runningVersion)
@@ -199,7 +202,8 @@ public static class Installer
 
         fs.RecreateRecordedLink(layout.AppLink, EntryKind.Symlink, layout.AppPath);
         Directory.CreateDirectory(Path.GetDirectoryName(layout.MenuEntry)!);
-        SafeFs.WriteFileAtomically(layout.MenuEntry, MenuEntry(layout.AppPath));
+        var icon = Path.Combine(layout.AppFolder, IconFile);
+        SafeFs.WriteFileAtomically(layout.MenuEntry, MenuEntry(layout.AppPath, SafeFs.Probe(icon) == EntryKind.File ? icon : null));
         RemoveLeftovers(layout);
         SafeFs.WriteFileAtomically(Path.Combine(layout.AppFolder, InstallLayout.VersionFile), version + "\n");
     }
@@ -271,8 +275,8 @@ public static class Installer
         return (removed, left);
     }
 
-    /// <summary>The menu entry: SaveTether in the app menu, starting the installed app with its window.</summary>
-    public static string MenuEntry(string program)
+    /// <summary>The menu entry: SaveTether in the app menu, with its icon, starting the installed app with its window.</summary>
+    public static string MenuEntry(string program, string? icon)
     {
         ArgumentException.ThrowIfNullOrEmpty(program);
         return
@@ -281,6 +285,7 @@ public static class Installer
             "Name=SaveTether\n" +
             "Comment=Keeps game save folders linked to one synced folder\n" +
             $"Exec={Autostart.QuoteExec(program)}\n" +
+            (icon is null ? string.Empty : $"Icon={icon}\n") +
             "Terminal=false\n" +
             "Categories=Utility;\n";
     }

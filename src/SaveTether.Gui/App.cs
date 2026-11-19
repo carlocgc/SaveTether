@@ -196,7 +196,7 @@ internal sealed class App : Application
             _window.Closing += OnWindowClosing;
             if (_last is not null)
             {
-                _window.Show(_last, _monitor.Current);
+                _window.Show(_last);
             }
         }
 
@@ -282,7 +282,7 @@ internal sealed class App : Application
             _headline!.Header = result.Icon.Headline;
         }
 
-        _window?.Show(result, _monitor.Current);
+        _window?.Show(result);
 
         if (result.Notification is { } text)
         {
