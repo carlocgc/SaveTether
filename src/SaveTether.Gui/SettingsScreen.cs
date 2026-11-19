@@ -12,12 +12,15 @@ namespace SaveTether.Gui;
 /// The Settings page (desktop-app-spec.md, section 11), in place of the Apps page while open. Built so far:
 /// Start with the session, and About. The backup location and This device come later.
 /// </summary>
-internal sealed class SettingsScreen : UserControl
+internal sealed class SettingsScreen : UserControl, IScreen
 {
+    /// <summary>The way back, shown by the window above the scrolling page.</summary>
+    public ContentControl Bar { get; } = new();
+
     public SettingsScreen(string localFolder, SessionStart session, Overlay overlay, Action close)
     {
         var page = new StackPanel { Spacing = 10, MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Left };
-        page.Children.Add(Navigation.BackRow("Back to apps", close));
+        Bar.Content = Navigation.BackRow("Back to apps", close);
         page.Children.Add(new TextBlock { Text = "Settings", FontSize = 22, FontWeight = FontWeight.SemiBold });
 
         page.Children.Add(Heading("Start with the session"));

@@ -26,7 +26,14 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _checkedAt = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _banners = new() { Spacing = 8 };
     private readonly StackPanel _rows = new() { Spacing = 2 };
+
+    /// <summary>
+    /// Above the scrolling area, so it stays in view: the Apps page's buttons, or the open screen's way back
+    /// (asked for by the owner). Empty during setup.
+    /// </summary>
+    private readonly ContentControl _bar = new();
     private readonly ScrollViewer _body;
+    private Control? _pageActions;
     private readonly Overlay _overlay;
     private readonly string _localFolder;
     private readonly Action _checkNow;
@@ -68,6 +75,7 @@ internal sealed class MainWindow : Window
                 Dock(header, Avalonia.Controls.Dock.Top),
                 Dock(new Border { Height = 16 }, Avalonia.Controls.Dock.Top),
                 Dock(_banners, Avalonia.Controls.Dock.Top),
+                Dock(_bar, Avalonia.Controls.Dock.Top),
                 Dock(footer, Avalonia.Controls.Dock.Bottom),
                 _body,
             },
@@ -120,6 +128,7 @@ internal sealed class MainWindow : Window
             _screen = null;
             _setup ??= new SetupView(_localFolder, _overlay, _checkNow);
             _body.Content = _setup;
+            _bar.Content = null;
             return;
         }
 
@@ -164,7 +173,7 @@ internal sealed class MainWindow : Window
 
         // The page's actions (section 5): Add app, and Apply all when at least one row is ready to link
         // (found on the Deck hidden with one left).
-        var pageActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 8) };
+        var pageActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var addApp = new Button { Content = "Add app", IsEnabled = actionsAllowed };
         addApp.Click += (_, _) => OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Catalog));
         pageActions.Children.Add(addApp);
@@ -182,7 +191,8 @@ internal sealed class MainWindow : Window
         var settings = new Button { Content = "Settings" };
         settings.Click += (_, _) => OpenScreen(new SettingsScreen(_localFolder, App.Session, _overlay, CloseScreen));
         pageActions.Children.Add(settings);
-        _rows.Children.Add(pageActions);
+        _pageActions = pageActions;
+        _bar.Content = _screen is IScreen open ? open.Bar : pageActions;
 
         foreach (var group in page.Groups)
         {
@@ -332,12 +342,14 @@ internal sealed class MainWindow : Window
     {
         _screen = screen;
         _body.Content = screen;
+        _bar.Content = (screen as IScreen)?.Bar;
     }
 
     private void CloseScreen()
     {
         _screen = null;
         _body.Content = _rows;
+        _bar.Content = _pageActions;
         _checkNow();
     }
 

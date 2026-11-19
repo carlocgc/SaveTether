@@ -26,7 +26,7 @@ internal sealed record AddAppStart(string? AppId, string? MappingId)
 /// <see cref="AddAppFlow"/>; this only shows it. Planning reads only and runs off the UI thread; Add is an
 /// operation, and after it "Apply it now?" runs the Apply flow for each role added.
 /// </summary>
-internal sealed class AddAppScreen : UserControl
+internal sealed class AddAppScreen : UserControl, IScreen
 {
     private readonly AddAppFlow _flow;
     private readonly ManualAddFlow _manual;
@@ -34,6 +34,9 @@ internal sealed class AddAppScreen : UserControl
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly Action _close;
     private readonly ContentControl _page = new();
+
+    /// <summary>The current page's way back, shown by the window above the scrolling page.</summary>
+    public ContentControl Bar { get; } = new();
     private readonly Dictionary<string, TextBlock> _labels = new(StringComparer.Ordinal);
     private bool _closed;
 
@@ -696,11 +699,11 @@ internal sealed class AddAppScreen : UserControl
         return (field, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { field, choose } });
     }
 
-    /// <summary>A page: the way back at the top, then its title, sentences and content.</summary>
-    private static StackPanel Page(Control back, string title, IReadOnlyList<string> sentences, params Control[] content)
+    /// <summary>A page: its title, sentences and content; its way back goes to the bar above it.</summary>
+    private StackPanel Page(Control back, string title, IReadOnlyList<string> sentences, params Control[] content)
     {
+        Bar.Content = back;
         var page = new StackPanel { Spacing = 10 };
-        page.Children.Add(back);
         page.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
         foreach (var sentence in sentences)
         {
