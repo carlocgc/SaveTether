@@ -57,7 +57,7 @@ public sealed class InstallOffer(string localFolder, InstallLayout layout, strin
         return new InstallOfferView(
             false,
             "Install SaveTether for this user?",
-            $"SaveTether is running from {runningFolder}. {where}, then starts it from there. "
+            $"SaveTether is running from {Normalized(runningFolder)}. {where}, then starts it from there. "
                 + "It then keeps working if this folder is moved or deleted; the files here can be deleted afterwards.",
             "Install",
             windows,

@@ -388,7 +388,14 @@ Choices made while building:
 - **Banner B5** is read at every check. Fix it writes the entry with this app's path; Turn it off removes it. It shows beside a green state: a stale entry does not make the saves unhealthy. Since the app rewrites the entry at start, B5 in the app is seen mostly when the entry is changed while it runs; `status` is where a moved or removed app shows.
 - **About** shows the version as "<version> (<short commit>)", the local folder with Open, and the licence.
 
-Not built yet: the backup location's Change, This device's Set up again, Installing, and the `PATH` option.
+Not built yet: the backup location's Change, and This device's Set up again.
+
+*As built (2026-11-19): Installing.* The core's `Startup.Installer` and `InstallLayout` know where the programs go and copy them; `InstallOffer` (presentation project) decides what to offer and words it; `InstallWindow` (the app) asks, before the main window opens. Decided by the owner while building, beyond the paragraph above:
+- **Linux layout.** The app and its two native libraries go in `~/.local/lib/savetether`, so `~/.local/bin` holds only programs: the CLI `savetether` and a `savetether-gui` link to the app. A desktop entry in `$XDG_DATA_HOME/applications` (`~/.local/share/applications` when unset) puts SaveTether in the app menu, starting it with its window. Windows has no Start menu shortcut yet: a shell link needs COM code under Native AOT, so it is its own change.
+- **When.** At any start from somewhere other than the installed location, not only on first run, until **Not now** for that folder, which is remembered in `install-declined.txt` in the local folder. Not when started with `--minimized` (at login), and not from a folder that lacks any of the package's programs and libraries, such as a development build.
+- **Updating.** When an older version is installed (the version is recorded in `version.txt` beside the app), a newer copy offers "Update the installed SaveTether to <version>?". If the installed copy is running, the newer copy cannot become the one copy, so it shows the offer in place of handing over; on **Update** it asks the running copy to quit over the single-instance socket (as Quit from the tray menu, so it is refused during an operation), waits up to 20 seconds to take the claim, then replaces the files. The same or an older version is not offered.
+- **The copy.** Each file is copied beside its destination, then put in place by `SafeFs.ReplaceFile`, which renames the old file aside first (Windows allows that for a running program) and removes it, or leaves it for the next install while it runs. The version is recorded last, the installed copy is started, and this one quits. A failure leaves the old programs whole and is said; the app then carries on from where it is.
+- **`PATH`** (decision 10): an unticked box on Windows, "Make the savetether command available in terminals", which adds the install folder to `Path` in `HKCU\Environment`, keeping the value's type so `%VAR%` entries still expand, and tells running programs the environment changed.
 
 ## 12. Keyboard and focus
 

@@ -61,6 +61,8 @@ Download the package for your platform from the [latest release](https://github.
 
 Each holds the desktop app (`savetether-gui`), the command line (`savetether`), and the libraries the app needs beside it. Keep the files together. `SHA256SUMS.txt` on the release page lets you check the download.
 
+The first time the desktop app starts from where you unpacked it, it offers to install itself for your user, and you can delete the unpacked files afterwards. On Windows it goes to `%LOCALAPPDATA%\Programs\SaveTether`, with an option to make the `savetether` command available in terminals. On Linux the app goes to `~/.local/lib/savetether`, the `savetether` command and a `savetether-gui` link to `~/.local/bin`, and SaveTether is added to the app menu. Starting a newer unpacked version later offers to update the installed one.
+
 ## Quick start
 
 **Desktop app.** Start `savetether-gui`. The first run asks for your synced folder, a name for this machine, and where to keep backups. Then **Add app** finds an app's save folders, or **Apply** links a folder you have added. On the first machine, its saves become the shared copy; on the others, SaveTether shows how their saves differ and asks what to keep.

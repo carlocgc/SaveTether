@@ -110,6 +110,31 @@ public class InstallerTests
         Assert.DoesNotContain(Directory.EnumerateFiles(layout.AppFolder), f => f.EndsWith(".new", StringComparison.Ordinal) || f.Contains(".old-", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("win-*", TargetOs.Windows)]
+    [InlineData("linux-*", TargetOs.Linux)]
+    public void The_installer_copies_exactly_the_programs_the_release_package_holds(string rid, TargetOs os)
+    {
+        // build/check-package.sh is the package's file list; the installer copies its programs and libraries.
+        var script = File.ReadAllLines(Path.Combine(RepositoryRoot(), "build", "check-package.sh"));
+        var line = script.Single(l => l.TrimStart().StartsWith(rid + ") expected=(", StringComparison.Ordinal));
+        var listed = line[(line.IndexOf('(', StringComparison.Ordinal) + 1)..line.IndexOf(')', line.IndexOf('(', StringComparison.Ordinal))]
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Except(["LICENSE", "README.md"]);
+        Assert.Equal(listed.Order(StringComparer.Ordinal), Installer.PackageFiles(os).Order(StringComparer.Ordinal));
+    }
+
+    private static string RepositoryRoot()
+    {
+        var folder = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(folder, "SaveTether.slnx")))
+        {
+            folder = Path.GetDirectoryName(folder) ?? throw new InvalidOperationException("The repository root was not found.");
+        }
+
+        return folder;
+    }
+
     [Fact]
     public void The_menu_entry_starts_the_installed_app_with_its_window()
     {
@@ -193,6 +218,10 @@ public class InstallerTests
         Assert.Equal("Install SaveTether for this user?", view.Title);
         Assert.Contains(layout.AppFolder, view.Text, StringComparison.Ordinal);
         Assert.Equal(Host == TargetOs.Windows, view.OffersPath);
+
+        // The app's own folder comes with a trailing separator; the offer names it without (found on the Deck).
+        var withSeparator = new InstallOffer(local, layout, unpacked + Path.DirectorySeparatorChar, "0.2.0+abc").Offer()!;
+        Assert.Contains($"running from {unpacked}. ", withSeparator.Text, StringComparison.Ordinal);
 
         offer.Decline();
         Assert.Null(offer.Offer());
