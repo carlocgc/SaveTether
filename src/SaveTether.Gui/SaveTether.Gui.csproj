@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The desktop app (design 5.14, desktop-app-spec.md): the window, the tray icon, notifications and the
+    platform code. Its logic is in SaveTether.Gui.Presentation; the views are built in code, so there is
+    no XAML and no reflection binding. Ships as a Native AOT binary beside its native Skia and HarfBuzz
+    libraries (and ANGLE on Windows).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>savetether-gui</AssemblyName>
+    <RootNamespace>SaveTether.Gui</RootNamespace>
+    <PublishAot>true</PublishAot>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SaveTether.Core\SaveTether.Core.csproj" />
+    <ProjectReference Include="..\SaveTether.Gui.Presentation\SaveTether.Gui.Presentation.csproj" />
+  </ItemGroup>
+
+</Project>

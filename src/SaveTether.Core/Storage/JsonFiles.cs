@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using SaveTether.Core.FileSystem;
+using SaveTether.Core.Model;
 
 namespace SaveTether.Core.Storage;
 
@@ -8,22 +10,39 @@ namespace SaveTether.Core.Storage;
 public enum StoreProblem
 {
     /// <summary>The file or folder is not there.</summary>
+    [JsonStringEnumMemberName("not-found")]
     NotFound,
 
     /// <summary>The file is not valid: broken JSON, a missing or unknown field, or a value that breaks a rule.</summary>
+    [JsonStringEnumMemberName("invalid")]
     Invalid,
 
     /// <summary>The file was written by a newer SaveTether. It is left exactly as it is.</summary>
+    [JsonStringEnumMemberName("schema-too-new")]
     SchemaTooNew,
 
     /// <summary>The sync root does not hold SaveTether's marker folder.</summary>
+    [JsonStringEnumMemberName("not-initialized")]
     NotInitialized,
 
     /// <summary>The change contradicts what is already recorded, such as a different target for an existing mapping.</summary>
+    [JsonStringEnumMemberName("conflict")]
     Conflict,
 
     /// <summary>The device name already belongs to another install.</summary>
+    [JsonStringEnumMemberName("name-in-use")]
     NameInUse,
+
+    /// <summary>Another SaveTether process holds the operation lock (<see cref="OperationLock"/>).</summary>
+    [JsonStringEnumMemberName("operation-running")]
+    OperationRunning,
+
+    /// <summary>
+    /// A new sync root was given while mappings on this device are still linked into the old one.
+    /// <see cref="StoreException.Next"/> holds a Revert step for each.
+    /// </summary>
+    [JsonStringEnumMemberName("mappings-applied")]
+    MappingsApplied,
 }
 
 /// <summary>A SaveTether file could not be read or written. <see cref="Problem"/> says why.</summary>
@@ -49,7 +68,30 @@ public sealed class StoreException : IOException
         Problem = problem;
     }
 
+    /// <param name="message">What is wrong, in words for any front end; <see cref="Exception.Message"/> is its text.</param>
+    public StoreException(StoreProblem problem, Note message, Exception? innerException = null)
+        : base(message?.Text, innerException)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        Problem = problem;
+        Next = message.Next;
+    }
+
+    /// <param name="conflict">The facts behind a <see cref="StoreProblem.Conflict"/>.</param>
+    public StoreException(Note message, ConflictFacts conflict)
+        : this(StoreProblem.Conflict, message)
+    {
+        ArgumentNullException.ThrowIfNull(conflict);
+        Conflict = conflict;
+    }
+
     public StoreProblem Problem { get; } = StoreProblem.Invalid;
+
+    /// <summary>What the owner can do about it. Each front end words it itself.</summary>
+    public IReadOnlyList<NextStep> Next { get; } = [];
+
+    /// <summary>For <see cref="StoreProblem.Conflict"/>: what is in the way, as fields. Null for other problems.</summary>
+    public ConflictFacts? Conflict { get; }
 }
 
 /// <summary>

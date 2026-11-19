@@ -34,7 +34,7 @@ savetether app add cemu
 savetether apply cemu.save
 ```
 
-If that device has saves of its own, `apply` stops, shows how they differ from the shared copy, and lists the choices. A verified backup is taken before anything is changed; see `savetether backup list`. `savetether status` shows each mapping's state, `savetether revert <id>` undoes a link, and `savetether --help` lists everything. Add `--dry-run` to see what a command would do, and `--json` for machine-readable output.
+If that device has saves of its own, `apply` stops, shows how they differ from the shared copy, and lists the choices. A verified backup is taken before anything is changed; see `savetether backup list`. `savetether status` shows each mapping's state, `savetether revert <id>` undoes a link, and `savetether --help` lists everything. Add `--dry-run` to see what a command would do, and `--json` for machine-readable output. That output is a stable contract for scripts, described in [docs/cli-json.md](docs/cli-json.md).
 
 ### Moving an app's folder
 
@@ -57,7 +57,7 @@ Native binary (needs the platform's native toolchain: Visual Studio C++ build to
 dotnet publish src/SaveTether.Cli -c Release -r linux-x64
 ```
 
-Use `win-x64` or `linux-arm64` for the other targets.
+Use `win-x64` or `linux-arm64` for the other targets. The desktop app is `src/SaveTether.Gui`, published the same way. It needs the native libraries its publish folder holds beside it (Skia, HarfBuzz, and ANGLE on Windows), so run it from that folder, not from `bin/`. To build the package a release ships, publish both, then run `build/package.sh` (see [docs/releasing.md](docs/releasing.md)).
 
 On Windows, if publishing fails with `'vswhere.exe' is not recognized`, put Visual Studio's installer folder on `PATH` for that shell first:
 

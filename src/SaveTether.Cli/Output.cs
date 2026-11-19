@@ -4,8 +4,10 @@ using System.Text.Json.Serialization;
 using SaveTether.Core.Backup;
 using SaveTether.Core.Definitions;
 using SaveTether.Core.Health;
+using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
+using SaveTether.Core.Storage;
 
 namespace SaveTether.Cli;
 
@@ -57,8 +59,10 @@ internal sealed record OperationOutput(
 /// <param name="Plan">Absent when there is no plan.</param>
 /// <param name="Problem">Why there is no plan.</param>
 /// <param name="Candidates">The installs of the app for this system, and whether each was found.</param>
+/// <param name="Conflict">When <paramref name="Problem"/> is a conflict: what is in the way.</param>
 internal sealed record AppOutput(
-    string AppId, bool Added, AppAddPlan? Plan, AppAddProblem? Problem, IReadOnlyList<InstallCandidate> Candidates);
+    string AppId, bool Added, AppAddPlan? Plan, AppAddProblem? Problem, IReadOnlyList<InstallCandidate> Candidates,
+    ConflictFacts? Conflict = null);
 
 /// <summary>"app list": one app that can be added.</summary>
 internal sealed record AppListEntry(string Id, string? Name, DefinitionSource Source, string? Error);
@@ -84,6 +88,15 @@ internal sealed record CliOutput
     /// <summary>Why the command as a whole did not run. Per-operation reasons are in <see cref="Operations"/>.</summary>
     public string? Error { get; init; }
 
+    /// <summary>
+    /// When the command was refused by one of the core's store checks, which kind it was, such as
+    /// <c>operation-running</c>. Absent otherwise.
+    /// </summary>
+    public StoreProblem? Problem { get; init; }
+
+    /// <summary>When <see cref="Problem"/> is <c>conflict</c>: what is in the way, as fields. Absent otherwise.</summary>
+    public ConflictFacts? Conflict { get; init; }
+
     public string? Message { get; init; }
 
     public InitResult? Init { get; init; }
@@ -99,14 +112,19 @@ internal sealed record CliOutput
     public IReadOnlyList<OperationOutput>? Operations { get; init; }
 
     public IReadOnlyList<BackupInfo>? Backups { get; init; }
+
+    /// <summary>"backup delete": the backup removed, whether it was its mapping's first, and how many are left.</summary>
+    public BackupDeletion? BackupDeleted { get; init; }
 }
 
 [JsonSourceGenerationOptions(
     WriteIndented = true,
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
     UseStringEnumConverter = true,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    Converters = [typeof(NoteJsonConverter)])]
 [JsonSerializable(typeof(CliOutput))]
+[JsonSerializable(typeof(PlanOutcome))]
 internal sealed partial class CliJsonContext : JsonSerializerContext;
 
 /// <summary>Prints a <see cref="CliOutput"/>: one JSON object on stdout, or text with problems on stderr.</summary>
@@ -159,6 +177,11 @@ internal static class OutputWriter
             WriteBackups(backups, stdout);
         }
 
+        if (output.BackupDeleted is { } deleted)
+        {
+            stdout.WriteLine($"Deleted backup {deleted.Backup.Id}. {deleted.Remaining} backup(s) of {deleted.Backup.MappingId} left.");
+        }
+
         if (output.Message is { } message)
         {
             stdout.WriteLine(message);
@@ -179,7 +202,7 @@ internal static class OutputWriter
         stdout.WriteLine($"  devices:   {string.Join(", ", init.Devices)}");
         foreach (var note in init.Notes)
         {
-            stdout.WriteLine($"Note: {note}");
+            stdout.WriteLine($"Note: {Hints.Compose(note)}");
         }
     }
 
@@ -216,7 +239,7 @@ internal static class OutputWriter
             {
                 stderr.WriteLine(candidate.IsDetected
                     ? $"  install {candidate.Id}: found ({candidate.Found})"
-                    : $"  install {candidate.Id}: not found. {candidate.Reason}");
+                    : $"  install {candidate.Id}: not found. {Hints.ComposeOrNull(candidate.Reason)}");
             }
 
             return;
@@ -239,7 +262,7 @@ internal static class OutputWriter
 
             if (role.Note is { } note)
             {
-                stdout.WriteLine($"    Note: {note}");
+                stdout.WriteLine($"    Note: {Hints.Compose(note)}");
             }
         }
 
@@ -269,7 +292,7 @@ internal static class OutputWriter
         }
     }
 
-    private static string FormatBytes(long bytes) => bytes switch
+    internal static string FormatBytes(long bytes) => bytes switch
     {
         >= 1L << 30 => $"{bytes / (double)(1L << 30):0.0} GiB",
         >= 1L << 20 => $"{bytes / (double)(1L << 20):0.0} MiB",
@@ -296,7 +319,7 @@ internal static class OutputWriter
         var width = status.Mappings.Select(m => m.MappingId.Length).DefaultIfEmpty(0).Max();
         foreach (var mapping in status.Mappings)
         {
-            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-12}  {mapping.Detail}");
+            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-12}  {Hints.Compose(mapping.Detail)}");
         }
 
         if (status.DeviceFileMismatch)
@@ -309,6 +332,13 @@ internal static class OutputWriter
         if (status.JournalOpen)
         {
             stderr.WriteLine("Warning: an earlier operation did not finish. Run 'savetether recover'.");
+        }
+
+        if (status.AutostartMissing is { } program)
+        {
+            stderr.WriteLine(
+                $"Warning: SaveTether is set to start with the session, but the entry points to '{program}', which is missing. " +
+                "Start the desktop app from where it is now to fix the entry, or turn starting with the session off in its settings.");
         }
     }
 
@@ -343,7 +373,7 @@ internal static class OutputWriter
                     stdout.WriteLine(headline);
                     foreach (var note in plan.Notes)
                     {
-                        stdout.WriteLine($"Note: {note}");
+                        stdout.WriteLine($"Note: {Hints.Compose(note)}");
                     }
                 }
 

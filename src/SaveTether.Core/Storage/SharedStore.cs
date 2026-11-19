@@ -124,16 +124,16 @@ public sealed class SharedStore
                 if (other.Target != mapping.Target)
                 {
                     throw new StoreException(
-                        StoreProblem.Conflict,
-                        $"Mapping '{mapping.Id}' already exists with target '{other.Target}'. Its target cannot be changed to '{mapping.Target}'.");
+                        $"Mapping '{mapping.Id}' already exists with target '{other.Target}'. Its target cannot be changed to '{mapping.Target}'.",
+                        new ConflictFacts(ConflictKind.TargetDiffers, mapping.Id, Target: other.Target));
                 }
             }
             else if (string.Equals(other.Target, mapping.Target, StringComparison.OrdinalIgnoreCase))
             {
                 var how = other.Target == mapping.Target ? "the same target" : "a target that differs only by letter case";
                 throw new StoreException(
-                    StoreProblem.Conflict,
-                    $"Mapping '{other.Id}' already uses {how} ('{other.Target}'). On Windows the two would be one folder.");
+                    $"Mapping '{other.Id}' already uses {how} ('{other.Target}'). On Windows the two would be one folder.",
+                    new ConflictFacts(ConflictKind.TargetInUse, other.Id, Target: other.Target));
             }
         }
 
@@ -314,9 +314,11 @@ public sealed class SharedStore
                 throw new StoreException(StoreProblem.Invalid, $"The device file for '{expectedName}' is not valid: app '{appId}' needs a valid ID and an install.");
             }
 
+            // Device files are shared by every device, on either system: each path is checked as absolute on
+            // the system of the device that wrote it, which may not be this one.
             foreach (var value in new[] { app.InstallDir, app.SdCard, app.WinePrefix })
             {
-                if (value is not null && !Path.IsPathFullyQualified(value))
+                if (value is not null && !PathRules.IsAbsoluteOnAnySystem(value))
                 {
                     throw new StoreException(StoreProblem.Invalid, $"The device file for '{expectedName}' is not valid: app '{appId}' has a path that is not absolute: '{value}'.");
                 }

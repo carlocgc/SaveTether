@@ -1,5 +1,6 @@
 using SaveTether.Core.Backup;
 using SaveTether.Core.FileSystem;
+using SaveTether.Core.Model;
 using SaveTether.Core.Storage;
 
 namespace SaveTether.Core.Planning;
@@ -31,7 +32,7 @@ public static class RestorePlanner
         {
             return Refuse(
                 backupId, PrecheckKind.BackupUnusable,
-                $"There is no backup '{backupId}' in '{backups.Root}'. Run 'savetether backup list' to see what there is.");
+                new Note($"There is no backup '{backupId}' in '{backups.Root}'.", new NextStep(NextStepKind.ListBackups)));
         }
 
         if (!shared.IsInitialized)
@@ -40,7 +41,7 @@ public static class RestorePlanner
         }
 
         var failures = new List<PrecheckFailure>();
-        void Fail(PrecheckKind kind, string message) => failures.Add(new PrecheckFailure(kind, message));
+        void Fail(PrecheckKind kind, Note message) => failures.Add(new PrecheckFailure(kind, message));
 
         if (journalOpen)
         {
@@ -58,7 +59,7 @@ public static class RestorePlanner
         var running = processNames.Count == 0 ? [] : ProcessCheck.FindRunning(processNames, processes.RunningProcessNames());
         if (running.Count > 0 && !request.AssumeClosed)
         {
-            Fail(PrecheckKind.AppRunning, Planner.AppRunningMessage(running, processNames));
+            failures.Add(Planner.AppRunning(running, processNames));
         }
 
         var data = backups.DataPathOf(backupId);
@@ -70,7 +71,7 @@ public static class RestorePlanner
         var hasData = current.Any(e => e.Kind != EntryKind.Directory);
 
         var steps = new List<PlanStep>();
-        var notes = new List<string>();
+        var notes = new List<Note>();
         var links = verification.IsValid ? backups.LinksOf(backupId) : [];
         if (isShared)
         {
@@ -89,8 +90,10 @@ public static class RestorePlanner
             {
                 return new PlanOutcome(null, new Refusal(
                     info.MappingId, RefusalKind.ConfirmationNeeded, Classification.NotClassified,
-                    $"This backup is of the shared folder '{destination}'. Restoring it replaces what is there on every device once it syncs. " +
-                    "The current content is backed up on this device first. Add --confirm-replace to go ahead.",
+                    new Note(
+                        $"This backup is of the shared folder '{destination}'. Restoring it replaces what is there on every device once it syncs. " +
+                        "The current content is backed up on this device first.",
+                        new NextStep(NextStepKind.ConfirmReplace, info.MappingId, backupId)),
                     [], [], AssumeSyncedWouldHelp: false, Comparison: null, PlanOperation.Restore));
             }
 
@@ -111,8 +114,10 @@ public static class RestorePlanner
             {
                 Fail(
                     PrecheckKind.RestoreDestinationUnusable,
-                    $"'{destination}' is a link now, so restoring into it would write to wherever it points. " +
-                    $"Run 'savetether revert {info.MappingId}' first to make it a real folder again, or restore a backup of the shared folder instead.");
+                    new Note(
+                        $"'{destination}' is a link now, so restoring into it would write to wherever it points. " +
+                        "Restore a backup of the shared folder instead, or make this one a real folder again first.",
+                        new NextStep(NextStepKind.Revert, info.MappingId)));
             }
             else if (kind is not (EntryKind.Directory or EntryKind.Missing))
             {
@@ -153,16 +158,12 @@ public static class RestorePlanner
         var currentBytes = current.Sum(e => e.Length);
         if (hasData && SnapshotReader.FreeBytesAt(backups.Root) is { } backupFree && currentBytes > backupFree)
         {
-            Fail(
-                PrecheckKind.NotEnoughSpace,
-                $"Backing up what is there now needs {currentBytes:N0} bytes, but only {backupFree:N0} are free at '{backups.Root}'.");
+            failures.Add(Planner.NotEnoughSpace("Backing up what is there now", backups.Root, currentBytes, backupFree));
         }
 
         if (SnapshotReader.FreeBytesAt(destination) is { } destinationFree && info.TotalBytes > destinationFree)
         {
-            Fail(
-                PrecheckKind.NotEnoughSpace,
-                $"Restoring needs {info.TotalBytes:N0} bytes, but only {destinationFree:N0} are free at '{destination}'.");
+            failures.Add(Planner.NotEnoughSpace("Restoring", destination, info.TotalBytes, destinationFree));
         }
 
         if (failures.Count > 0)
@@ -188,7 +189,7 @@ public static class RestorePlanner
             null);
     }
 
-    private static PlanOutcome Refuse(string mappingId, PrecheckKind kind, string message) => new(null, new Refusal(
+    private static PlanOutcome Refuse(string mappingId, PrecheckKind kind, Note message) => new(null, new Refusal(
         mappingId, RefusalKind.Precondition, Classification.NotClassified, message,
         [new PrecheckFailure(kind, message)], [], AssumeSyncedWouldHelp: false, Comparison: null, PlanOperation.Restore));
 }

@@ -37,9 +37,57 @@ public enum HealthState
     ForeignLink,
 }
 
+/// <summary>
+/// Which situation a state stands for, where one state covers several that call for different
+/// words or a different fix (desktop-app-spec.md, section 5.1).
+/// </summary>
+public enum HealthReason
+{
+    /// <summary>Not applied: this device has no save folder set for the mapping.</summary>
+    [JsonStringEnumMemberName("no-save-folder")]
+    NoSaveFolder,
+
+    /// <summary>Not applied: this device's file has a save folder that is not an absolute path.</summary>
+    [JsonStringEnumMemberName("save-folder-not-absolute")]
+    SaveFolderNotAbsolute,
+
+    /// <summary>Not applied: the save folder is set, and not linked yet.</summary>
+    [JsonStringEnumMemberName("not-linked-yet")]
+    NotLinkedYet,
+
+    /// <summary>Replaced: the save folder is a real folder again and holds files, so saves made here are not shared.</summary>
+    [JsonStringEnumMemberName("folder-holds-files")]
+    FolderHoldsFiles,
+
+    /// <summary>Replaced: the save folder is a real folder again, with no files in it.</summary>
+    [JsonStringEnumMemberName("folder-empty")]
+    FolderEmpty,
+
+    /// <summary>Replaced: there is nothing at the save folder. The app's folder has most likely moved, taking the link with it.</summary>
+    [JsonStringEnumMemberName("folder-missing")]
+    FolderMissing,
+
+    /// <summary>Replaced: a file, or something else that is not a folder, is where the save folder was.</summary>
+    [JsonStringEnumMemberName("not-a-folder")]
+    NotAFolder,
+
+    /// <summary>Broken: the link is in place and the sync root is there, but the shared folder is missing.</summary>
+    [JsonStringEnumMemberName("shared-folder-missing")]
+    SharedFolderMissing,
+
+    /// <summary>Broken: the link is in place, but the sync root cannot be used (the report says why).</summary>
+    [JsonStringEnumMemberName("sync-root-unavailable")]
+    SyncRootUnavailable,
+}
+
 /// <param name="Source">S on this device, or null when this device has no save folder set for the mapping.</param>
 /// <param name="Detail">One sentence saying what the state means here and what to do.</param>
-public sealed record MappingHealth(string MappingId, HealthState State, string? Source, string Target, string Detail);
+/// <param name="Reason">
+/// Which situation the state stands for, for Not applied, Replaced and Broken; null for the other states,
+/// which each stand for one situation.
+/// </param>
+public sealed record MappingHealth(
+    string MappingId, HealthState State, string? Source, string Target, Note Detail, HealthReason? Reason = null);
 
 /// <summary>
 /// Works out a mapping's state from one look at S, one read of its link, and the seed markers.
@@ -55,16 +103,25 @@ public static class HealthCheck
         ArgumentNullException.ThrowIfNull(mapping);
 
         var target = shared.TargetPathOf(mapping);
-        MappingHealth Is(HealthState state, string detail) => new(mapping.Id, state, path?.Source, target, detail);
+        MappingHealth Is(HealthState state, Note detail, HealthReason? reason = null) =>
+            new(mapping.Id, state, path?.Source, target, detail, reason);
 
         if (path is null)
         {
-            return Is(HealthState.NotApplied, $"No save folder is set for it on this device. Set one with 'savetether map add {mapping.Id} --source <path>'.");
+            return Is(
+                HealthState.NotApplied,
+                new Note("No save folder is set for it on this device.", new NextStep(NextStepKind.SetSaveFolder, mapping.Id)),
+                HealthReason.NoSaveFolder);
         }
 
         if (!Path.IsPathFullyQualified(path.Source))
         {
-            return Is(HealthState.NotApplied, $"The save folder '{path.Source}' in this device's file is not an absolute path.");
+            return Is(
+                HealthState.NotApplied,
+                new Note(
+                    $"The save folder '{path.Source}' in this device's file is not an absolute path.",
+                    new NextStep(NextStepKind.SetSaveFolder, mapping.Id)),
+                HealthReason.SaveFolderNotAbsolute);
         }
 
         var kind = SafeFs.Probe(path.Source);
@@ -80,24 +137,32 @@ public static class HealthCheck
 
             if (SafeFs.Probe(PathRules.ResolveAll(target)) != EntryKind.Directory)
             {
-                return Is(HealthState.Broken, "The link is in place, but the shared folder is missing. Check that the sync root is present and has synced.");
+                return Is(
+                    HealthState.Broken,
+                    "The link is in place, but the shared folder is missing. Check that the sync root is present and has synced.",
+                    HealthReason.SharedFolderMissing);
             }
 
             var seeders = shared.ReadSeedMarkers(mapping.Id).Where(m => m.IsActive).Select(m => m.DeviceName).ToList();
             return seeders.Count > 1
                 ? Is(
                     HealthState.DoubleSeed,
-                    $"More than one device made its saves the shared copy ({string.Join(", ", seeders)}). " +
-                    "On the device that should win, run 'savetether apply " + mapping.Id + " --replace-shared', or restore a backup.")
+                    new Note(
+                        $"More than one device made its saves the shared copy ({string.Join(", ", seeders)}).",
+                        new NextStep(NextStepKind.MakeThisCopyWin, mapping.Id)))
                 : Is(HealthState.Ok, "Linked to the shared folder.");
         }
 
         if (recorded is not null)
         {
-            return Is(HealthState.Replaced, ReplacedDetail(path.Source, kind));
+            var (detail, reason) = Replaced(mapping.Id, path.Source, kind);
+            return Is(HealthState.Replaced, detail, reason);
         }
 
-        return Is(HealthState.NotApplied, "Not applied on this device yet. Run 'savetether apply " + mapping.Id + "'.");
+        return Is(
+            HealthState.NotApplied,
+            new Note("Not applied on this device yet.", new NextStep(NextStepKind.Apply, mapping.Id)),
+            HealthReason.NotLinkedYet);
     }
 
     /// <summary>
@@ -111,32 +176,41 @@ public static class HealthCheck
         ArgumentException.ThrowIfNullOrWhiteSpace(mappingId);
         ArgumentNullException.ThrowIfNull(recorded);
 
-        MappingHealth Is(HealthState state, string detail) => new(mappingId, state, recorded.Source, recorded.Target, detail);
+        MappingHealth Is(HealthState state, Note detail, HealthReason? reason = null) =>
+            new(mappingId, state, recorded.Source, recorded.Target, detail, reason);
 
         var kind = SafeFs.Probe(recorded.Source);
         if (kind is EntryKind.Symlink or EntryKind.Junction)
         {
             var linkTarget = PathRules.ResolveAll(SafeFs.ReadLinkTarget(recorded.Source));
             return PathRules.AreSame(linkTarget, PathRules.ResolveAll(recorded.Target))
-                ? Is(HealthState.Broken, "The link is in place, but the sync root is not available.")
+                ? Is(HealthState.Broken, "The link is in place, but the sync root is not available.", HealthReason.SyncRootUnavailable)
                 : Is(HealthState.Retargeted, $"The save folder now links to '{linkTarget}' instead of the shared folder.");
         }
 
-        return Is(HealthState.Replaced, ReplacedDetail(recorded.Source, kind));
+        var (detail, reason) = Replaced(mappingId, recorded.Source, kind);
+        return Is(HealthState.Replaced, detail, reason);
     }
 
-    private static string ReplacedDetail(string source, EntryKind kind)
+    /// <summary>What has taken the link's place at the save folder, and what to say about it.</summary>
+    private static (Note Detail, HealthReason Reason) Replaced(string mappingId, string source, EntryKind kind)
     {
+        var apply = new NextStep(NextStepKind.Apply, mappingId);
         if (kind == EntryKind.Missing)
         {
             // Nothing there at all: the app's folder has most likely moved, taking the link with it.
-            return "There is nothing at the save folder now. If the app has moved, run 'savetether app add' with its new location; " +
-                "otherwise run apply to link it again.";
+            return (
+                new Note("There is nothing at the save folder now. The app may have moved.", new NextStep(NextStepKind.FindAppAgain, mappingId)),
+                HealthReason.FolderMissing);
         }
 
-        var stranded = kind == EntryKind.Directory && SafeFs.EnumerateTree(source).Any(e => e.Kind != EntryKind.Directory);
-        return stranded
-            ? "The save folder is a real folder again and holds files, so saves made here are not shared. Run apply to link it again."
-            : "The save folder is no longer a link. Run apply to link it again.";
+        if (kind != EntryKind.Directory)
+        {
+            return (new Note("Something other than a folder is where the save folder was.", apply), HealthReason.NotAFolder);
+        }
+
+        return SafeFs.EnumerateTree(source).Any(e => e.Kind != EntryKind.Directory)
+            ? (new Note("The save folder is a real folder again and holds files, so saves made here are not shared.", apply), HealthReason.FolderHoldsFiles)
+            : (new Note("The save folder is no longer a link, and holds no files.", apply), HealthReason.FolderEmpty);
     }
 }

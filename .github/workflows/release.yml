@@ -129,17 +129,14 @@ jobs:
           ./publish/${{ matrix.exe }} --self-test
           bash tests/e2e/scenario1.sh "$PWD/publish/${{ matrix.exe }}"
 
-      - name: Package
+      - name: Publish the desktop app
+        run: dotnet publish src/SaveTether.Gui/SaveTether.Gui.csproj -c Release -r ${{ matrix.rid }} -o publish-gui -p:Version=${{ env.VERSION }}
+
+      - name: Package and check
         shell: bash
         run: |
-          mkdir -p "stage/$PACKAGE" dist
-          cp "publish/${{ matrix.exe }}" README.md LICENSE "stage/$PACKAGE/"
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            (cd stage && 7z a -tzip "../dist/$PACKAGE.zip" "$PACKAGE" > /dev/null)
-          else
-            chmod +x "stage/$PACKAGE/${{ matrix.exe }}"
-            tar -C stage -czf "dist/$PACKAGE.tar.gz" "$PACKAGE"
-          fi
+          archive=$(bash build/package.sh ${{ matrix.rid }} "$PACKAGE" publish publish-gui dist)
+          bash build/check-package.sh ${{ matrix.rid }} "$archive"
           ls -l dist
 
       - uses: actions/upload-artifact@v4
@@ -152,14 +149,15 @@ jobs:
       - name: Collect debug symbols
         shell: bash
         run: |
-          mkdir -p symbols
-          find publish -maxdepth 1 \( -name '*.pdb' -o -name '*.dbg' \) -exec cp {} symbols/ \;
-          ls -l symbols
+          mkdir -p symbols/cli symbols/gui
+          find publish -maxdepth 1 \( -name '*.pdb' -o -name '*.dbg' \) -exec cp {} symbols/cli/ \;
+          find publish-gui -maxdepth 1 \( -name '*.pdb' -o -name '*.dbg' \) -exec cp {} symbols/gui/ \;
+          ls -lR symbols
 
       - uses: actions/upload-artifact@v4
         with:
           name: symbols-${{ matrix.rid }}
-          path: symbols/*
+          path: symbols/
           if-no-files-found: warn
           retention-days: 30
 

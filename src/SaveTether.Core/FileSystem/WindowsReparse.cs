@@ -16,6 +16,9 @@ internal static unsafe partial class WindowsReparse
     internal const uint TagMountPoint = 0xA0000003;
     internal const uint TagSymlink = 0xA000000C;
 
+    /// <summary>IO_REPARSE_TAG_AF_UNIX: a Unix domain socket's file.</summary>
+    internal const uint TagAfUnix = 0x80000023;
+
     private const uint FsctlSetReparsePoint = 0x000900A4;
     private const uint FsctlGetReparsePoint = 0x000900A8;
     private const uint GenericWrite = 0x40000000;

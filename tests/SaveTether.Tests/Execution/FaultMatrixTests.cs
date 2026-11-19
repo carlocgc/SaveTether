@@ -71,7 +71,7 @@ public class FaultMatrixTests
                 {
                     Assert.True(
                         SafeFs.Probe(leftover) == EntryKind.Missing
-                        || result.Messages.Any(m => m.Contains(leftover, StringComparison.Ordinal)),
+                        || result.Messages.Any(m => m.Text.Contains(leftover, StringComparison.Ordinal)),
                         label + $"'{leftover}' was left without being reported");
                 }
 

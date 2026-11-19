@@ -76,6 +76,7 @@ internal static class ArgParser
         new("revert", 1, 1, ["--assume-closed", DryRun], None, None),
         new("backup list", 0, 1, None, None, None),
         new("backup restore", 1, 1, ["--confirm-replace", "--assume-closed", DryRun], None, None),
+        new("backup delete", 1, 1, ["--confirm-delete"], None, None),
         new("recover", 0, 0, None, None, None),
     ];
 

@@ -137,6 +137,9 @@ internal static class CliApp
           savetether backup restore <backup-id> [--confirm-replace] [--assume-closed] [--dry-run]
               Put a backup back where it was taken from. What is there now is backed up first.
               --confirm-replace is needed for a backup of a shared folder.
+          savetether backup delete <backup-id> [--confirm-delete]
+              Delete one backup. It cannot be undone, so it asks first, or needs --confirm-delete.
+              The first backup of a folder is usually the only copy from before SaveTether changed it.
 
           savetether recover
               Undo or finish an operation that was interrupted.
@@ -167,6 +170,11 @@ internal static class CliApp
         {
             try
             {
+                // One operation at a time on this device, across processes. Taken before the journal is
+                // looked at: while another process runs an operation its journal is open, and that is
+                // not an unfinished operation to recover.
+                using var held = Writes ? OperationLock.Acquire(_local, "cli", command.Name) : null;
+
                 // While an operation is unfinished, only looking and recovering are allowed.
                 var readOnly = command.Name is "status" or "backup list" or "recover" or "app list"
                     || (command.Name == "app add" && command.Has(ArgParser.DryRun));
@@ -191,15 +199,32 @@ internal static class CliApp
                         Backups = Open().ListBackups(command.FirstPositional),
                     },
                     "backup restore" => Restore(),
+                    "backup delete" => DeleteBackup(),
                     _ => Recover(),
                 };
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 // The core's refusals outside the planner. Each says what is wrong and what to do; nothing was changed.
-                return Failed(ExitRefused, e.Message);
+                var store = e as StoreException;
+                return Failed(ExitRefused, Hints.ErrorText(e)) with { Problem = store?.Problem, Conflict = store?.Conflict };
             }
         }
+
+        /// <summary>
+        /// Whether the command changes anything, and so takes the operation lock: everything but looking,
+        /// and a dry run. Recovery writes, so it takes the lock too.
+        /// </summary>
+        /// <remarks>
+        /// <c>init</c> on a device never set up has no local folder yet, and so no journal or state to
+        /// protect. Taking the lock there would create the folder, and a refused <c>init</c> must leave
+        /// nothing behind, so it goes without. Two first-time <c>init</c>s at the same instant are not
+        /// guarded against.
+        /// </remarks>
+        private bool Writes =>
+            command.Name is not ("status" or "backup list" or "app list")
+            && !command.Has(ArgParser.DryRun)
+            && (command.Name != "init" || Directory.Exists(_local.Folder));
 
         private CliOutput Init()
         {
@@ -304,7 +329,7 @@ internal static class CliApp
             if (outcome.Problem == AppAddProblem.InstallChoiceNeeded && CanAsk)
             {
                 var found = outcome.Candidates.Where(c => c.IsDetected).ToList();
-                var question = $"{outcome.Message}\n" +
+                var question = $"{outcome.Message?.Text}\n" +
                     string.Concat(found.Select((c, i) => $"  {i + 1}. {c.Id}  ({c.Found})\n")) +
                     "Which install? Type its number: ";
                 if (!int.TryParse(Ask(question), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number)
@@ -318,7 +343,7 @@ internal static class CliApp
 
             if (outcome.Plan is not { } plan)
             {
-                return AppFailed(appId, outcome, outcome.Message!);
+                return AppFailed(appId, outcome, Hints.Compose(outcome.Message!));
             }
 
             var dryRun = command.Has(ArgParser.DryRun);
@@ -337,7 +362,7 @@ internal static class CliApp
         private CliOutput AppFailed(string appId, AppAddOutcome outcome, string error) => new()
         {
             Command = command.Name, ExitCode = ExitRefused, Error = error,
-            App = new AppOutput(appId, Added: false, null, outcome.Problem, outcome.Candidates),
+            App = new AppOutput(appId, Added: false, null, outcome.Problem, outcome.Candidates, outcome.Conflict),
         };
 
         private CliOutput AppList()
@@ -360,7 +385,10 @@ internal static class CliApp
 
         private CliOutput Status()
         {
-            var report = Open().Status(command.FirstPositional);
+            var report = Open().Status(command.FirstPositional) with
+            {
+                AutostartMissing = SaveTether.Core.Startup.Autostart.Check(environment.Autostart).MissingProgram,
+            };
             return new CliOutput
             {
                 Command = command.Name, ExitCode = report.JournalOpen ? ExitRecoveryNeeded : ExitSuccess, Status = report,
@@ -459,11 +487,44 @@ internal static class CliApp
                 backupId.Split('/')[0]);
         }
 
+        /// <summary>
+        /// "backup delete": one backup, after a confirmation at a terminal or with --confirm-delete. The first
+        /// backup of a mapping gets a stronger warning, since it is usually the only copy from before SaveTether.
+        /// </summary>
+        private CliOutput DeleteBackup()
+        {
+            var backupId = command.Positionals[0];
+            var workspace = Open();
+            var deletion = workspace.DescribeBackupDeletion(backupId);
+            if (!command.Has("--confirm-delete"))
+            {
+                if (!CanAsk)
+                {
+                    return Failed(ExitRefused, $"Deleting backup '{backupId}' cannot be undone. Add --confirm-delete to go ahead.");
+                }
+
+                var backup = deletion.Backup;
+                var first = deletion.WasFirst
+                    ? $"\nThis is the first backup of {backup.MappingId}: usually the only copy of '{backup.SourcePath}' from before SaveTether changed it."
+                    : string.Empty;
+                var question =
+                    $"Delete backup '{backupId}' ({backup.FileCount} file(s), {OutputWriter.FormatBytes(backup.TotalBytes)}, of '{backup.SourcePath}')?{first}" +
+                    "\nIt cannot be undone.";
+                if (!Confirm(question))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was deleted.");
+                }
+            }
+
+            var deleted = workspace.DeleteBackup(backupId);
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, BackupDeleted = deleted };
+        }
+
         private CliOutput Recover()
         {
             var result = Open().Recover();
             var operation = new OperationOutput(
-                result.MappingId, result.Operation, OutcomeOf(result.Status), null, null, result.BackupIds, result.Messages, result.Error);
+                result.MappingId, result.Operation, OutcomeOf(result.Status), null, null, result.BackupIds, Hints.Compose(result.Messages), Hints.ComposeOrNull(result.Error));
 
             // Undoing the unfinished operation is recovery succeeding.
             return new CliOutput
@@ -521,7 +582,7 @@ internal static class CliApp
 
                 if (outcome.Refusal is { Kind: RefusalKind.ConfirmationNeeded } unconfirmed && CanAsk)
                 {
-                    if (!Confirm(unconfirmed.Message.Replace(" Add --confirm-replace to go ahead.", string.Empty, StringComparison.Ordinal) + "\nReplace the shared saves?"))
+                    if (!Confirm(unconfirmed.Message.Text + "\nReplace the shared saves?"))
                     {
                         return Ended(OperationOutcome.Cancelled, refusal: unconfirmed);
                     }
@@ -531,7 +592,7 @@ internal static class CliApp
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                return Ended(OperationOutcome.Refused, error: e.Message);
+                return Ended(OperationOutcome.Refused, error: Hints.ErrorText(e));
             }
 
             if (outcome.Plan is not { } made)
@@ -554,7 +615,7 @@ internal static class CliApp
             var result = workspace.Run(made);
             return new OperationOutput(
                 mappingId, made.Operation, OutcomeOf(result.Status), made, null, result.BackupIds,
-                granted is null ? result.Messages : [granted, .. result.Messages], result.Error);
+                granted is null ? Hints.Compose(result.Messages) : [granted, .. Hints.Compose(result.Messages)], Hints.ComposeOrNull(result.Error));
         }
 
         private static OperationOutcome OutcomeOf(ExecutionStatus status) => status switch

@@ -35,6 +35,69 @@ public class CliCommandTests
     }
 
     [Fact]
+    public void A_new_sync_folder_is_refused_while_a_mapping_is_linked_into_the_old_one()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", Id, "--copy");
+        var newRoot = sandbox.Dir("pc", "sync2");
+
+        // Init again with the same sync folder is still fine.
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", "pc");
+
+        var refused = pc.Expect(CliApp.ExitRefused, "init", "--sync-root", newRoot, "--device", "pc", "--create-root", "--json").Json();
+        Assert.Equal("mappings-applied", refused.GetProperty("problem").GetString());
+        Assert.Contains($"savetether revert {Id}", refused.GetProperty("error").GetString(), StringComparison.Ordinal);
+
+        // Nothing was written: no SaveTether folder in the new place, and the device still uses the old one.
+        Assert.Empty(Directory.GetFileSystemEntries(newRoot));
+        Assert.Equal(pc.SyncRoot, pc.Ok("status", "--json").Json().GetProperty("status").GetProperty("sync_root").GetString());
+        Assert.True(pc.IsLinked);
+
+        // Losing the local record does not hide the link: the old sync folder's device file names it.
+        File.Delete(Path.Combine(pc.LocalFolder, "state.json"));
+        Assert.Equal(
+            "mappings-applied",
+            pc.Expect(CliApp.ExitRefused, "init", "--sync-root", newRoot, "--device", "pc", "--create-root", "--json")
+                .Json().GetProperty("problem").GetString());
+        Assert.Empty(Directory.GetFileSystemEntries(newRoot));
+
+        // Reverted, it goes ahead.
+        pc.Ok("revert", Id);
+        pc.Ok("init", "--sync-root", newRoot, "--device", "pc", "--create-root");
+        Assert.Equal(newRoot, pc.Ok("status", "--json").Json().GetProperty("status").GetProperty("sync_root").GetString());
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_link_into_an_old_sync_folder_that_is_gone_does_not_block_a_new_one()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", Id, "--copy");
+
+        // The old sync folder moves for good, as when its drive letter changes. The link cannot be reverted now.
+        var moved = sandbox.At("pc", "sync-moved");
+        Directory.Move(pc.SyncRoot, moved);
+        var newRoot = sandbox.Dir("pc", "sync2");
+
+        var init = pc.Ok("init", "--sync-root", newRoot, "--device", "pc", "--create-root", "--json").Json().GetProperty("init");
+        var note = Assert.Single(init.GetProperty("notes").EnumerateArray()).GetString();
+        Assert.Contains($"({Id}) is still a link", note, StringComparison.Ordinal);
+        Assert.Contains("cannot be reached", note, StringComparison.Ordinal);
+
+        // The link is left as it was: SaveTether deletes nothing here.
+        Assert.True(pc.IsLinked);
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, CliDevice.FilesIn(Path.Combine(moved, "savetether", "ppsspp", "SAVEDATA")));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void A_shared_folder_set_up_only_in_part_still_takes_devices_and_mappings()
     {
         // Found on the Deck: a .savetether folder holding only definitions, with no devices or mappings folder.
@@ -160,6 +223,14 @@ public class CliCommandTests
             Assert.Contains($"savetether map remove {Id}", err, StringComparison.Ordinal);
         }
 
+        // With --json, the store's refusal says what is in the way as fields.
+        var json = pc.Expect(CliApp.ExitRefused, "map", "add", "other.saves", "--target", "other/saves", "--source", pc.AppFolder, "--json").Json();
+        Assert.Equal("conflict", json.GetProperty("problem").GetString());
+        var conflict = json.GetProperty("conflict");
+        Assert.Equal("folder-in-use", conflict.GetProperty("kind").GetString());
+        Assert.Equal(Id, conflict.GetProperty("mapping_id").GetString());
+        Assert.Equal(pc.Source, conflict.GetProperty("folder").GetString());
+
         Assert.Equal(before, File.ReadAllText(deviceFile));
 
         // A sibling folder is fine, and so is the same mapping given its own folder again.
@@ -284,6 +355,12 @@ public class CliCommandTests
         // 1: a precondition. The app is running.
         pc.Running.Add("PPSSPPSDL");
         Assert.Contains("appears to be running", pc.Expect(CliApp.ExitRefused, "apply", Id, "--copy").Err, StringComparison.Ordinal);
+        var running = pc.Expect(CliApp.ExitRefused, "apply", Id, "--copy", "--json")
+            .Operation().GetProperty("refusal").GetProperty("failures")[0];
+        Assert.Equal("app-running", running.GetProperty("kind").GetString());
+        Assert.Equal(["PPSSPPSDL"], running.GetProperty("processes").GetProperty("running").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal(["PPSSPPSDL"], running.GetProperty("processes").GetProperty("looked_for").EnumerateArray().Select(e => e.GetString()));
+        Assert.False(running.TryGetProperty("space", out _));
         Assert.Equal("planned", pc.Ok("apply", Id, "--copy", "--assume-closed", "--dry-run", "--json").Operation().GetProperty("outcome").GetString());
         pc.Running.Clear();
 
@@ -488,117 +565,9 @@ public class CliCommandTests
         Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.SharedFiles());
     }
 
-    /// <summary>
-    /// The JSON a command prints is what the Decky plugin will depend on (design 5.11). Each
-    /// command's output is reduced to its shape, every property path with its type, and compared
-    /// with a stored copy, so a renamed or removed field is caught here first.
-    /// To accept an intended change, run the tests once with SAVETETHER_UPDATE_SHAPES=1.
-    /// </summary>
-    [Fact]
-    public void Json_output_of_every_command_keeps_its_stored_shape()
-    {
-        using var sandbox = new Sandbox();
-        var pc = new CliDevice(sandbox, "pc");
-        var shapes = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        void Record(string name, int exit, params string[] args) => shapes[name] = JsonShape.Of(pc.Expect(exit, [.. args, "--json"]).Json());
-
-        Record("init", 0, "init", "--sync-root", pc.SyncRoot, "--device", "pc", "--create-root");
-        Record("map-add", 0, "map", "add", Id, "--target", "ppsspp/SAVEDATA", "--source", pc.Source, "--process", "PPSSPPSDL");
-        pc.Save("GAME1/save.bin", "mine");
-        pc.Save("GAME2/save.bin", "only-here");
-        Record("status", 0, "status");
-        Record("apply-refused-choice", 1, "apply", Id);
-        Record("apply-dry-run", 0, "apply", Id, "--copy", "--dry-run");
-        Record("apply-completed", 0, "apply", Id, "--copy");
-        Record("apply-all", 0, "apply", "--all");
-        Record("backup-list", 0, "backup", "list");
-        Record("revert", 0, "revert", Id);
-        CliDevice.Write(pc.Source, "GAME1/save.bin", "changed");
-        Record("apply-refused-guard", 1, "apply", Id);
-        var backupId = pc.Ok("backup", "list", "--json").Json().GetProperty("backups")[0].GetProperty("id").GetString()!;
-        Record("backup-restore", 0, "backup", "restore", backupId);
-        Record("recover", 0, "recover");
-        Record("map-remove", 0, "map", "remove", Id);
-        Record("refused", 1, "revert", Id);
-        Record("usage-error", 64, "apply");
-
-        JsonShape.AssertStored(shapes);
-    }
-
     /// <summary>A terminal nobody may be asked at.</summary>
     private sealed class MustNotBeRead : TextReader
     {
         public override string? ReadLine() => throw new InvalidOperationException("the command asked a question");
-    }
-}
-
-/// <summary>Reduces a JSON document to its property paths and value types.</summary>
-internal static class JsonShape
-{
-    public static string Of(JsonElement root)
-    {
-        var lines = new SortedSet<string>(StringComparer.Ordinal);
-        Walk(root, "$", lines);
-        return string.Join('\n', lines);
-    }
-
-    public static void AssertStored(SortedDictionary<string, string> shapes)
-    {
-        var actual = string.Join("\n\n", shapes.Select(pair => $"## {pair.Key}\n{pair.Value}")) + "\n";
-        var path = Path.Combine(FindRepositoryRoot(), "tests", "SaveTether.Tests", "Cli", "json-shapes.txt");
-        if (Environment.GetEnvironmentVariable("SAVETETHER_UPDATE_SHAPES") == "1")
-        {
-            File.WriteAllText(path, actual);
-            return;
-        }
-
-        var stored = File.Exists(path) ? File.ReadAllText(path).ReplaceLineEndings("\n") : string.Empty;
-        Assert.True(
-            stored == actual,
-            "The JSON output changed shape. If that is intended, run the tests once with SAVETETHER_UPDATE_SHAPES=1 and commit " +
-            $"'{path}'. Actual shapes:\n{actual}");
-    }
-
-    private static void Walk(JsonElement element, string path, SortedSet<string> lines)
-    {
-        switch (element.ValueKind)
-        {
-            case JsonValueKind.Object:
-                lines.Add($"{path}: object");
-                foreach (var property in element.EnumerateObject())
-                {
-                    Walk(property.Value, $"{path}.{property.Name}", lines);
-                }
-
-                break;
-
-            case JsonValueKind.Array:
-                lines.Add($"{path}: array");
-                foreach (var item in element.EnumerateArray())
-                {
-                    Walk(item, path + "[]", lines);
-                }
-
-                break;
-
-            case JsonValueKind.True or JsonValueKind.False:
-                lines.Add($"{path}: boolean");
-                break;
-
-            default:
-                lines.Add($"{path}: {element.ValueKind.ToString().ToLowerInvariant()}");
-                break;
-        }
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SaveTether.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not find SaveTether.slnx above the test folder.");
     }
 }

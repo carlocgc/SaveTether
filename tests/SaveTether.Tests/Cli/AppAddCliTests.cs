@@ -13,7 +13,7 @@ namespace SaveTether.Tests.Cli;
 public class AppAddCliTests
 {
     /// <summary>A definition with two Linux installs, both under home, and roles on and off by default.</summary>
-    private const string TestApp = """
+    internal const string TestApp = """
         {
           "schema": 1,
           "id": "testapp",
@@ -35,7 +35,7 @@ public class AppAddCliTests
     private static string SharedDefinitions(CliDevice device) =>
         Path.Combine(device.SyncRoot, "savetether", ".savetether", DefinitionCatalog.SharedFolderName);
 
-    private static void ShareDefinition(CliDevice device, string id, string text)
+    internal static void ShareDefinition(CliDevice device, string id, string text)
     {
         Directory.CreateDirectory(SharedDefinitions(device));
         File.WriteAllText(Path.Combine(SharedDefinitions(device), id + ".jsonc"), text);
@@ -350,8 +350,9 @@ public class AppAddCliTests
         Assert.Contains("nothing at the save folder", deck.Ok("status").Out, StringComparison.Ordinal);
 
         var notFound = deck.Expect(CliApp.ExitRefused, "app", "add", "testapp").Err;
-        Assert.Contains($"install folder '{first}' (--install-dir) remembered from last time", notFound, StringComparison.Ordinal);
-        Assert.Contains("If Test App has moved", notFound, StringComparison.Ordinal);
+        Assert.Contains($"install folder '{first}' remembered from last time", notFound, StringComparison.Ordinal);
+        Assert.Contains("Give the new location with --install-dir", notFound, StringComparison.Ordinal);
+        Assert.Contains("Test App may have moved", notFound, StringComparison.Ordinal);
 
         deck.Ok("app", "add", "testapp", "--install-dir", second);
         deck.Ok("apply", "--all");
@@ -393,6 +394,11 @@ public class AppAddCliTests
 
         Assert.Equal("conflict", json.GetProperty("app").GetProperty("problem").GetString());
         Assert.Contains("is already the save folder of 'flash.objects'", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        var conflict = json.GetProperty("app").GetProperty("conflict");
+        Assert.Equal("folder-in-use", conflict.GetProperty("kind").GetString());
+        Assert.Equal("flash.objects", conflict.GetProperty("mapping_id").GetString());
+        Assert.Equal(Path.Combine(install, "saves"), conflict.GetProperty("folder").GetString());
+        Assert.False(conflict.TryGetProperty("target", out _));
         Assert.False(MappingExists(deck, "testapp.saves"));
         Assert.False(DeviceFile(deck).TryGetProperty("apps", out _));
     }
@@ -457,6 +463,10 @@ public class AppAddCliTests
 
         Assert.Equal("conflict", json.GetProperty("app").GetProperty("problem").GetString());
         Assert.Contains("savetether revert testapp.saves", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        var conflict = json.GetProperty("app").GetProperty("conflict");
+        Assert.Equal("applied-elsewhere", conflict.GetProperty("kind").GetString());
+        Assert.Equal("testapp.saves", conflict.GetProperty("mapping_id").GetString());
+        Assert.Equal(Path.Combine(first, "saves"), conflict.GetProperty("folder").GetString());
         Assert.Equal(first, DeviceFile(deck).GetProperty("apps").GetProperty("testapp").GetProperty("install_dir").GetString());
         sandbox.AssertCanaryIntact();
     }
@@ -540,7 +550,7 @@ public class AppAddCliTests
         var json = deck.Expect(CliApp.ExitRefused, "app", "add", "testapp", "--json").Json();
 
         Assert.Equal("not-installed", json.GetProperty("app").GetProperty("problem").GetString());
-        Assert.Contains("Install 'portable' can only be looked for once you say where: Give it with --install-dir", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Install 'portable' can only be looked for once you say where. Give it with --install-dir", json.GetProperty("error").GetString(), StringComparison.Ordinal);
         var portable = json.GetProperty("app").GetProperty("candidates").EnumerateArray().Single(c => c.GetProperty("id").GetString() == "portable");
         Assert.Equal("needs-value", portable.GetProperty("problem").GetString());
     }

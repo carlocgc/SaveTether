@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The desktop app's logic without the UI toolkit (desktop-app-spec.md, section 14): the state tables,
+    the health monitor, its texts, the log and the single-instance claim. Tested in SaveTether.Tests.
+  -->
+  <PropertyGroup>
+    <RootNamespace>SaveTether.Gui.Presentation</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SaveTether.Core\SaveTether.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SaveTether.Tests" />
+  </ItemGroup>
+
+</Project>

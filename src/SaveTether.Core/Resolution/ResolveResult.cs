@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using SaveTether.Core.Model;
 
 namespace SaveTether.Core.Resolution;
 
@@ -33,7 +34,7 @@ public enum ResolveProblem
 /// <summary>An absolute path, or the reason there is none. Never both.</summary>
 public sealed record ResolveResult
 {
-    private ResolveResult(string? path, ResolveProblem? problem, string? message)
+    private ResolveResult(string? path, ResolveProblem? problem, Note? message)
     {
         Path = path;
         Problem = problem;
@@ -46,13 +47,13 @@ public sealed record ResolveResult
     public ResolveProblem? Problem { get; }
 
     /// <summary>What went wrong, written for the owner. Null when resolved.</summary>
-    public string? Message { get; }
+    public Note? Message { get; }
 
     public bool IsResolved => Path is not null;
 
     public static ResolveResult Ok(string path) => new(path, null, null);
 
-    public static ResolveResult Fail(ResolveProblem problem, string message) => new(null, problem, message);
+    public static ResolveResult Fail(ResolveProblem problem, Note message) => new(null, problem, message);
 
     public override string ToString() => IsResolved ? Path! : $"{Problem}: {Message}";
 }

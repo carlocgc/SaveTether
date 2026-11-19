@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SaveTether.Cli;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Planning;
@@ -104,7 +105,11 @@ public class PrecheckTests
 
         var refusal = Planner.Plan(snapshot, Copy).Refusal!;
         Assert.Equal([PrecheckKind.AppRunning], refusal.Failures.Select(f => f.Kind));
-        Assert.Contains("PPSSPPQt", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("PPSSPPQt", refusal.Message.Text, StringComparison.Ordinal);
+        var processes = refusal.Failures[0].Processes!;
+        Assert.Equal(["PPSSPPSDL"], processes.Running);
+        Assert.Equal(["PPSSPPSDL", "PPSSPPQt"], processes.LookedFor);
+        Assert.Null(refusal.Failures[0].Space);
 
         // The owner can override a false positive.
         Assert.True(Planner.Plan(snapshot, Copy with { AssumeClosed = true }).IsPlanned);
@@ -142,7 +147,7 @@ public class PrecheckTests
             [PrecheckKind.UnfinishedOperation, PrecheckKind.SourceParentMissing, PrecheckKind.TargetNotLocal, PrecheckKind.AppRunning],
             refusal.Failures.Select(f => f.Kind));
         Assert.Equal(RefusalKind.Precondition, refusal.Kind);
-        Assert.Contains("4 checks failed", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("4 checks failed", refusal.Message.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -167,6 +172,11 @@ public class PrecheckTests
         var replace = new ApplyRequest(SetupChoice.ReplaceShared, ConfirmReplace: true);
         Assert.True(Planner.Plan(Snap.Guarded() with { FreeBytesAtBackupRoot = 700 }, replace).IsPlanned);
         Assert.Equal([PrecheckKind.NotEnoughSpace], Failures(Snap.Guarded() with { FreeBytesAtBackupRoot = 699 }, replace));
+
+        // The sizes and the place are fields as well as words.
+        var shortOfSpace = Planner.Plan(roomy with { FreeBytesAtTarget = 299 }, Copy).Refusal!.Failures[0];
+        Assert.Equal(new SpaceFacts(roomy.Target, 300, 299), shortOfSpace.Space);
+        Assert.Null(shortOfSpace.Processes);
 
         // Unknown free space does not block.
         Assert.True(Planner.Plan(Snap.WithLocalSaves() with { FreeBytesAtBackupRoot = null, FreeBytesAtTarget = null }, Copy).IsPlanned);

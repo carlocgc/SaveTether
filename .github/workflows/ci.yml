@@ -66,10 +66,21 @@ jobs:
         shell: bash
         run: bash tests/e2e/scenario1.sh "$PWD/publish/${{ matrix.exe }}"
 
+      # Not run here: it needs a desktop session. Publishing it checks that Native AOT accepts it on each target.
+      - name: Publish the desktop app
+        run: dotnet publish src/SaveTether.Gui/SaveTether.Gui.csproj -c Release -r ${{ matrix.rid }} -o publish-gui
+
+      # The same package the release workflow builds, checked file by file, so a missing library or a
+      # stray file is found on the pull request rather than at release.
+      - name: Package and check
+        shell: bash
+        run: |
+          archive=$(bash build/package.sh ${{ matrix.rid }} savetether-ci-${{ matrix.rid }} publish publish-gui dist)
+          bash build/check-package.sh ${{ matrix.rid }} "$archive"
+
       - uses: actions/upload-artifact@v4
         with:
           name: savetether-${{ matrix.rid }}
-          path: |
-            publish/${{ matrix.exe }}
+          path: dist/*
           if-no-files-found: error
           retention-days: 14

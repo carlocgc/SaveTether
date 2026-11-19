@@ -138,6 +138,56 @@ public sealed class SafeFs
     }
 
     /// <summary>
+    /// Removes a Unix domain socket's file, such as one left by a process that was killed. A missing path
+    /// is not an error. Refuses anything that could be something else: on Windows the entry must be a
+    /// reparse point with the AF_UNIX tag; elsewhere, where .NET shows a socket as an empty file, it must be
+    /// an empty entry that is neither a folder nor a link. So no file with content is ever removed here.
+    /// </summary>
+    public void DeleteSocket(string path)
+    {
+        var socketPath = RequireAbsolute(path, nameof(path));
+        var kind = Probe(socketPath);
+        if (kind == EntryKind.Missing)
+        {
+            return;
+        }
+
+        var isSocket = OperatingSystem.IsWindows()
+            ? kind == EntryKind.OtherReparsePoint && WindowsReparse.Read(PathRules.Normalize(socketPath)).Tag == WindowsReparse.TagAfUnix
+            : kind == EntryKind.File && new FileInfo(socketPath).Length == 0;
+        if (!isSocket)
+        {
+            throw new SafeFsException($"Refusing to remove '{socketPath}' as a socket: it is {Describe(kind)}.");
+        }
+
+        RefuseInsideProtectedRoot(socketPath, "remove a socket");
+        File.Delete(socketPath);
+    }
+
+    /// <summary>
+    /// Deletes the regular file at <paramref name="path"/> and nothing else: a folder, a link or anything else
+    /// is refused, so a link is never followed to delete what it points to. A missing path is not an error.
+    /// Used for files SaveTether wrote itself, such as the autostart entry.
+    /// </summary>
+    public void RemoveFile(string path)
+    {
+        var filePath = RequireAbsolute(path, nameof(path));
+        var kind = Probe(filePath);
+        if (kind == EntryKind.Missing)
+        {
+            return;
+        }
+
+        if (kind != EntryKind.File)
+        {
+            throw new SafeFsException($"Refusing to delete '{filePath}' as a file: it is {Describe(kind)}.");
+        }
+
+        RefuseInsideProtectedRoot(filePath, "delete a file");
+        File.Delete(filePath);
+    }
+
+    /// <summary>
     /// Deletes the tree at <paramref name="path"/>. Links found inside are removed, never entered,
     /// so nothing outside the tree is touched. A missing path is not an error.
     /// </summary>

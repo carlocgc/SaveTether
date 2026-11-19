@@ -1,0 +1,159 @@
+using SaveTether.Core.Health;
+using SaveTether.Core.Model;
+using SaveTether.Core.Planning;
+using SaveTether.Core.Storage;
+using SaveTether.Gui.Presentation;
+using SaveTether.Tests.Cli;
+using SaveTether.Tests.FileSystem;
+
+namespace SaveTether.Tests.Gui;
+
+/// <summary>Section 5 of the desktop app spec: the Apps page, its rows and their actions, and Apply all (9.4).</summary>
+public class AppsPageTests
+{
+    private const string Id = CliDevice.MappingId;
+
+    [Fact]
+    public void Each_state_has_the_spec_sentence_main_action_and_others()
+    {
+        AppRow For(HealthState state, HealthReason? reason = null) => AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", state, reason));
+
+        var ok = For(HealthState.Ok);
+        Assert.Equal("Saves here are the shared copy.", ok.Sentence);
+        Assert.Null(ok.Main);
+        Assert.Equal([RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert], ok.Others);
+
+        // Backups, where section 5.1 lists it: Linked, Not linked, Two shared copies.
+        Assert.Contains(RowAction.Backups, For(HealthState.Replaced, HealthReason.FolderHoldsFiles).Others);
+        Assert.Contains(RowAction.Backups, For(HealthState.DoubleSeed).Others);
+
+        var ready = For(HealthState.NotApplied, HealthReason.NotLinkedYet);
+        Assert.Equal((RowAction?)RowAction.Apply, ready.Main);
+        Assert.Contains(RowAction.StopUsingHere, ready.Others);
+
+        // Stop using here is offered only when Ready to link: the core refuses it while applied.
+        Assert.All(
+            Enum.GetValues<HealthState>().Where(s => s != HealthState.NotApplied),
+            s => Assert.DoesNotContain(RowAction.StopUsingHere, For(s).Others));
+
+        Assert.Equal((RowAction?)RowAction.Apply, For(HealthState.Replaced, HealthReason.FolderHoldsFiles).Main);
+        Assert.Equal((RowAction?)RowAction.Apply, For(HealthState.Replaced, HealthReason.FolderEmpty).Main);
+        Assert.Equal([RowAction.Apply], For(HealthState.Replaced, HealthReason.FolderMissing).Others);
+        Assert.Equal((RowAction?)RowAction.OpenFolderParent, For(HealthState.Replaced, HealthReason.NotAFolder).Main);
+        Assert.Equal((RowAction?)RowAction.CheckAgain, For(HealthState.Broken, HealthReason.SharedFolderMissing).Main);
+        Assert.Equal((RowAction?)RowAction.UseThisCopy, For(HealthState.DoubleSeed).Main);
+        Assert.Equal((RowAction?)RowAction.OpenFolder, For(HealthState.ForeignLink).Main);
+        Assert.Null(For(HealthState.NotApplied, HealthReason.NoSaveFolder).Main);
+    }
+
+    [Fact]
+    public void Apps_needing_attention_come_first_and_those_not_on_this_device_last_and_apart()
+    {
+        var status = new OverallStatus(OverallCondition.NeedsAttention, null,
+        [
+            Mapping("cemu.save", "Cemu", HealthState.Ok),
+            Mapping("ryujinx.saves", "Ryujinx", HealthState.NotApplied, HealthReason.NoSaveFolder),
+            Mapping("eden.saves", "Eden", HealthState.Ok),
+            Mapping("eden.nand", "Eden", HealthState.Replaced, HealthReason.FolderEmpty),
+            Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NotLinkedYet),
+        ]);
+
+        var page = AppsPage.From(status);
+        Assert.Equal(["Eden", "Cemu", "PPSSPP"], page.Groups.Select(g => g.AppName));
+        Assert.Equal(["nand", "saves"], page.Groups[0].Rows.Select(r => r.Mapping.Role));
+        Assert.Equal(["ryujinx.saves"], page.NotOnThisDevice.Select(r => r.Mapping.MappingId));
+        Assert.Equal(["eden.nand", "ppsspp.savedata"], page.ForApplyAll.Select(r => r.Mapping.MappingId).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_mapping_set_up_elsewhere_names_those_devices_and_a_foreign_link_its_target()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        var deck = new CliDevice(sandbox, "deck");
+        pc.DeliverTo(deck, metadataOnly: true);
+        deck.Ok("init", "--sync-root", deck.SyncRoot, "--device", "deck");
+        pc.DeliverTo(deck, metadataOnly: true);
+
+        var notHere = AppsPage.From(StatusCheck.Run(new LocalStore(deck.LocalFolder))).NotOnThisDevice;
+        Assert.Equal("Set up on pc, not here.", Assert.Single(notHere).Sentence);
+
+        // A link SaveTether did not make, at pc's save folder.
+        var elsewhere = sandbox.Dir("elsewhere");
+        Sandbox.Link(pc.Source, elsewhere);
+        var row = AppsPage.From(StatusCheck.Run(new LocalStore(pc.LocalFolder))).Groups.Single().Rows.Single();
+        Assert.Equal(HealthState.ForeignLink, row.Mapping.Health.State);
+        Assert.Equal(elsewhere, row.Mapping.LinkTarget);
+        Assert.Contains(elsewhere, row.Sentence, StringComparison.Ordinal);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void Apply_all_plans_what_needs_no_choice_and_sets_the_rest_aside()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        var empty = Path.Combine(pc.AppFolder, "STATES");
+        pc.Ok("map", "add", "ppsspp.states", "--target", "ppsspp/STATES", "--source", empty);
+        var local = new LocalStore(pc.LocalFolder);
+
+        var (session, _) = OperationSession.Begin(local, "apply all", new NoProcesses(), null);
+        using (session)
+        {
+            var (plans, needYou) = session!.PlanApplyAll([Id, "ppsspp.states"]);
+            Assert.Equal(["ppsspp.states"], plans.Select(p => p.MappingId));
+            Assert.Equal(RefusalKind.ChoiceNeeded, Assert.Single(needYou).Kind);
+            Assert.Equal(Id, needYou[0].MappingId);
+
+            foreach (var plan in plans)
+            {
+                Assert.Equal(Core.Execution.ExecutionStatus.Completed, session.Run(plan, null).Status);
+            }
+        }
+
+        Assert.Equal("1 linked. 1 need you: PPSSPP savedata.", AppsPage.ApplyAllSummary(1, ["PPSSPP savedata"]));
+        Assert.Equal("2 linked.", AppsPage.ApplyAllSummary(2, []));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void Stop_using_here_forgets_this_devices_folder_and_is_refused_while_linked()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", Id, "--copy");
+        var local = new LocalStore(pc.LocalFolder);
+
+        var (linked, _) = OperationSession.Begin(local, "stop using", new NoProcesses(), null);
+        using (linked)
+        {
+            Assert.Equal(StoreProblem.Conflict, Assert.Throws<StoreException>(() => linked!.StopUsing(Id)).Problem);
+        }
+
+        pc.Ok("revert", Id);
+        var (ready, _) = OperationSession.Begin(local, "stop using", new NoProcesses(), null);
+        using (ready)
+        {
+            ready!.StopUsing(Id);
+        }
+
+        var row = Assert.Single(AppsPage.From(StatusCheck.Run(local)).NotOnThisDevice);
+        Assert.Equal(HealthReason.NoSaveFolder, row.Mapping.Health.Reason);
+        Assert.Equal("No device has a folder set for it.", row.Sentence);
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
+        sandbox.AssertCanaryIntact();
+    }
+
+    private static MappingState Mapping(string id, string app, HealthState state, HealthReason? reason = null) =>
+        new(id, app, id.Split('.')[1], StateWords.For(state, reason), new MappingHealth(id, state, "/s", "/t", new Note("d"), reason));
+
+    private sealed class NoProcesses : IProcessLister
+    {
+        public IReadOnlyList<string> RunningProcessNames() => [];
+    }
+}
