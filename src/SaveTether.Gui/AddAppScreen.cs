@@ -443,12 +443,15 @@ internal sealed class AddAppScreen : UserControl
 
             appName.TextChanged += (_, _) => Update();
             savesName.TextChanged += (_, _) => Update();
-            // Suggest the saves' name from the folder chosen, while the owner has not typed one.
+            // The saves' name follows the folder until the owner types their own.
+            var lastSuggested = string.IsNullOrEmpty(input.FolderName) ? string.Empty : null;
             folder.TextChanged += (_, _) =>
             {
-                if (string.IsNullOrWhiteSpace(savesName.Text) && ManualAddFlow.SuggestFolderName(folder.Text) is { } suggested)
+                var next = ManualAddFlow.FollowFolder(savesName.Text, lastSuggested, folder.Text);
+                if (!string.Equals(next, savesName.Text, StringComparison.Ordinal))
                 {
-                    savesName.Text = suggested;
+                    lastSuggested = next;
+                    savesName.Text = next;
                 }
             };
             Update();

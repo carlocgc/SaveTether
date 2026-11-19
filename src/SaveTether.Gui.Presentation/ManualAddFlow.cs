@@ -132,6 +132,17 @@ public sealed class ManualAddFlow(LocalStore local)
         return string.IsNullOrEmpty(trimmed) ? null : Path.GetFileName(trimmed);
     }
 
+    /// <summary>
+    /// The saves' name after the save folder changed: the folder's own name while the field is empty or still holds
+    /// the last suggestion, so it follows the folder as it is typed; what the owner typed is kept. Found on the Deck:
+    /// suggesting only into an empty field left the name at "h", from the first two characters typed.
+    /// </summary>
+    public static string? FollowFolder(string? current, string? lastSuggested, string? saveFolder)
+    {
+        var owned = !string.IsNullOrEmpty(current) && !string.Equals(current, lastSuggested, StringComparison.Ordinal);
+        return owned ? current : SuggestFolderName(saveFolder) ?? string.Empty;
+    }
+
     /// <summary>"Shared as rondo-duo/Flash Player (mapping rondo-duo.flash-player)."</summary>
     public static string SharedAs(string? mappingId, string? target) =>
         mappingId is null ? "Give both names to see where it is shared." : $"Shared as {target} (mapping {mappingId}).";

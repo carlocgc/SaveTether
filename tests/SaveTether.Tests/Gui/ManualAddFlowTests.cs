@@ -50,6 +50,31 @@ public class ManualAddFlowTests
     }
 
     [Fact]
+    public void The_saves_name_follows_the_folder_as_it_is_typed_until_the_owner_types_one()
+    {
+        // Typing a path a character at a time, as on the Deck: the name follows to the folder's own name.
+        string? name = string.Empty;
+        string? last = string.Empty;
+        var typed = string.Empty;
+        foreach (var c in "/home/deck/games/Flash Player")
+        {
+            typed += c;
+            var next = ManualAddFlow.FollowFolder(name, last, typed);
+            if (next != name)
+            {
+                last = next;
+                name = next;
+            }
+        }
+
+        Assert.Equal("Flash Player", name);
+
+        // A name the owner typed is kept when the folder changes; an emptied field follows again.
+        Assert.Equal("Saves", ManualAddFlow.FollowFolder("Saves", "Flash Player", "/home/deck/games/Other"));
+        Assert.Equal("Other", ManualAddFlow.FollowFolder(string.Empty, "Saves", "/home/deck/games/Other"));
+    }
+
+    [Fact]
     public void A_new_folder_is_checked_field_by_field_and_nothing_is_written_until_it_passes()
     {
         using var sandbox = new Sandbox();
