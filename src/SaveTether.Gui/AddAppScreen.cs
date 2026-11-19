@@ -519,7 +519,9 @@ internal sealed class AddAppScreen : UserControl
         content.Add(Buttons(back, add));
 
         _page.Content = Page(form.Title, form.Sentences, [.. content]);
-        folder.Focus();
+        // Focus once the page is laid out: focused at once, the field did not take it when the form was opened from
+        // a row (found on the Deck), and Return then pressed Add with the old folder still in the field.
+        Dispatcher.UIThread.Post(() => folder.Focus(), DispatcherPriority.Loaded);
     }
 
     private const int MappingFileMaxDepth = Core.Model.MappingFile.MaxEntryDepth;
