@@ -72,4 +72,47 @@ public class NetworkDriveTests
         Assert.Contains("can only point to a local drive", check.Sentence, StringComparison.Ordinal);
         Assert.Null(flow.SyncFolder);
     }
+
+    [Fact]
+    public void Map_add_refuses_a_network_folder_to_link_on_windows_before_writing_anything()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", "pc", "--create-root");
+
+        var json = pc.Expect(
+            CliApp.ExitRefused, "map", "add", CliDevice.MappingId, "--target", "ppsspp/SAVEDATA", "--source", @"\\nas\games\SAVEDATA", "--json").Json();
+
+        Assert.Equal("invalid", json.GetProperty("problem").GetString());
+        Assert.Contains("is on a network drive", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(pc.SyncRoot, "savetether", ".savetether", "mappings", CliDevice.MappingId + ".json")));
+    }
+
+    [Fact]
+    public void The_hand_form_refuses_a_network_folder_on_windows_at_its_field()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", "pc", "--create-root");
+        var flow = new ManualAddFlow(new LocalStore(pc.LocalFolder));
+        flow.StartNew();
+
+        var input = new ManualAddInput(@"\\nas\games\Saves", "Some Game", "Saves", null, 1);
+        var check = flow.Check(input);
+
+        Assert.False(check.CanAdd);
+        Assert.Contains(check.Problems, p => p.Field == ManualField.SaveFolder && p.Problem.Contains("network drive", StringComparison.Ordinal));
+        Assert.False(flow.Add(input, joinAccepted: false).Succeeded);
+        Assert.False(File.Exists(Path.Combine(pc.SyncRoot, "savetether", ".savetether", "mappings", "some-game.saves.json")));
+    }
 }

@@ -81,6 +81,8 @@ public static class ActionTexts
                 : "Not enough free space.",
             PrecheckKind.TargetNotLocal =>
                 "On Windows the sync folder must be on a local drive, because a folder link cannot point to a network drive.",
+            PrecheckKind.SourceNotLocal =>
+                $"{role}'s folder is on a network drive. On Windows SaveTether can only link a folder on a local drive.",
             PrecheckKind.TargetOutsideDataRoot or PrecheckKind.SourceInsideSyncRoot or PrecheckKind.PathsOverlap
                 or PrecheckKind.SourceUnusable or PrecheckKind.TargetUnusable => $"{role} cannot be linked as it is set up.",
             PrecheckKind.NotApplied => "The folder is no longer this mapping's link, so there is nothing to revert.",

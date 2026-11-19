@@ -593,5 +593,8 @@ public sealed partial class Executor
         public Plan Plan => Entry.Plan;
 
         public List<Note> Messages { get; } = [];
+
+        /// <summary>Set by a rollback that could not put the shared folder back as it was.</summary>
+        public bool LeftInSharedFolder { get; set; }
     }
 }

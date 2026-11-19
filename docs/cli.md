@@ -77,7 +77,7 @@ Adds a mapping, or sets this device's save folder for a mapping another device a
 | Option | |
 |---|---|
 | `<id>` | `app.role`, lowercase, for example `ppsspp.savedata`. |
-| `--source <path>` | The app's save folder on this device. It need not exist yet. |
+| `--source <path>` | The app's save folder on this device. It need not exist yet. On Windows it must be on a local drive: a junction cannot be made on a network drive, so a network folder is refused. |
 | `--target <app>/<folder>` | Where the shared copy lives under `<sync root>/savetether/`. Needed only when the mapping is new. |
 | `--process <name>` | The app's process name, repeatable. `apply`, `revert` and `backup restore` refuse while it runs. |
 | `--entry-depth <n>` | How many folder levels down one game's saves sit (default 1). It is the unit `--add-missing` copies in, so it is never mixing two games' files. Give it again later to change it. |

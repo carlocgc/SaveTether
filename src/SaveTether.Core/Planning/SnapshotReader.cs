@@ -76,6 +76,7 @@ public static class SnapshotReader
             FreeBytesAtTarget = FreeBytesAt(shared.SyncRoot),
             FreeBytesAtSource = FreeBytesAt(source),
             TargetOnLocalVolume = IsOnLocalVolume(target),
+            SourceOnLocalVolume = IsOnLocalVolume(source),
         };
     }
 
