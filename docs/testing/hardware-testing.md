@@ -102,6 +102,8 @@ Then copy the image to the PC to look at it.
 
 **Coordinates.** Take them from a capture made after the last change of layout: a banner, a dialog or a page change moves everything below it. A click that lands beside a button does nothing and gives no error, which reads like a bug in the app.
 
+**`xdotool` over SSH on the Deck** needs the session's `XAUTHORITY` as well as `DISPLAY`, read from Plasma's environment as in "Running the app"; without it every call fails with "Authorization required". Keep the exports in a small file that each helper sources, written with a quoted heredoc: inserting the line with `sed` mangled its `'\0'` and `'\n'`.
+
 **Helpers.** Two small scripts in the scratch folder save typing: `click.sh x y [wait]` (activate the window, click at window coordinates, wait) and `shot.sh name` (wake the display, activate the window, `spectacle -a` to `/tmp`). With `spectacle -a` on the Deck, the window's client area starts about 65 pixels right and 81 down from the capture's corner (shadow and title bar): subtract that from a point in the capture to get the coordinates to click.
 
 ## Testing against a real setup
@@ -186,3 +188,12 @@ A throwaway device, and a shared definition in its sync folder's `.savetether/de
 - Open the test app: "was not found", the native install's reason, and only the Install folder field. Give the portable folder, Look again: the plan, with the default roles ticked and sized, an off-by-default role saying why, the quirks.
 - Tick and untick a role: the page is made again each time. Add: "Apply it now?" with Not now focused. Apply: the ordinary Apply flow; on disk the link and the shared copy; the row Linked.
 - Rename the install folder, Check now: Folder gone with Find the app again. It opens page 2 with "may have moved" and the old folder prefilled. Give the new one: "already a link". Add, Not now: the row is Linked at the new folder.
+
+### Add a folder by hand
+
+Two throwaway devices sharing one throwaway sync folder, set up with the CLI: the "other" device with `map add other-game.saves --target other-game/Saves --source <its folder> --entry-depth 2`, so the device under test has a hand mapping with no definition; and on the device under test, a folder holding a file to add, for example `games/Rondo/Flash Player/#SharedObjects/save.sol`.
+
+- Add app: "Add a folder by hand" is a link below the list. It opens the form with the focus in Save folder.
+- Type the folder a character at a time (`xdotool type`): "Name for these saves" follows it to the folder's own name. Type an app name: "Shared as <app>/<name> (mapping <id>)" below. Give `plasmashell` as the program name, Add: "<App> added. Apply it now?". Apply: the running-app refusal, then the ordinary Apply flow; on disk the link and the shared copy.
+- The Apps page groups it under its ID. "Not on this device" lists the other device's mapping with Add. Add opens the form for it: "Set up on <other device>", its shared folder, "Entry depth: 2". Add with the folder empty: the problem under the field, and the focus back in it. Give the folder and press Return: "Apply it now?".
+- Apply that row, then remove only its link (`rm` on the link, not the folder it points to), Check now: Folder gone with Choose the folder again. It opens the form with the old folder prefilled and focused. Select all, type a new folder, Return, Not now: the device file has the new folder and the row says Link missing.

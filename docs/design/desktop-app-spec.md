@@ -115,6 +115,8 @@ Changes from the table above:
 
 *As built (2026-11-18), with Add app:* **Find the app again** (Folder gone) and **Add** (Not on this device) open Add app's page 2 for the row's app. Both are offered only when the catalog has a usable definition for the app (`MappingState.HasDefinition`); a mapping made by hand with `map add` has none, so its row keeps no main action there, as Add app could only refuse it.
 
+*As built (2026-11-19), with "Add a folder by hand":* a mapping with no definition now has a main action too, which opens the hand form for that mapping (section 8): **Add** on a Not on this device row, and **Choose the folder again** on a Folder gone row.
+
 *As built (2026-11-18), with the Backups page:* **Backups** is under More on Linked, Not linked and Two shared copies, as the table lists it.
 
 Not built yet:
@@ -224,7 +226,15 @@ Choices made while building:
 
 Not built yet:
 - **Another install when one is found.** When exactly one install is detected, the core plans it, and the window offers no way to use another install of the same app instead (the CLI has `--install`).
-- **Add a folder by hand.**
+
+*As built (2026-11-19): Add a folder by hand.* `ManualAddFlow` (presentation project) holds the form's logic and words; `AddAppScreen` shows it in place of page 1. Choices made while building:
+- **Names in words, not an ID and a target.** A new folder asks for the save folder, the app's name and a name for the saves. The mapping ID and the shared folder follow from the two names: "Rondo Duo" and "Flash Player" give `rondo-duo.flash-player`, shared as `rondo-duo/Flash Player`, shown under the fields as they are typed. The owner never types an ID, and the target's first part always matches the ID's, which `map add` requires. Common accented Latin letters are folded by a table ("é" to "e"), since SaveTether runs with invariant globalization, where Unicode normalization cannot be relied on; a name with no letter from a to z or digit is refused with that reason.
+- **The saves' name follows the folder** as it is typed or chosen, until the owner types their own (found on the Deck: suggesting only into an empty field left it at "h").
+- **Join mode.** The same form serves a mapping another device made by hand: opened from that mapping's row (section 5.1), it asks only for this device's folder and program names, says which devices have it, and keeps the mapping's entry depth. A new folder whose names give a mapping that already exists with the same shared folder asks "Already shared by another device" before sharing it from here too, and also keeps that mapping's depth; a different shared folder for the same ID, or a mapping this device already has, is refused at the field.
+- **Program names** are one field, separated by commas; a name with a folder in it is refused. **Entry depth** is a number from 1 to 8, with Cemu as the example of 2.
+- **Checking and Add.** Checking reads only. Add takes the operation lock, checks again, and runs the core's `map add`; problems are shown beside their fields, and a refusal from the core (a folder inside another mapping's, the lock held) as a dialog with nothing written. Afterwards "Apply it now?" as for an app.
+- **Focus.** The folder field is focused once the page is laid out: focused at once, it did not take the focus when the form was opened from a row, and Return then pressed Add with the old folder (found on the Deck).
+- **The app's name is not kept.** A mapping has no field for a display name, so the Apps page groups a hand-added folder under its ID (`rondo-duo`), not the name typed.
 
 ## 9. Apply, revert, restore, recover
 
