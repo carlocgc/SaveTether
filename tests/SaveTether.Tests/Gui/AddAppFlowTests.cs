@@ -239,7 +239,7 @@ public class AddAppFlowTests
     }
 
     [Fact]
-    public void A_row_whose_app_has_a_definition_offers_find_again_and_add()
+    public void A_row_offers_find_again_and_add_through_Add_app_or_the_hand_form()
     {
         static MappingState Mapping(HealthState state, HealthReason reason, bool defined) =>
             new("cemu.save", "Cemu", "save", StateWords.For(state, reason), new MappingHealth("cemu.save", state, "/s", "/t", new Note("d"), reason))
@@ -248,9 +248,10 @@ public class AddAppFlowTests
             };
 
         Assert.Equal(RowAction.FindAppAgain, AppsPage.Row(Mapping(HealthState.Replaced, HealthReason.FolderMissing, true)).Main);
-        Assert.Null(AppsPage.Row(Mapping(HealthState.Replaced, HealthReason.FolderMissing, false)).Main);
+        // Without a definition (a folder added by hand) the same rows open the hand form instead (section 8).
+        Assert.Equal(RowAction.ChooseFolderAgain, AppsPage.Row(Mapping(HealthState.Replaced, HealthReason.FolderMissing, false)).Main);
         Assert.Equal(RowAction.AddHere, AppsPage.Row(Mapping(HealthState.NotApplied, HealthReason.NoSaveFolder, true)).Main);
-        Assert.Null(AppsPage.Row(Mapping(HealthState.NotApplied, HealthReason.NoSaveFolder, false)).Main);
+        Assert.Equal(RowAction.AddHere, AppsPage.Row(Mapping(HealthState.NotApplied, HealthReason.NoSaveFolder, false)).Main);
         Assert.Equal("cemu", Mapping(HealthState.NotApplied, HealthReason.NoSaveFolder, true).AppId);
 
         // Apply all still works only on rows whose main action is Apply.
