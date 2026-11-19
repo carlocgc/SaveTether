@@ -1,7 +1,6 @@
 using System.Net.Sockets;
-using System.Security.Cryptography;
-using System.Text;
 using SaveTether.Core.FileSystem;
+using SaveTether.Core.Startup;
 
 namespace SaveTether.Gui.Presentation;
 
@@ -78,25 +77,10 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <summary>Asks the copy that holds the lock to show its window. False when none answered.</summary>
-    public static bool SignalExisting(string localFolder) => Send(localFolder, ShowMessage);
+    public static bool SignalExisting(string localFolder) => AppChannel.RequestShow(localFolder);
 
     /// <summary>Asks the copy that holds the lock to quit, as it would from its tray menu. False when none answered.</summary>
-    public static bool RequestQuit(string localFolder) => Send(localFolder, QuitMessage);
-
-    private static bool Send(string localFolder, string message)
-    {
-        try
-        {
-            using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-            socket.Connect(new UnixDomainSocketEndPoint(SocketPath(localFolder)));
-            socket.Send(Encoding.ASCII.GetBytes(message));
-            return true;
-        }
-        catch (SocketException)
-        {
-            return false;
-        }
-    }
+    public static bool RequestQuit(string localFolder) => AppChannel.RequestQuit(localFolder);
 
     public void Dispose()
     {
@@ -115,19 +99,7 @@ public sealed class SingleInstance : IDisposable
         _stop.Dispose();
     }
 
-    internal static string SocketPath(string localFolder)
-    {
-        var inFolder = Path.Combine(Path.GetFullPath(localFolder), "gui.sock");
-        if (inFolder.Length <= MaxSocketPath)
-        {
-            return inFolder;
-        }
-
-        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(localFolder))))[..16];
-        var runtime = OperatingSystem.IsWindows() ? null : Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
-        var folder = runtime is { Length: > 0 } && Path.IsPathFullyQualified(runtime) ? runtime : Path.GetTempPath();
-        return Path.Combine(folder, $"savetether-{hash}.sock");
-    }
+    internal static string SocketPath(string localFolder) => AppChannel.SocketPath(localFolder);
 
     private async Task ListenAsync(Action onShow, Action? onQuit, CancellationToken stop)
     {
@@ -138,12 +110,12 @@ public sealed class SingleInstance : IDisposable
             {
                 using var client = await _listener.AcceptAsync(stop).ConfigureAwait(false);
                 var read = await client.ReceiveAsync(buffer, SocketFlags.None, stop).ConfigureAwait(false);
-                var message = Encoding.ASCII.GetString(buffer, 0, read);
-                if (message == ShowMessage)
+                var message = System.Text.Encoding.ASCII.GetString(buffer, 0, read);
+                if (message == AppChannel.ShowMessage)
                 {
                     onShow();
                 }
-                else if (message == QuitMessage)
+                else if (message == AppChannel.QuitMessage)
                 {
                     onQuit?.Invoke();
                 }

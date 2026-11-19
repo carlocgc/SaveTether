@@ -148,8 +148,8 @@ internal static class CliApp
 
           savetether uninstall [--confirm-uninstall]
               Linux: remove SaveTether's programs, which the desktop app installed for this user, and
-              its app menu entry. Your setup, linked folders, backups and the sync folder stay. It
-              asks first, or needs --confirm-uninstall. On Windows, use Settings > Apps instead.
+              its app menu entry; a running SaveTether is asked to quit first. Your setup, linked
+              folders, backups and the sync folder stay. It asks first, or needs --confirm-uninstall. On Windows, use Settings > Apps instead.
 
           savetether --version
           savetether --help
@@ -554,6 +554,7 @@ internal static class CliApp
 
                 var question =
                     $"Remove SaveTether's programs from {layout.AppFolder} and {layout.BinFolder}, and its app menu entry?" +
+                    " A running SaveTether is asked to quit first." +
                     "\nYour setup, linked folders, backups and the sync folder stay; linked folders keep syncing, but nothing checks on them.";
                 if (!Confirm(question))
                 {
@@ -561,8 +562,12 @@ internal static class CliApp
                 }
             }
 
+            // The installed app, left running, would go on from removed files until the end of the session.
+            var stillRunning = Installer.QuitRunning(layout, environment.LocalFolder, environment.RunningPrograms, environment.QuitWait);
             var (removed, left) = Installer.Uninstall(layout, environment.Autostart);
-            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Uninstalled = new UninstallOutput(removed, left) };
+            var leftAll = left.Concat(stillRunning.Select(id =>
+                $"SaveTether is still running (process {id}) and did not quit when asked: quit it from its tray menu.")).ToList();
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Uninstalled = new UninstallOutput(removed, leftAll) };
         }
 
         private CliOutput Recover()

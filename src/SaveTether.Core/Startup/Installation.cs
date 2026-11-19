@@ -209,6 +209,37 @@ public static class Installer
     }
 
     /// <summary>
+    /// Before uninstalling from outside the app: asks the installed app, when it runs, to quit, as it would from its tray
+    /// menu, and waits up to <paramref name="wait"/> for it to end. Only the copy running for this local folder hears the
+    /// request. Returns the ids of installed copies still running, which the caller names: left running, they would go on
+    /// from files that are gone, until quit or the end of the session.
+    /// </summary>
+    public static IReadOnlyList<int> QuitRunning(InstallLayout layout, string localFolder, IRunningPrograms programs, TimeSpan wait)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(programs);
+        var running = programs.Running(layout.AppPath);
+        if (running.Count == 0)
+        {
+            return running;
+        }
+
+        AppChannel.RequestQuit(localFolder);
+        var until = DateTime.UtcNow + wait;
+        while (DateTime.UtcNow < until)
+        {
+            Thread.Sleep(100);
+            running = programs.Running(layout.AppPath);
+            if (running.Count == 0)
+            {
+                break;
+            }
+        }
+
+        return running;
+    }
+
+    /// <summary>
     /// Removes what <see cref="Install"/> put in place, and nothing else: the menu entry, the link (only while it points at
     /// the installed app), the CLI, the app folder's own files and then the folder once empty, and the autostart entry when
     /// it starts the installed app. This user's setup, links, backups and the sync folder are not touched. Returns what was

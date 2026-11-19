@@ -243,6 +243,60 @@ public class InstallerTests
         Assert.False(File.Exists(layout.CliPath));
     }
 
+    // Found on the Deck: the CLI's uninstall left the installed app running, from files it had just removed.
+    [Fact]
+    public void The_cli_asks_the_running_installed_app_to_quit_before_removing_it()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new Cli.CliDevice(sandbox, "pc");
+        var layout = InstalledLayout(sandbox);
+        var programs = new Cli.RunningProgramsStub();
+        programs.Start(4242);
+        var asked = false;
+        using var app = SaveTether.Gui.Presentation.SingleInstance.TryClaim(pc.LocalFolder, () => { }, () =>
+        {
+            asked = true;
+            programs.StopAll();
+        });
+        Assert.NotNull(app);
+        pc.Install = layout;
+        pc.RunningPrograms = programs;
+
+        var run = pc.Ok("uninstall", "--confirm-uninstall");
+
+        Assert.True(asked);
+        Assert.DoesNotContain("still running", run.Out, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(layout.AppFolder));
+    }
+
+    [Fact]
+    public void The_cli_names_an_installed_app_that_did_not_quit()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new Cli.CliDevice(sandbox, "pc");
+        var layout = InstalledLayout(sandbox);
+        var programs = new Cli.RunningProgramsStub();
+        programs.Start(4242);
+        pc.Install = layout;
+        pc.RunningPrograms = programs;
+        pc.QuitWait = TimeSpan.FromMilliseconds(300);
+
+        var run = pc.Ok("uninstall", "--confirm-uninstall");
+
+        Assert.Contains("still running (process 4242)", run.Out, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(layout.AppFolder));
+    }
+
+    private static InstallLayout InstalledLayout(Sandbox sandbox)
+    {
+        var layout = InstallLayout.For(sandbox.Dir("install-home"), null);
+        Directory.CreateDirectory(layout.AppFolder);
+        Directory.CreateDirectory(layout.BinFolder);
+        File.WriteAllText(layout.AppPath, "app");
+        File.WriteAllText(layout.CliPath, "cli");
+        return layout;
+    }
+
     [Fact]
     public void The_offer_is_made_until_declined_for_that_location_and_names_what_it_does()
     {
