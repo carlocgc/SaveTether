@@ -17,7 +17,7 @@ public enum ManualField
 }
 
 /// <summary>What the owner typed. In join mode the app and folder names are the mapping's and are not edited.</summary>
-/// <param name="ProcessNames">Program names, separated by commas, semicolons or new lines.</param>
+/// <param name="ProcessNames">Process names, separated by commas, semicolons or new lines.</param>
 public sealed record ManualAddInput(string? SaveFolder, string? AppName, string? FolderName, string? ProcessNames, int? EntryDepth);
 
 /// <summary>The form as it starts: empty for a new folder, or filled from the mapping for join mode.</summary>
@@ -147,7 +147,7 @@ public sealed class ManualAddFlow(LocalStore local)
     public static string SharedAs(string? mappingId, string? target) =>
         mappingId is null ? "Give both names to see where it is shared." : $"Shared as {target} (mapping {mappingId}).";
 
-    /// <summary>Program names from the field: separated by commas, semicolons or new lines, each trimmed, empty ones dropped.</summary>
+    /// <summary>Process names from the field: separated by commas, semicolons or new lines, each trimmed, empty ones dropped.</summary>
     public static IReadOnlyList<string> SplitProcessNames(string? text) =>
         (text ?? string.Empty).Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.Ordinal)
@@ -293,7 +293,7 @@ public sealed class ManualAddFlow(LocalStore local)
         {
             if (name.IndexOfAny(['/', '\\']) >= 0)
             {
-                problems.Add((ManualField.ProcessNames, $"'{name}' looks like a path. Give the program's name only, for example PPSSPPWindows64."));
+                problems.Add((ManualField.ProcessNames, $"'{name}' looks like a path. Give the process name only, for example Dolphin."));
             }
         }
 

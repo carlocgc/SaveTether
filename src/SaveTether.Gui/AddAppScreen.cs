@@ -382,7 +382,7 @@ internal sealed class AddAppScreen : UserControl
 
     /// <summary>
     /// The hand form (section 8, decision 6): the folder to share, and for a new folder the app's and the folder's names,
-    /// from which the mapping ID and the shared folder follow; program names and entry depth. Problems found by Add
+    /// from which the mapping ID and the shared folder follow; process names and entry depth. Problems found by Add
     /// are shown beside their fields.
     /// </summary>
     private void ShowManual(ManualAddStart form, ManualAddInput input, ManualAddCheck? check, bool fromCatalog)
@@ -458,9 +458,9 @@ internal sealed class AddAppScreen : UserControl
             content.Add(sharedAs);
         }
 
-        Label("Program names (optional)", "Apply, Revert and Restore wait while one of these runs. Separate them with commas, for example PPSSPPWindows64.");
+        Label("Process names (optional)", "The app's process name, as Task Manager or System Monitor shows it, for example Dolphin. Apply, Revert and Restore wait while one of these runs. Separate several with commas.");
         var processes = new TextBox { Text = input.ProcessNames ?? string.Empty, Width = 520, HorizontalAlignment = HorizontalAlignment.Left };
-        AutomationProperties.SetName(processes, "Program names");
+        AutomationProperties.SetName(processes, "Process names");
         content.Add(processes);
         content.Add(Problems(ManualField.ProcessNames));
 
