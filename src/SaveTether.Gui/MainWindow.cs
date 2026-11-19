@@ -166,7 +166,7 @@ internal sealed class MainWindow : Window
         // (found on the Deck hidden with one left).
         var pageActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 8) };
         var addApp = new Button { Content = "Add app", IsEnabled = actionsAllowed };
-        addApp.Click += (_, _) => OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, null));
+        addApp.Click += (_, _) => OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Catalog));
         pageActions.Children.Add(addApp);
         if (page.ForApplyAll.Count > 0)
         {
@@ -311,7 +311,7 @@ internal sealed class MainWindow : Window
     /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
         actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.StopUsingHere
-            or RowAction.FindAppAgain or RowAction.AddHere);
+            or RowAction.FindAppAgain or RowAction.ChooseFolderAgain or RowAction.AddHere);
 
     /// <summary>Banner B5's Fix it (write the entry with this app's path) or Turn it off (remove it); then a check redraws.</summary>
     private void SetSessionStart(bool on)
@@ -362,8 +362,12 @@ internal sealed class MainWindow : Window
             case RowAction.CheckAgain:
                 _checkNow();
                 break;
-            case RowAction.FindAppAgain or RowAction.AddHere:
-                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, mapping.AppId));
+            case RowAction.FindAppAgain or RowAction.AddHere when mapping.HasDefinition:
+                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.App(mapping.AppId)));
+                break;
+            case RowAction.ChooseFolderAgain or RowAction.AddHere:
+                // A folder added by hand: the hand form for this mapping (section 8).
+                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Folder(mapping.MappingId)));
                 break;
             case RowAction.Backups:
                 OpenScreen(new BackupsScreen(_localFolder, _operate, CloseScreen, mapping.AppId));

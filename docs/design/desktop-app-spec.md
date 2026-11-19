@@ -115,6 +115,8 @@ Changes from the table above:
 
 *As built (2026-11-18), with Add app:* **Find the app again** (Folder gone) and **Add** (Not on this device) open Add app's page 2 for the row's app. Both are offered only when the catalog has a usable definition for the app (`MappingState.HasDefinition`); a mapping made by hand with `map add` has none, so its row keeps no main action there, as Add app could only refuse it.
 
+*As built (2026-11-19), with "Add a folder by hand":* a mapping with no definition now has a main action too, which opens the hand form for that mapping (section 8): **Add** on a Not on this device row, and **Choose the folder again** on a Folder gone row.
+
 *As built (2026-11-18), with the Backups page:* **Backups** is under More on Linked, Not linked and Two shared copies, as the table lists it.
 
 Not built yet:
@@ -224,7 +226,17 @@ Choices made while building:
 
 Not built yet:
 - **Another install when one is found.** When exactly one install is detected, the core plans it, and the window offers no way to use another install of the same app instead (the CLI has `--install`).
-- **Add a folder by hand.**
+
+*As built (2026-11-19): Add a folder by hand.* `ManualAddFlow` (presentation project) holds the form's logic and words; `AddAppScreen` shows it in place of page 1. Choices made while building:
+- **Any folder, not only saves.** The form says "Folder to share", since a hand-added folder may hold saves, mods, textures or anything else (asked for by the owner).
+- **Names in words, not an ID and a target.** A new folder asks for the folder to share, the app's name and a name for the shared folder. The mapping ID and the shared folder follow from the two names: "Dolphin" and "GC" give `dolphin.gc`, shared as `dolphin/GC`, shown under the fields as they are typed. The owner never types an ID, and the target's first part always matches the ID's, which `map add` requires. Common accented Latin letters are folded by a table ("é" to "e"), since SaveTether runs with invariant globalization, where Unicode normalization cannot be relied on; a name with no letter from a to z or digit is refused with that reason.
+- **The shared folder's name follows the folder** as it is typed or chosen, until the owner types their own (found on the Deck: suggesting only into an empty field left it at "h").
+- **Join mode.** The same form serves a mapping another device made by hand: opened from that mapping's row (section 5.1), it asks only for this device's folder and process names, says which devices have it, and keeps the mapping's entry depth. A new folder whose names give a mapping that already exists with the same shared folder asks "Already shared by another device" before sharing it from here too, and also keeps that mapping's depth; a different shared folder for the same ID, or a mapping this device already has, is refused at the field.
+- **Process names** (first built as "Program names"; renamed by the owner to match the CLI's `--process` and the running-app refusal) are one field, separated by commas, with a hint naming Task Manager and System Monitor as where to find them; a name with a folder in it is refused. The field stays outside Advanced: without it Apply, Revert and Restore cannot refuse while the app runs.
+- **Entry depth is under "Advanced", closed,** at 1, with the reason in words, tied to Apply's "add games only this device has": when a folder that already holds files is linked and the shared folder has files too, Apply can add the folders the shared copy lacks, and the depth says how deep to look for them (Cemu's save folder as the example of 2; wording from the owner). The section opens by itself when the depth has a problem or is not 1. It stays rather than a plain "copy whatever is missing", because copying file by file would mix two devices' files inside one game (design 5.13). Join mode shows the mapping's depth only when it is not 1.
+- **Checking and Add.** Checking reads only. Add takes the operation lock, checks again, and runs the core's `map add`; problems are shown beside their fields, and a refusal from the core (a folder inside another mapping's, the lock held) as a dialog with nothing written. Afterwards "Apply it now?" as for an app.
+- **Focus.** The folder field is focused once the page is laid out: focused at once, it did not take the focus when the form was opened from a row, and Return then pressed Add with the old folder (found on the Deck).
+- **The app's name is not kept.** A mapping has no field for a display name, so the Apps page groups a hand-added folder under its ID (`super-mario-galaxy` for "Super Mario Galaxy"), not the name typed.
 
 ## 9. Apply, revert, restore, recover
 

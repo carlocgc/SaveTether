@@ -11,6 +11,16 @@ using SaveTether.Gui.Presentation;
 
 namespace SaveTether.Gui;
 
+/// <summary>Where Add app opens: page 1, page 2 for an app, or the hand form for a mapping with no definition.</summary>
+internal sealed record AddAppStart(string? AppId, string? MappingId)
+{
+    public static AddAppStart Catalog { get; } = new(null, null);
+
+    public static AddAppStart App(string appId) => new(appId, null);
+
+    public static AddAppStart Folder(string mappingId) => new(null, mappingId);
+}
+
 /// <summary>
 /// Add app's two pages (desktop-app-spec.md, section 8), in place of the Apps page while open. The logic is
 /// <see cref="AddAppFlow"/>; this only shows it. Planning reads only and runs off the UI thread; Add is an
@@ -19,6 +29,7 @@ namespace SaveTether.Gui;
 internal sealed class AddAppScreen : UserControl
 {
     private readonly AddAppFlow _flow;
+    private readonly ManualAddFlow _manual;
     private readonly Overlay _overlay;
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly Action _close;
@@ -26,21 +37,28 @@ internal sealed class AddAppScreen : UserControl
     private readonly Dictionary<string, TextBlock> _labels = new(StringComparer.Ordinal);
     private bool _closed;
 
-    /// <param name="startAt">An app to open page 2 at, from a row's "Find the app again" or "Add"; null for page 1.</param>
-    public AddAppScreen(string localFolder, Overlay overlay, Func<Func<ActionFlow, Task>, Task> operate, Action close, string? startAt)
+    /// <param name="startAt">Page 1; page 2 for an app, from a row's "Find the app again" or "Add"; or the hand form for a mapping.</param>
+    public AddAppScreen(string localFolder, Overlay overlay, Func<Func<ActionFlow, Task>, Task> operate, Action close, AddAppStart startAt)
     {
-        _flow = new AddAppFlow(new LocalStore(localFolder), ResolverEnvironment.FromSystem());
+        ArgumentNullException.ThrowIfNull(startAt);
+        var local = new LocalStore(localFolder);
+        _flow = new AddAppFlow(local, ResolverEnvironment.FromSystem());
+        _manual = new ManualAddFlow(local);
         _overlay = overlay;
         _operate = operate;
         _close = close;
         Content = new StackPanel { Spacing = 16, MaxWidth = 820, HorizontalAlignment = HorizontalAlignment.Left, Children = { _page } };
-        if (startAt is null)
+        if (startAt.AppId is { } appId)
         {
-            _ = ShowCatalogAsync();
+            _ = PlanAsync(() => _flow.Start(appId));
+        }
+        else if (startAt.MappingId is { } mappingId)
+        {
+            _ = ShowManualAsync(() => _manual.StartJoin(mappingId), fromCatalog: false);
         }
         else
         {
-            _ = PlanAsync(() => _flow.Start(startAt));
+            _ = ShowCatalogAsync();
         }
     }
 
@@ -103,11 +121,17 @@ internal sealed class AddAppScreen : UserControl
 
         var back = new Button { Content = "Back to apps" };
         back.Click += (_, _) => Leave();
+        // Decision 6: the way to add an app that is not in the list, without the CLI.
+        var byHand = new HyperlinkButton { Content = "Add a folder by hand", Padding = new Thickness(0) };
+        AutomationProperties.SetName(byHand, "Add a folder by hand, for an app not in the list");
+        byHand.Click += (_, _) => _ = ShowManualAsync(() => _manual.StartNew(), fromCatalog: true);
         _page.Content = Page(
             "Add app",
             ["Choose an app. SaveTether looks for it on this device and shows what it would share before anything is written."],
             search,
             list,
+            new TextBlock { Text = "Not in the list?", Opacity = 0.75, Margin = new Thickness(0, 8, 0, 0) },
+            byHand,
             Buttons(back));
         search.Focus();
 
@@ -340,6 +364,240 @@ internal sealed class AddAppScreen : UserControl
         if (pressed == apply)
         {
             await actions.ApplyAddedAsync(view.AppName, result.Added);
+        }
+    });
+
+    // ---- Add a folder by hand ----
+
+    private async Task ShowManualAsync(Func<ManualAddStart> start, bool fromCatalog)
+    {
+        _page.IsEnabled = false;
+        var form = await Guard(start);
+        _page.IsEnabled = true;
+        if (form is not null)
+        {
+            ShowManual(form, form.Input, null, fromCatalog);
+        }
+    }
+
+    /// <summary>
+    /// The hand form (section 8, decision 6): the folder to share, and for a new folder the app's and the folder's names,
+    /// from which the mapping ID and the shared folder follow; process names and entry depth. Problems found by Add
+    /// are shown beside their fields.
+    /// </summary>
+    private void ShowManual(ManualAddStart form, ManualAddInput input, ManualAddCheck? check, bool fromCatalog)
+    {
+        var content = new List<Control>();
+        Control Problems(ManualField field)
+        {
+            var problems = new StackPanel { Spacing = 2 };
+            foreach (var (_, problem) in check?.Problems.Where(p => p.Field == field) ?? [])
+            {
+                problems.Children.Add(new TextBlock { Text = problem, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Icons.Amber) });
+            }
+
+            return problems;
+        }
+
+        void Label(string text, string? hint = null)
+        {
+            content.Add(new TextBlock { Text = text, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 6, 0, 0) });
+            if (hint is not null)
+            {
+                content.Add(new TextBlock { Text = hint, TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 13 });
+            }
+        }
+
+        Label("Folder to share", "The folder on this device: saves, mods, textures or anything else the app keeps in one folder.");
+        var (folder, folderRow) = PathField(input.SaveFolder ?? string.Empty, "Folder to share");
+        content.Add(folderRow);
+        content.Add(Problems(ManualField.SaveFolder));
+
+        TextBox? appName = null;
+        TextBox? savesName = null;
+        NumericUpDown? depth = null;
+        if (form.IsJoin)
+        {
+            content.Add(new TextBlock { Text = $"Shared as {form.Target}.", TextWrapping = TextWrapping.Wrap, Opacity = 0.85, Margin = new Thickness(0, 6, 0, 0) });
+        }
+        else
+        {
+            Label("App name", "For example Dolphin. Every folder of one app shares this name.");
+            appName = new TextBox { Text = input.AppName ?? string.Empty, Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+            AutomationProperties.SetName(appName, "App name");
+            content.Add(appName);
+            content.Add(Problems(ManualField.AppName));
+
+            Label("Name for the shared folder", "The folder's own name is usually right, for example GC.");
+            savesName = new TextBox { Text = input.FolderName ?? string.Empty, Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+            AutomationProperties.SetName(savesName, "Name for the shared folder");
+            content.Add(savesName);
+            content.Add(Problems(ManualField.FolderName));
+
+            var sharedAs = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.85 };
+            void Update()
+            {
+                var (id, target) = ManualAddFlow.Derive(appName.Text, savesName.Text);
+                sharedAs.Text = ManualAddFlow.SharedAs(id, target);
+            }
+
+            appName.TextChanged += (_, _) => Update();
+            savesName.TextChanged += (_, _) => Update();
+            // The shared folder's name follows the folder until the owner types their own.
+            var lastSuggested = string.IsNullOrEmpty(input.FolderName) ? string.Empty : null;
+            folder.TextChanged += (_, _) =>
+            {
+                var next = ManualAddFlow.FollowFolder(savesName.Text, lastSuggested, folder.Text);
+                if (!string.Equals(next, savesName.Text, StringComparison.Ordinal))
+                {
+                    lastSuggested = next;
+                    savesName.Text = next;
+                }
+            };
+            Update();
+            content.Add(sharedAs);
+        }
+
+        Label("Process names (optional)", "The app's process name, as Task Manager or System Monitor shows it, for example Dolphin. Apply, Revert and Restore wait while one of these runs. Separate several with commas.");
+        var processes = new TextBox { Text = input.ProcessNames ?? string.Empty, Width = 520, HorizontalAlignment = HorizontalAlignment.Left };
+        AutomationProperties.SetName(processes, "Process names");
+        content.Add(processes);
+        content.Add(Problems(ManualField.ProcessNames));
+
+        if (form.IsJoin || check?.ExistingDepth is not null)
+        {
+            var shown = check?.ExistingDepth ?? input.EntryDepth ?? 1;
+            if (shown > 1)
+            {
+                content.Add(new TextBlock { Text = $"Entry depth {shown}, as set when the folder was first added.", Opacity = 0.75, FontSize = 13 });
+            }
+        }
+        else
+        {
+            // Under Advanced, closed: 1 is right unless items sit deeper, as in Cemu's save folder (design 5.13).
+            depth = new NumericUpDown
+            {
+                Value = input.EntryDepth ?? 1, Minimum = 1, Maximum = MappingFileMaxDepth, Increment = 1, FormatString = "0", Width = 140,
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            AutomationProperties.SetName(depth, "Entry depth");
+            var advanced = new StackPanel { Spacing = 6 };
+            advanced.Children.Add(new TextBlock { Text = "Entry depth", FontWeight = FontWeight.SemiBold });
+            advanced.Children.Add(new TextBlock
+            {
+                Text = "When you link a folder that already holds files, and the shared folder has files too (for example Cemu saves on "
+                    + "a second PC), Apply can add the folders the shared copy doesn't have. Entry depth says how deep to look for them: "
+                    + "1 when each game or mod is a folder directly inside, 2 when they sit one level down, as in Cemu's save folder "
+                    + "(title group, then title). A folder the shared copy already has is left as it is.",
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.75,
+                FontSize = 13,
+            });
+            advanced.Children.Add(depth);
+            advanced.Children.Add(Problems(ManualField.EntryDepth));
+            var hasProblem = check?.Problems.Any(p => p.Field == ManualField.EntryDepth) == true;
+            content.Add(new Expander
+            {
+                Header = "Advanced",
+                Content = advanced,
+                IsExpanded = hasProblem || (input.EntryDepth ?? 1) != 1,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                Margin = new Thickness(0, 8, 0, 0),
+            });
+        }
+
+        foreach (var note in check?.Notes ?? [])
+        {
+            content.Add(new TextBlock { Text = note, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+        }
+
+        content.Add(new TextBlock
+        {
+            Text = "Adding only records this folder; nothing in it changes. Apply links it afterwards.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.75,
+            Margin = new Thickness(0, 8, 0, 0),
+        });
+
+        var back = new Button { Content = "Back" };
+        back.Click += (_, _) =>
+        {
+            if (fromCatalog)
+            {
+                _ = ShowCatalogAsync();
+            }
+            else
+            {
+                Leave();
+            }
+        };
+        var add = new Button { Content = "Add", IsDefault = true };
+        add.Click += (_, _) =>
+        {
+            // Read here, on the UI thread: a control cannot be read from another thread (found on the Deck).
+            var typed = new ManualAddInput(
+                folder.Text, appName?.Text ?? input.AppName, savesName?.Text ?? input.FolderName, processes.Text,
+                depth is null ? input.EntryDepth : (int?)depth.Value);
+            _ = ManualAddAsync(form, typed, fromCatalog);
+        };
+        content.Add(Buttons(back, add));
+
+        _page.Content = Page(form.Title, form.Sentences, [.. content]);
+        // Focus once the page is laid out: focused at once, the field did not take it when the form was opened from
+        // a row (found on the Deck), and Return then pressed Add with the old folder still in the field.
+        Dispatcher.UIThread.Post(() => folder.Focus(), DispatcherPriority.Loaded);
+    }
+
+    private const int MappingFileMaxDepth = Core.Model.MappingFile.MaxEntryDepth;
+
+    /// <summary>Add from the hand form, then "Apply it now?" as for an app (section 8).</summary>
+    private Task ManualAddAsync(ManualAddStart form, ManualAddInput input, bool fromCatalog) => _operate(async actions =>
+    {
+        _page.IsEnabled = false;
+        var result = await Guard(() => _manual.Add(input, joinAccepted: false));
+        if (result?.Check is { JoinsExisting: true, CanAdd: true } joins)
+        {
+            _page.IsEnabled = true;
+            var cancel = new Button { Content = "Cancel" };
+            var share = new Button { Content = "Share it from here" };
+            if (await _overlay.ShowAsync("Already shared by another device", Overlay.Body(ManualAddFlow.JoinQuestion(joins)), [cancel, share], cancel) != share)
+            {
+                ShowManual(form, input, joins, fromCatalog);
+                return;
+            }
+
+            _page.IsEnabled = false;
+            result = await Guard(() => _manual.Add(input, joinAccepted: true));
+        }
+
+        _page.IsEnabled = true;
+        if (result is null)
+        {
+            return;
+        }
+
+        if (result.Check is { } check)
+        {
+            ShowManual(form, input, check, fromCatalog);
+            return;
+        }
+
+        if (!result.Succeeded)
+        {
+            App.Options.Log.Write($"map add refused: {result.Refused}");
+            await _overlay.InformAsync("Nothing was changed", result.Refused ?? "The folder could not be added.");
+            return;
+        }
+
+        App.Options.Log.Write($"map add {result.Added}: added by hand");
+        Leave();
+        var name = form.IsJoin ? result.Added! : input.AppName!.Trim();
+        var notNow = new Button { Content = "Not now" };
+        var apply = new Button { Content = "Apply" };
+        var pressed = await _overlay.ShowAsync(AddAppFlow.AddedQuestion(name), Overlay.Body(AddAppFlow.AddedText([result.Added!])), [notNow, apply], notNow);
+        if (pressed == apply)
+        {
+            await actions.ApplyAddedAsync(name, [result.Added!]);
         }
     });
 

@@ -43,7 +43,16 @@ public class AppsPageTests
         Assert.Equal((RowAction?)RowAction.CheckAgain, For(HealthState.Broken, HealthReason.SharedFolderMissing).Main);
         Assert.Equal((RowAction?)RowAction.UseThisCopy, For(HealthState.DoubleSeed).Main);
         Assert.Equal((RowAction?)RowAction.OpenFolder, For(HealthState.ForeignLink).Main);
-        Assert.Null(For(HealthState.NotApplied, HealthReason.NoSaveFolder).Main);
+
+        // A folder added by hand has no definition: its rows open the hand form instead of Add app (section 8).
+        Assert.Equal((RowAction?)RowAction.AddHere, For(HealthState.NotApplied, HealthReason.NoSaveFolder).Main);
+        Assert.Equal((RowAction?)RowAction.ChooseFolderAgain, For(HealthState.Replaced, HealthReason.FolderMissing).Main);
+        var defined = Mapping("ppsspp.savedata", "PPSSPP", HealthState.Replaced, HealthReason.FolderMissing) with { HasDefinition = true };
+        Assert.Equal((RowAction?)RowAction.FindAppAgain, AppsPage.Row(defined).Main);
+        foreach (var action in Enum.GetValues<RowAction>())
+        {
+            Assert.False(string.IsNullOrWhiteSpace(AppsPage.Label(action)));
+        }
     }
 
     [Fact]
