@@ -25,40 +25,24 @@ The point is to share that folder between machines. Put it under a sync tool you
 ```mermaid
 flowchart LR
   subgraph PC["Windows PC"]
-    direction LR
-    subgraph PCA["Where each app keeps its saves"]
-      direction TB
-      PA["Cemu's save folder"]
-      PB["PPSSPP's SAVEDATA"]
-      PG["A PC game's saves"]
-    end
+    PA["Cemu's save folder"] --- |"link →"| PSA[("cemu\save")]
+    PB["PPSSPP's SAVEDATA"] --- |"link →"| PSB[("ppsspp\savedata")]
+    PG["A PC game's saves"] --- |"link →"| PSG[("game\saves")]
     subgraph PCS["Sync\savetether\ (the real saves)"]
-      direction TB
-      PSA[("cemu\save")]
-      PSB[("ppsspp\savedata")]
-      PSG[("game\saves")]
+      PSA
+      PSB
+      PSG
     end
-    PA -- link --> PSA
-    PB -- link --> PSB
-    PG -- link --> PSG
   end
   subgraph Deck["Steam Deck"]
-    direction LR
+    DSA[("cemu/save")] --- |"← link"| DAA["Cemu's save folder<br/>(Flatpak)"]
+    DSB[("ppsspp/savedata")] --- |"← link"| DAB["PPSSPP's SAVEDATA<br/>(Flatpak)"]
+    DSG[("game/saves")] --- |"← link"| DAG["The game's saves<br/>(Proton prefix)"]
     subgraph DS["~/Sync/savetether/ (the real saves)"]
-      direction TB
-      DSA[("cemu/save")]
-      DSB[("ppsspp/savedata")]
-      DSG[("game/saves")]
+      DSA
+      DSB
+      DSG
     end
-    subgraph DA["Where each app keeps its saves"]
-      direction TB
-      DAA["Cemu's save folder<br/>(Flatpak)"]
-      DAB["PPSSPP's SAVEDATA<br/>(Flatpak)"]
-      DAG["The game's saves<br/>(Proton prefix)"]
-    end
-    DSA <-- link --- DAA
-    DSB <-- link --- DAB
-    DSG <-- link --- DAG
   end
   PCS <-. "Syncthing, or any<br/>file sync tool" .-> DS
 ```
