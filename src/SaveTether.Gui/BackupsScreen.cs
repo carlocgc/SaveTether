@@ -13,8 +13,11 @@ namespace SaveTether.Gui;
 /// by mapping with an app filter, Open folder, Restore and Delete. The logic is <see cref="BackupsPage"/>; restore
 /// runs through <see cref="ActionFlow.RestoreAsync"/> as an operation, after which the list is read again.
 /// </summary>
-internal sealed class BackupsScreen : UserControl
+internal sealed class BackupsScreen : UserControl, IScreen
 {
+    /// <summary>The way back, shown by the window above the scrolling page.</summary>
+    public ContentControl Bar { get; } = new();
+
     private readonly LocalStore _local;
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly Action _close;
@@ -27,6 +30,7 @@ internal sealed class BackupsScreen : UserControl
         _local = new LocalStore(localFolder);
         _operate = operate;
         _close = close;
+        Bar.Content = Navigation.BackRow("Back to apps", close);
         _appFilter = appFilter;
         Content = new StackPanel { Spacing = 16, MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Left, Children = { _page } };
         _ = LoadAsync();
@@ -150,10 +154,8 @@ internal sealed class BackupsScreen : UserControl
         await LoadAsync();
     }
 
-    private StackPanel Page(IEnumerable<Control> content)
+    private static StackPanel Page(IEnumerable<Control> content)
     {
-        var back = new Button { Content = "Back to apps" };
-        back.Click += (_, _) => _close();
         var page = new StackPanel { Spacing = 8 };
         page.Children.Add(new TextBlock { Text = "Backups", FontSize = 22, FontWeight = FontWeight.SemiBold });
         page.Children.Add(new TextBlock { Text = BackupsPage.Intro, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) });
@@ -162,7 +164,6 @@ internal sealed class BackupsScreen : UserControl
             page.Children.Add(control);
         }
 
-        page.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0), Children = { back } });
         return page;
     }
 

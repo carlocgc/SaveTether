@@ -112,6 +112,7 @@ Changes from the table above:
 - **Opening folders.** Open folder uses `explorer` on Windows and `xdg-open` on Linux.
 - **No device has a folder.** When no device has a folder set for the mapping, the row says "No device has a folder set for it." instead of "Set up on <devices>".
 - **The collapsed section** stays open across checks, and its rows name their app, since there is no app heading above them.
+- **The page's buttons stay in view** (2026-11-19, asked for by the owner). Add app, Apply all, Backups and Settings sit in a bar above the scrolling area. A page shown in place of the Apps page (Add app with its hand form, Backups, Settings) puts its way back, "Back" or "Back to apps", in that same bar, so it is in the same place on every page and stays in view however long the page is. A page's own action, such as Add or Look again, stays below what it acts on. Setup keeps Back beside Next, as in any step-by-step form.
 
 *As built (2026-11-18), with Add app:* **Find the app again** (Folder gone) and **Add** (Not on this device) open Add app's page 2 for the row's app. Both are offered only when the catalog has a usable definition for the app (`MappingState.HasDefinition`); a mapping made by hand with `map add` has none, so its row keeps no main action there, as Add app could only refuse it.
 

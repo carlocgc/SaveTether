@@ -26,7 +26,7 @@ internal sealed record AddAppStart(string? AppId, string? MappingId)
 /// <see cref="AddAppFlow"/>; this only shows it. Planning reads only and runs off the UI thread; Add is an
 /// operation, and after it "Apply it now?" runs the Apply flow for each role added.
 /// </summary>
-internal sealed class AddAppScreen : UserControl
+internal sealed class AddAppScreen : UserControl, IScreen
 {
     private readonly AddAppFlow _flow;
     private readonly ManualAddFlow _manual;
@@ -34,6 +34,9 @@ internal sealed class AddAppScreen : UserControl
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly Action _close;
     private readonly ContentControl _page = new();
+
+    /// <summary>The current page's way back, shown by the window above the scrolling page.</summary>
+    public ContentControl Bar { get; } = new();
     private readonly Dictionary<string, TextBlock> _labels = new(StringComparer.Ordinal);
     private bool _closed;
 
@@ -119,20 +122,18 @@ internal sealed class AddAppScreen : UserControl
             }
         };
 
-        var back = new Button { Content = "Back to apps" };
-        back.Click += (_, _) => Leave();
         // Decision 6: the way to add an app that is not in the list, without the CLI.
         var byHand = new HyperlinkButton { Content = "Add a folder by hand", Padding = new Thickness(0) };
         AutomationProperties.SetName(byHand, "Add a folder by hand, for an app not in the list");
         byHand.Click += (_, _) => _ = ShowManualAsync(() => _manual.StartNew(), fromCatalog: true);
         _page.Content = Page(
+            Navigation.BackRow("Back to apps", Leave),
             "Add app",
             ["Choose an app. SaveTether looks for it on this device and shows what it would share before anything is written."],
             search,
             list,
             new TextBlock { Text = "Not in the list?", Opacity = 0.75, Margin = new Thickness(0, 8, 0, 0) },
-            byHand,
-            Buttons(back));
+            byHand);
         search.Focus();
 
         // Filled in the background: opening the page does not wait for detection (section 8).
@@ -176,8 +177,7 @@ internal sealed class AddAppScreen : UserControl
 
     private void Show(AddAppView view)
     {
-        var back = new Button { Content = "Back" };
-        back.Click += (_, _) =>
+        var back = Navigation.BackRow("Back", () =>
         {
             if (view.Page != AddAppPage.Plan && _flow.Back() is { } last)
             {
@@ -187,7 +187,7 @@ internal sealed class AddAppScreen : UserControl
             {
                 _ = ShowCatalogAsync();
             }
-        };
+        });
 
         var content = new List<Control>();
         switch (view.Page)
@@ -196,7 +196,7 @@ internal sealed class AddAppScreen : UserControl
                 content.AddRange(PlanContent(view));
                 var add = new Button { Content = "Add", IsDefault = true, IsEnabled = view.CanAdd };
                 add.Click += (_, _) => _ = AddAsync(view);
-                content.Add(Buttons(back, add));
+                content.Add(Buttons(add));
                 break;
 
             case AddAppPage.ChooseInstall:
@@ -212,7 +212,6 @@ internal sealed class AddAppScreen : UserControl
                     });
                 }
 
-                content.Add(Buttons(back));
                 break;
 
             case AddAppPage.NeedsLocation:
@@ -249,11 +248,7 @@ internal sealed class AddAppScreen : UserControl
                             return last!;
                         });
                     };
-                    content.Add(Buttons(back, look));
-                }
-                else
-                {
-                    content.Add(Buttons(back));
+                    content.Add(Buttons(look));
                 }
 
                 break;
@@ -264,11 +259,10 @@ internal sealed class AddAppScreen : UserControl
                     content.Add(Overlay.Details(why));
                 }
 
-                content.Add(Buttons(back));
                 break;
         }
 
-        _page.Content = Page(view.Title, view.Sentences, [.. content]);
+        _page.Content = Page(back, view.Title, view.Sentences, [.. content]);
     }
 
     private IEnumerable<Control> PlanContent(AddAppView view)
@@ -522,8 +516,7 @@ internal sealed class AddAppScreen : UserControl
             Margin = new Thickness(0, 8, 0, 0),
         });
 
-        var back = new Button { Content = "Back" };
-        back.Click += (_, _) =>
+        var back = Navigation.BackRow(fromCatalog ? "Back" : "Back to apps", () =>
         {
             if (fromCatalog)
             {
@@ -533,7 +526,7 @@ internal sealed class AddAppScreen : UserControl
             {
                 Leave();
             }
-        };
+        });
         var add = new Button { Content = "Add", IsDefault = true };
         add.Click += (_, _) =>
         {
@@ -543,9 +536,9 @@ internal sealed class AddAppScreen : UserControl
                 depth is null ? input.EntryDepth : (int?)depth.Value);
             _ = ManualAddAsync(form, typed, fromCatalog);
         };
-        content.Add(Buttons(back, add));
+        content.Add(Buttons(add));
 
-        _page.Content = Page(form.Title, form.Sentences, [.. content]);
+        _page.Content = Page(back, form.Title, form.Sentences, [.. content]);
         // Focus once the page is laid out: focused at once, the field did not take it when the form was opened from
         // a row (found on the Deck), and Return then pressed Add with the old folder still in the field.
         Dispatcher.UIThread.Post(() => folder.Focus(), DispatcherPriority.Loaded);
@@ -675,12 +668,11 @@ internal sealed class AddAppScreen : UserControl
         {
             var expected = e is StoreException or IOException or UnauthorizedAccessException;
             App.Options.Log.Write(expected ? $"add app: {e.GetType().Name}: {e.Message}" : $"unexpected error: {e}");
-            var back = new Button { Content = "Back to apps" };
-            back.Click += (_, _) => Leave();
+            var back = Navigation.BackRow("Back to apps", Leave);
             _page.IsEnabled = true;
             _page.Content = expected
-                ? Page("Add app cannot go on", [e.Message], Buttons(back))
-                : Page("Something went wrong", [$"Something went wrong: {e.Message}", "SaveTether is still running. The details are in gui.log."], Buttons(back));
+                ? Page(back, "Add app cannot go on", [e.Message])
+                : Page(back, "Something went wrong", [$"Something went wrong: {e.Message}", "SaveTether is still running. The details are in gui.log."]);
             return null;
         }
     }
@@ -707,8 +699,10 @@ internal sealed class AddAppScreen : UserControl
         return (field, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { field, choose } });
     }
 
-    private static StackPanel Page(string title, IReadOnlyList<string> sentences, params Control[] content)
+    /// <summary>A page: its title, sentences and content; its way back goes to the bar above it.</summary>
+    private StackPanel Page(Control back, string title, IReadOnlyList<string> sentences, params Control[] content)
     {
+        Bar.Content = back;
         var page = new StackPanel { Spacing = 10 };
         page.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
         foreach (var sentence in sentences)
