@@ -257,7 +257,7 @@ Finishes or undoes an operation that was interrupted (a crash, a power cut, a ki
 savetether uninstall [--confirm-uninstall]
 ```
 
-Linux only. Removes what the desktop app's "Install SaveTether for this user" put in place: the app and its libraries in `~/.local/lib/savetether`, `savetether` and the `savetether-gui` link in `~/.local/bin` (the link only while it points at the installed app), the app menu entry, and the autostart entry when it starts the installed app. Your setup, linked folders, backups and the sync folder are not touched: linked folders stay linked and keep syncing, but nothing checks on them. A file in the install folder that is not SaveTether's is left and named. It asks at a terminal, or needs `--confirm-uninstall`. On Windows, SaveTether is uninstalled from Settings > Apps > Installed apps, and this command refuses.
+Linux only. Removes what the desktop app's "Install SaveTether for this user" put in place: the app and its libraries in `~/.local/lib/savetether`, `savetether` and the `savetether-gui` link in `~/.local/bin` (the link only while it points at the installed app), the app menu entry, and the autostart entry when it starts the installed app. A running SaveTether is asked to quit first, as from its tray menu; one that is still running after ten seconds is named, to quit by hand. Your setup, linked folders, backups and the sync folder are not touched: linked folders stay linked and keep syncing, but nothing checks on them. A file in the install folder that is not SaveTether's is left and named. It asks at a terminal, or needs `--confirm-uninstall`. On Windows, SaveTether is uninstalled from Settings > Apps > Installed apps, and this command refuses.
 
 ```bash
 savetether uninstall
