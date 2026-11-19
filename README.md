@@ -23,13 +23,13 @@ The point is to share that folder between machines. Put it under a sync tool you
 ```mermaid
 flowchart LR
   subgraph PC
-    A["Emulator's save folder<br/>(a link)"]
+    direction TB
+    A["Emulator's save folder<br/>(a link)"] --> S1[("Sync/savetether/<br/>the real saves")]
   end
   subgraph Deck
-    B["Emulator's save folder<br/>(a link)"]
+    direction TB
+    B["Emulator's save folder<br/>(a link)"] --> S2[("Sync/savetether/<br/>the real saves")]
   end
-  A --> S1[("Sync/savetether/<br/>the real saves")]
-  B --> S2[("Sync/savetether/<br/>the real saves")]
   S1 <-. "Syncthing, or any<br/>file sync tool" .-> S2
 ```
 
