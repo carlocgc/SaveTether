@@ -72,11 +72,20 @@ try {
     Write-Host '--- install and uninstall'
     Install-AndCheck
     Uninstall-AndCheck
-    Assert-That (((Read-UserPath).Value) -eq $pathBefore.Value) 'user Path as before'
-    Assert-That (((Read-UserPath).Kind) -eq $pathBefore.Kind) "user Path's type as before ($($pathBefore.Kind))"
+    $pathAfter = Read-UserPath
+    if ($null -eq $pathBefore) {
+        # A user with no Path of their own (a fresh CI runner) has none again.
+        Assert-That ($null -eq $pathAfter) 'no user Path, as before'
+    }
+    else {
+        Assert-That ($null -ne $pathAfter -and $pathAfter.Value -eq $pathBefore.Value) 'user Path as before'
+        Assert-That ($pathAfter.Kind -eq $pathBefore.Kind) "user Path's type as before ($($pathBefore.Kind))"
+    }
 
     Write-Host '--- the folder already on Path by hand'
-    $byHand = [pscustomobject]@{ Value = (($pathBefore.Value.TrimEnd(';'), $app) -join ';').TrimStart(';'); Kind = $pathBefore.Kind }
+    $baseValue = if ($null -eq $pathBefore) { '' } else { $pathBefore.Value.TrimEnd(';') }
+    $baseKind = if ($null -eq $pathBefore) { [Microsoft.Win32.RegistryValueKind]::ExpandString } else { $pathBefore.Kind }
+    $byHand = [pscustomobject]@{ Value = (($baseValue, $app) -join ';').TrimStart(';'); Kind = $baseKind }
     Write-UserPath $byHand
     Install-AndCheck
     Uninstall-AndCheck

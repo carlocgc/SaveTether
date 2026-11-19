@@ -172,7 +172,11 @@ begin
       Kept := Kept + Entry;
     end;
   end;
-  WriteUserPath(Kept);
+  { Nothing left: the user had no Path of their own before the installer added one, so there is none again. }
+  if Kept = '' then
+    RegDeleteValue(HKCU, EnvironmentKey, 'Path')
+  else
+    WriteUserPath(Kept);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
