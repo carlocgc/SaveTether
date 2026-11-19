@@ -461,7 +461,10 @@ internal sealed class AddAppScreen : UserControl
         Label("Process names (optional)", "The app's process name, as Task Manager or System Monitor shows it, for example Dolphin. Apply, Revert and Restore wait while one of these runs. Separate several with commas.");
         var processes = new TextBox { Text = input.ProcessNames ?? string.Empty, Width = 520, HorizontalAlignment = HorizontalAlignment.Left };
         AutomationProperties.SetName(processes, "Process names");
-        content.Add(processes);
+        var pick = new Button { Content = "Choose running app" };
+        AutomationProperties.SetName(pick, "Choose a process name from the running apps");
+        pick.Click += (_, _) => _ = PickProcessAsync(processes);
+        content.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { processes, pick } });
         content.Add(Problems(ManualField.ProcessNames));
 
         if (form.IsJoin || check?.ExistingDepth is not null)
@@ -549,6 +552,61 @@ internal sealed class AddAppScreen : UserControl
     }
 
     private const int MappingFileMaxDepth = Core.Model.MappingFile.MaxEntryDepth;
+
+    /// <summary>
+    /// The process picker (section 8): what is running, read by the running-app check's own code, with a search.
+    /// The name chosen is added to the field; the owner can still edit it there.
+    /// </summary>
+    private async Task PickProcessAsync(TextBox field)
+    {
+        IReadOnlyList<string> names;
+        try
+        {
+            names = await Task.Run(() => ProcessChoices.Running(new Core.Planning.SystemProcessLister()));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            App.Options.Log.Write($"process list: {e.GetType().Name}: {e.Message}");
+            await _overlay.InformAsync("Running apps cannot be listed", e.Message);
+            return;
+        }
+
+        var search = new TextBox { PlaceholderText = "Search", Width = 380, HorizontalAlignment = HorizontalAlignment.Left };
+        AutomationProperties.SetName(search, "Search running processes");
+        var list = new ListBox { ItemsSource = names, Height = 280, Width = 380, HorizontalAlignment = HorizontalAlignment.Left };
+        AutomationProperties.SetName(list, "Running processes");
+        var cancel = new Button { Content = "Cancel" };
+        var add = new Button { Content = "Add", IsEnabled = false };
+        search.TextChanged += (_, _) => list.ItemsSource = ProcessChoices.Filter(names, search.Text);
+        list.SelectionChanged += (_, _) => add.IsEnabled = list.SelectedItem is string;
+        // A double click on a name adds it, as Add would.
+        list.DoubleTapped += (_, _) =>
+        {
+            if (list.SelectedItem is string && add.IsEffectivelyEnabled)
+            {
+                add.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            }
+        };
+
+        var body = new StackPanel
+        {
+            Spacing = 10,
+            Children =
+            {
+                new TextBlock { Text = "Start the app first if it is not running, then choose it here.", TextWrapping = TextWrapping.Wrap },
+                search,
+                list,
+            },
+        };
+
+        var shown = _overlay.ShowAsync("Choose a running app", body, [cancel, add], cancel);
+        // The dialog focuses Cancel once its buttons answer; the search box is where the owner starts, so it takes the focus after that.
+        DispatcherTimer.RunOnce(() => search.Focus(), Pacing.DialogMinimum + TimeSpan.FromMilliseconds(50));
+        if (await shown == add && list.SelectedItem is string name)
+        {
+            field.Text = ProcessChoices.Add(field.Text, name);
+        }
+    }
 
     /// <summary>Add from the hand form, then "Apply it now?" as for an app (section 8).</summary>
     private Task ManualAddAsync(ManualAddStart form, ManualAddInput input, bool fromCatalog) => _operate(async actions =>
