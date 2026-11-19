@@ -78,6 +78,23 @@ jobs:
           archive=$(bash build/package.sh ${{ matrix.rid }} savetether-ci-${{ matrix.rid }} publish publish-gui dist)
           bash build/check-package.sh ${{ matrix.rid }} "$archive"
 
+      # Inno Setup builds the Windows installer (build/windows/savetether.iss). Build time only: nothing of it ships.
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+
+      # The installer from the checked package, installed and uninstalled on this throwaway runner: files, Start menu,
+      # Settings > Apps, the Path task, and that uninstalling leaves the user's Path as it was.
+      - name: Build and check the installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (& ./publish/${{ matrix.exe }} --version) -replace '^savetether ', ''
+          $setup = ./build/build-installer.ps1 -Package dist/savetether-ci-${{ matrix.rid }}.zip -Version $version -OutDir dist | Select-Object -Last 1
+          ./build/check-installer.ps1 -Installer $setup -Version $version
+
       - uses: actions/upload-artifact@v4
         with:
           name: savetether-${{ matrix.rid }}

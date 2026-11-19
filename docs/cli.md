@@ -6,7 +6,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 - [Concepts](#concepts)
 - [Options every command takes](#options-every-command-takes)
-- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover)
+- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
 - [Workflows](#workflows)
 - [Files and environment](#files-and-environment)
 - [Exit codes](#exit-codes)
@@ -250,6 +250,18 @@ savetether recover
 ```
 
 Finishes or undoes an operation that was interrupted (a crash, a power cut, a killed process), whichever its journal shows is safe. Nothing is lost either way. While an operation is unfinished, every command that could change something refuses and says to run this; `status`, `backup list`, `app list` and `app add --dry-run` still work.
+
+## uninstall
+
+```
+savetether uninstall [--confirm-uninstall]
+```
+
+Linux only. Removes what the desktop app's "Install SaveTether for this user" put in place: the app and its libraries in `~/.local/lib/savetether`, `savetether` and the `savetether-gui` link in `~/.local/bin` (the link only while it points at the installed app), the app menu entry, and the autostart entry when it starts the installed app. Your setup, linked folders, backups and the sync folder are not touched: linked folders stay linked and keep syncing, but nothing checks on them. A file in the install folder that is not SaveTether's is left and named. It asks at a terminal, or needs `--confirm-uninstall`. On Windows, SaveTether is uninstalled from Settings > Apps > Installed apps, and this command refuses.
+
+```bash
+savetether uninstall
+```
 
 ## Workflows
 

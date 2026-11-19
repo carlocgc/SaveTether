@@ -150,6 +150,20 @@ public class JsonContractTests
         Record("backup-restore", 0, "backup", "restore", backupId);
         Record("backup-delete", 0, "backup", "delete", backupId, "--confirm-delete");
         Record("recover", 0, "recover");
+
+        // An install laid out by hand, so the recording does not depend on the system: uninstall removes the files
+        // and leaves one that is not SaveTether's, which gives both lists entries.
+        var installed = Core.Startup.InstallLayout.For(sandbox.Dir("pc", "install-home"), null);
+        Directory.CreateDirectory(installed.AppFolder);
+        Directory.CreateDirectory(installed.BinFolder);
+        File.WriteAllText(installed.AppPath, "app");
+        File.WriteAllText(installed.CliPath, "cli");
+        File.WriteAllText(Path.Combine(installed.AppFolder, "notes.txt"), "the owner's");
+        pc.Install = installed;
+        Record("uninstall", 0, "uninstall", "--confirm-uninstall");
+        Record("uninstall-not-installed", 1, "uninstall", "--confirm-uninstall");
+        pc.Install = null;
+
         Record("map-remove", 0, "map", "remove", Id);
         Record("refused", 1, "revert", Id);
         using (OperationLock.Acquire(new LocalStore(pc.LocalFolder), "gui", "apply"))

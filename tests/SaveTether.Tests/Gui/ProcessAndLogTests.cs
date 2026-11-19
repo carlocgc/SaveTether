@@ -33,6 +33,24 @@ public class ProcessAndLogTests
     }
 
     [Fact]
+    public void A_newer_copy_can_ask_the_running_one_to_quit()
+    {
+        using var sandbox = new Sandbox();
+        var folder = sandbox.Dir("local");
+        using var quit = new SemaphoreSlim(0);
+        using var shown = new SemaphoreSlim(0);
+        using (var first = SingleInstance.TryClaim(folder, () => shown.Release(), () => quit.Release()))
+        {
+            Assert.NotNull(first);
+            Assert.True(SingleInstance.RequestQuit(folder));
+            Assert.True(quit.Wait(TimeSpan.FromSeconds(10)), "the running copy was not asked to quit");
+            Assert.Equal(0, shown.CurrentCount);
+        }
+
+        Assert.False(SingleInstance.RequestQuit(folder));
+    }
+
+    [Fact]
     public void A_socket_left_by_a_killed_copy_is_cleared_but_nothing_else_is()
     {
         using var sandbox = new Sandbox();

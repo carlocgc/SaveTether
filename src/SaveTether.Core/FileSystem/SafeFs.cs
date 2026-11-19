@@ -123,6 +123,49 @@ public sealed class SafeFs
         RecreateLink(linkPath, kind, toFolder ? FileAttributes.Directory : FileAttributes.Normal, rawTarget);
     }
 
+    /// <summary>
+    /// Puts the regular file <paramref name="source"/> in place of <paramref name="destination"/>, which must be a
+    /// regular file or nothing: a link or a folder there is refused, never followed. An old file is renamed aside
+    /// first, which Windows allows even for a program that is running, and removed when it can be; one still in use
+    /// is left as "&lt;name&gt;.old-&lt;id&gt;" for <see cref="RemoveFile"/> later. Used to install SaveTether's own programs.
+    /// </summary>
+    public void ReplaceFile(string source, string destination)
+    {
+        var from = RequireAbsolute(source, nameof(source));
+        var to = RequireAbsolute(destination, nameof(destination));
+        if (Probe(from) != EntryKind.File)
+        {
+            throw new SafeFsException($"Cannot put '{from}' in place: it is not a file.");
+        }
+
+        var existing = Probe(to);
+        if (existing is not (EntryKind.Missing or EntryKind.File))
+        {
+            throw new SafeFsException($"Refusing to replace '{to}': it is {Describe(existing)}, not a file.");
+        }
+
+        RefuseInsideProtectedRoot(to, "replace a file");
+        string? aside = null;
+        if (existing == EntryKind.File)
+        {
+            aside = $"{to}.old-{Guid.NewGuid():N}";
+            File.Move(to, aside);
+        }
+
+        File.Move(from, to);
+        if (aside is not null)
+        {
+            try
+            {
+                File.Delete(aside);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Still running (Windows): removed at a later install.
+            }
+        }
+    }
+
     /// <summary>Removes the link at <paramref name="path"/> and nothing else. Refuses anything that is not a link.</summary>
     public void RemoveLink(string path)
     {

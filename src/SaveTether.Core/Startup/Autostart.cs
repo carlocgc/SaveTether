@@ -147,7 +147,7 @@ public static class Autostart
     }
 
     /// <summary>The program as one quoted Exec argument, then escaped again as a desktop entry string.</summary>
-    private static string QuoteExec(string program)
+    internal static string QuoteExec(string program)
     {
         var quoted = new StringBuilder("\"");
         foreach (var c in program)

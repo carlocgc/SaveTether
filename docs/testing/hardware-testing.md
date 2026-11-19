@@ -198,3 +198,26 @@ Two throwaway devices sharing one throwaway sync folder, set up with the CLI: th
 - Type the folder a character at a time (`xdotool type`): "Name for the shared folder" follows it to the folder's own name. Type an app name: "Shared as <app>/<name> (mapping <id>)" below. Choose running app: the list of running processes with the search box focused; type `plasma` and double-click `plasmashell`, which puts it in the field (it always runs in Desktop Mode, so the running-app refusal appears). Add: "<App> added. Apply it now?". Apply: the running-app refusal, then the ordinary Apply flow; on disk the link and the shared copy.
 - The Apps page groups it under its ID. "Not on this device" lists the other device's mapping with Add. Add opens the form for it: "Set up on <other device>", its shared folder, "Entry depth 2". Add with the folder empty: the problem under the field, and the focus back in it. Give the folder and press Return: "Apply it now?".
 - Apply that row, then remove only its link (`rm` on the link, not the folder it points to), Check now: Folder gone with Choose the folder again. It opens the form with the old folder prefilled and focused. Select all, type a new folder, Return, Not now: the device file has the new folder and the row says Link missing.
+
+### Install for this user (Linux)
+
+Never against the real `~/.local`: run the app with `HOME` set to a folder under the scratch area as well as `SAVETETHER_HOME`, so the install goes to `<scratch>/home/.local/...`. Before and after, list `~/.local/bin` and `~/.local/lib` and compare, and check that `~/.local/share/applications` has no `savetether.desktop`.
+
+To see an update, build the same commit twice with different versions, for example `dotnet publish ... -p:Version=0.2.0 -o <scratch>/v0.2.0` and again with `0.2.1`, each with the CLI beside the app (an incomplete folder is not offered anything).
+
+Start the app as a user unit with `-p KillMode=process` (and `-E HOME=<scratch>/home -E SAVETETHER_HOME=...`): an install starts the installed copy and quits, and the default kill mode would stop the new copy with the unit.
+
+- Start the unpacked 0.2.0: "Install SaveTether for this user?", naming the folder it runs from and the install folders. Install: the window closes and the installed copy runs (`pgrep -a -x savetether-gui` shows its path in `.local/lib/savetether`). On disk: the app and its libraries in `.local/lib/savetether` with `version.txt`; `savetether` and a `savetether-gui` link in `.local/bin`; `savetether.desktop` in `.local/share/applications`.
+- With that copy running, start the unpacked 0.2.1: "Update the installed SaveTether to 0.2.1 (...)?" Update: the running copy quits, the files are replaced with nothing left over (`ls -a`), `version.txt` says 0.2.1, the installed `savetether --version` says 0.2.1, and the installed copy runs again.
+- Start the unpacked 0.2.1 again: no offer; the running copy's window comes forward.
+- Remove the install, start the unpacked 0.2.0, Not now: the app starts as usual, and `install-declined.txt` in the local folder names the folder. Quit and start it again: no offer.
+- Uninstall from Settings: Settings appears only on a set-up device, so set up the throwaway device first (the installed `savetether init ... --create-root`, with the same `HOME` and `SAVETETHER_HOME`, then Check now). Turn on Start with the session, then Uninstall SaveTether: the confirmation says what goes and what stays; afterwards the app has quit, `.local/lib/savetether`, both entries in `.local/bin`, the menu entry and `.config/autostart/savetether.desktop` are gone, and the local folder and sync folder are as they were.
+- Uninstall from the CLI: install again, then the installed `savetether uninstall` with `< /dev/null` refuses, naming `--confirm-uninstall`; with the flag it lists what it removed; again, it says nothing is installed.
+
+### Windows installer
+
+Built here with `build/build-installer.ps1` from a package made by `build/package.sh` (Inno Setup 6, installed for the user). The default folder, `%LOCALAPPDATA%\Programs\SaveTether`, may already hold something (a CLI copied there by hand, say, perhaps on `Path`): never test over it. Pass `-Dir <scratch folder>` to `build/check-installer.ps1`, and `/DIR="<scratch folder>"` to a hand-run installer. The Start menu and Settings > Apps entries are real ones, so check they are gone afterwards. Before and after, note the raw user `Path` (`HKCU\Environment`, read without expanding) and its type, and the Run value `SaveTether`, and compare.
+
+- `build/check-installer.ps1 -Installer <setup.exe> -Version <version> -Dir <scratch>`: both rounds pass (install and uninstall; then with the folder already on `Path` by hand, which stays). It puts `Path` back exactly as it was in any case.
+- Upgrade over a running app: install 0.2.0 into the scratch folder, start its `savetether-gui.exe` with `SAVETETHER_HOME` set to a scratch local folder, then run the 0.2.1 installer silently with `/CLOSEAPPLICATIONS`: the running copy is closed ("Shutting down applications using our files" in the `/LOG`), and the installed CLI reports 0.2.1. Uninstall with `unins000.exe /VERYSILENT` and check all is gone.
+- Not covered by these: the wizard on screen, and starting SaveTether from its Start menu entry.

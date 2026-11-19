@@ -59,9 +59,37 @@ internal sealed class SettingsScreen : UserControl, IScreen
             page.Children.Add(Note("This desktop has no place for programs that start with the session."));
         }
 
+        // Linux, in the installed copy only (section 11, "Installing"). On Windows, Settings > Apps uninstalls what the installer put there.
+        if (InstallOffer.ForSystem(localFolder, AppContext.BaseDirectory, Program.Version) is { CanUninstall: true } installed)
+        {
+            page.Children.Add(Heading("Uninstall"));
+            page.Children.Add(Note($"SaveTether is installed in {installed.Layout.AppFolder}. Uninstalling removes it; your setup and linked folders stay."));
+            var uninstall = new Button { Content = "Uninstall SaveTether" };
+            uninstall.Click += async (_, _) =>
+            {
+                if (!await overlay.ConfirmAsync(InstallOffer.UninstallTitle, installed.UninstallText(), "Uninstall"))
+                {
+                    return;
+                }
+
+                var (done, problem) = installed.Uninstall(Core.Startup.Autostart.ForSystem());
+                App.Options.Log.Write(done ? $"uninstalled from {installed.Layout.AppFolder}" : $"uninstall failed: {problem}");
+                if (problem is not null)
+                {
+                    await overlay.InformAsync(done ? "Uninstalled, with files left" : "Not uninstalled", problem);
+                }
+
+                if (done)
+                {
+                    App.Instance?.Quit();
+                }
+            };
+            page.Children.Add(uninstall);
+        }
+
         page.Children.Add(Heading("About"));
         // The build stamps "<version>+<commit>"; the commit is shortened as git shows it.
-        var stamped = typeof(SettingsScreen).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        var stamped = Program.Version;
         var parts = stamped.Split('+', 2);
         var version = parts.Length == 2 ? $"{parts[0]} ({parts[1][..Math.Min(7, parts[1].Length)]})" : stamped;
         page.Children.Add(new TextBlock { Text = $"SaveTether {version}" });
