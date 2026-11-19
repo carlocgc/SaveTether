@@ -575,6 +575,24 @@ $.status.sync_root_problem: string
 $.status: object
 $: object
 
+## uninstall
+$.command: string
+$.exit_code: number
+$.schema: number
+$.uninstalled.left: array
+$.uninstalled.left[]: string
+$.uninstalled.removed: array
+$.uninstalled.removed[]: string
+$.uninstalled: object
+$: object
+
+## uninstall-not-installed
+$.command: string
+$.error: string
+$.exit_code: number
+$.schema: number
+$: object
+
 ## usage-error
 $.command: string
 $.error: string

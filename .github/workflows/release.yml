@@ -137,7 +137,21 @@ jobs:
         run: |
           archive=$(bash build/package.sh ${{ matrix.rid }} "$PACKAGE" publish publish-gui dist)
           bash build/check-package.sh ${{ matrix.rid }} "$archive"
-          ls -l dist
+
+      # Inno Setup builds the Windows installer (build/windows/savetether.iss). Build time only: nothing of it ships.
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+
+      - name: Build and check the installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = ./build/build-installer.ps1 -Package "dist/$env:PACKAGE.zip" -Version $env:VERSION -OutDir dist | Select-Object -Last 1
+          ./build/check-installer.ps1 -Installer $setup -Version $env:VERSION
+          Get-ChildItem dist
 
       - uses: actions/upload-artifact@v4
         with:

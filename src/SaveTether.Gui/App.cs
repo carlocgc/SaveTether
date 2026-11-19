@@ -77,7 +77,7 @@ internal sealed class App : Application
     private async Task OfferAsync(InstallOffer installer, InstallOfferView offer)
     {
         var window = new InstallWindow();
-        var (accepted, addToPath) = await window.AskAsync(offer);
+        var accepted = await window.AskAsync(offer);
         if (!accepted)
         {
             installer.Decline();
@@ -106,11 +106,11 @@ internal sealed class App : Application
         }
 
         window.Working(offer.IsUpdate ? "Updating SaveTether…" : "Installing SaveTether…");
-        var (installed, problem) = await Task.Run(() => installer.Install(addToPath));
+        var (installed, problem) = await Task.Run(installer.Install);
         if (problem is not null)
         {
             Log.Write(problem);
-            await window.InformAsync(installed ? "Installed, with one problem" : "Nothing was installed", problem);
+            await window.InformAsync("Nothing was installed", problem);
         }
 
         if (!installed)

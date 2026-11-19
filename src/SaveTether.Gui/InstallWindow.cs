@@ -15,7 +15,7 @@ namespace SaveTether.Gui;
 internal sealed class InstallWindow : Window
 {
     private readonly StackPanel _body = new() { Spacing = 14, Margin = new Thickness(24) };
-    private TaskCompletionSource<(bool Accepted, bool AddToPath)>? _answer;
+    private TaskCompletionSource<bool>? _answer;
 
     public InstallWindow()
     {
@@ -26,20 +26,19 @@ internal sealed class InstallWindow : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Content = _body;
-        Closing += (_, _) => _answer?.TrySetResult((false, false));
+        Closing += (_, _) => _answer?.TrySetResult(false);
     }
 
-    /// <summary>Shows the offer and answers whether it was accepted, and whether the Path box was ticked.</summary>
-    public Task<(bool Accepted, bool AddToPath)> AskAsync(InstallOfferView view)
+    /// <summary>Shows the offer and answers whether it was accepted.</summary>
+    public Task<bool> AskAsync(InstallOfferView view)
     {
         ArgumentNullException.ThrowIfNull(view);
-        _answer = new TaskCompletionSource<(bool, bool)>();
-        var path = new CheckBox { Content = new TextBlock { Text = view.PathLabel, TextWrapping = TextWrapping.Wrap }, IsChecked = false, IsVisible = view.OffersPath };
+        _answer = new TaskCompletionSource<bool>();
         var notNow = new Button { Content = "Not now" };
         var confirm = new Button { Content = view.Confirm };
-        notNow.Click += (_, _) => _answer.TrySetResult((false, false));
-        confirm.Click += (_, _) => _answer.TrySetResult((true, path.IsChecked == true));
-        Fill(view.Title, view.Text, path, Row(notNow, confirm));
+        notNow.Click += (_, _) => _answer.TrySetResult(false);
+        confirm.Click += (_, _) => _answer.TrySetResult(true);
+        Fill(view.Title, view.Text, null, Row(notNow, confirm));
         Show();
         Activate();
         notNow.Focus();

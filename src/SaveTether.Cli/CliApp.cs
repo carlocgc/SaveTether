@@ -1,9 +1,11 @@
 using SaveTether.Core;
 using SaveTether.Core.Diagnostics;
 using SaveTether.Core.Execution;
+using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
+using SaveTether.Core.Startup;
 using SaveTether.Core.Storage;
 
 namespace SaveTether.Cli;
@@ -144,6 +146,11 @@ internal static class CliApp
           savetether recover
               Undo or finish an operation that was interrupted.
 
+          savetether uninstall [--confirm-uninstall]
+              Linux: remove SaveTether's programs, which the desktop app installed for this user, and
+              its app menu entry. Your setup, linked folders, backups and the sync folder stay. It
+              asks first, or needs --confirm-uninstall. On Windows, use Settings > Apps instead.
+
           savetether --version
           savetether --help
 
@@ -200,6 +207,7 @@ internal static class CliApp
                     },
                     "backup restore" => Restore(),
                     "backup delete" => DeleteBackup(),
+                    "uninstall" => Uninstall(),
                     _ => Recover(),
                 };
             }
@@ -222,7 +230,7 @@ internal static class CliApp
         /// guarded against.
         /// </remarks>
         private bool Writes =>
-            command.Name is not ("status" or "backup list" or "app list")
+            command.Name is not ("status" or "backup list" or "app list" or "uninstall")
             && !command.Has(ArgParser.DryRun)
             && (command.Name != "init" || Directory.Exists(_local.Folder));
 
@@ -518,6 +526,43 @@ internal static class CliApp
 
             var deleted = workspace.DeleteBackup(backupId);
             return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, BackupDeleted = deleted };
+        }
+
+        /// <summary>
+        /// "uninstall" (Linux): removes what the desktop app's install put in place, after a confirmation at a terminal or
+        /// with --confirm-uninstall. Changes no setup, link, backup or shared file. On Windows the installer's own
+        /// uninstaller does this.
+        /// </summary>
+        private CliOutput Uninstall()
+        {
+            if (environment.Install is not { } layout)
+            {
+                return Failed(ExitRefused, "On Windows, SaveTether is uninstalled from Settings > Apps > Installed apps. Nothing was changed.");
+            }
+
+            if (SafeFs.Probe(layout.AppPath) != EntryKind.File && SafeFs.Probe(layout.CliPath) != EntryKind.File)
+            {
+                return Failed(ExitRefused, $"SaveTether is not installed in {layout.AppFolder}. Nothing was changed.");
+            }
+
+            if (!command.Has("--confirm-uninstall"))
+            {
+                if (!CanAsk)
+                {
+                    return Failed(ExitRefused, "Uninstalling removes SaveTether's programs. Add --confirm-uninstall to go ahead.");
+                }
+
+                var question =
+                    $"Remove SaveTether's programs from {layout.AppFolder} and {layout.BinFolder}, and its app menu entry?" +
+                    "\nYour setup, linked folders, backups and the sync folder stay; linked folders keep syncing, but nothing checks on them.";
+                if (!Confirm(question))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was removed.");
+                }
+            }
+
+            var (removed, left) = Installer.Uninstall(layout, environment.Autostart);
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Uninstalled = new UninstallOutput(removed, left) };
         }
 
         private CliOutput Recover()

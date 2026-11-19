@@ -24,6 +24,9 @@ internal sealed class CliEnvironment
     /// <summary>Where the desktop app's autostart entry is, for status to check. Null where there is none.</summary>
     public SaveTether.Core.Startup.IAutostartStore? Autostart { get; init; } = SaveTether.Core.Startup.Autostart.ForSystem();
 
+    /// <summary>Where SaveTether installs itself on Linux, for "uninstall". Null on Windows, where its installer does that.</summary>
+    public SaveTether.Core.Startup.InstallLayout? Install { get; init; } = SaveTether.Core.Startup.InstallLayout.ForSystem();
+
     /// <summary>Where answers to prompts are read from. Only used when <see cref="Interactive"/>.</summary>
     public TextReader? Input { get; init; }
 

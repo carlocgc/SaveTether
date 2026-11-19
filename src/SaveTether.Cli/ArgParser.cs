@@ -78,6 +78,7 @@ internal static class ArgParser
         new("backup restore", 1, 1, ["--confirm-replace", "--assume-closed", DryRun], None, None),
         new("backup delete", 1, 1, ["--confirm-delete"], None, None),
         new("recover", 0, 0, None, None, None),
+        new("uninstall", 0, 0, ["--confirm-uninstall"], None, None),
     ];
 
     public static ParsedCommand Parse(IReadOnlyList<string> args)

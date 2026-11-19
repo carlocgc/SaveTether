@@ -218,6 +218,17 @@ Flags:
 | `was_first` | boolean | It was its mapping's first backup, which retention never removes: usually the only copy of the folder from before SaveTether changed it. |
 | `remaining` | number | How many backups of the mapping are left. |
 
+### `uninstall`
+
+`uninstall`, with `--confirm-uninstall`. With `--json` nothing is asked, so without `--confirm-uninstall` it is refused (exit 1) and nothing is removed. Refused (exit 1) when nothing is installed, and on Windows, where the installer's uninstaller does this. Added 2026-11-19.
+
+`uninstalled` object, present when SaveTether was uninstalled:
+
+| Field | Type | |
+|---|---|---|
+| `removed` | array of strings | Each file, link, folder or autostart entry removed. |
+| `left` | array of strings | Each one left, with the reason: a file in the install folder that is not SaveTether's, or a link SaveTether did not make. |
+
 ## Conflict
 
 The `conflict` object, at the top level for a store refusal and in `app` for `app add`:

@@ -115,7 +115,13 @@ internal sealed record CliOutput
 
     /// <summary>"backup delete": the backup removed, whether it was its mapping's first, and how many are left.</summary>
     public BackupDeletion? BackupDeleted { get; init; }
+
+    /// <summary>"uninstall": what was removed, and what was left and why.</summary>
+    public UninstallOutput? Uninstalled { get; init; }
 }
+
+/// <summary>"uninstall": the paths removed, and each one left with the reason.</summary>
+public sealed record UninstallOutput(IReadOnlyList<string> Removed, IReadOnlyList<string> Left);
 
 [JsonSourceGenerationOptions(
     WriteIndented = true,
@@ -180,6 +186,22 @@ internal static class OutputWriter
         if (output.BackupDeleted is { } deleted)
         {
             stdout.WriteLine($"Deleted backup {deleted.Backup.Id}. {deleted.Remaining} backup(s) of {deleted.Backup.MappingId} left.");
+        }
+
+        if (output.Uninstalled is { } uninstalled)
+        {
+            stdout.WriteLine("Uninstalled SaveTether. Removed:");
+            foreach (var path in uninstalled.Removed)
+            {
+                stdout.WriteLine($"  {path}");
+            }
+
+            foreach (var left in uninstalled.Left)
+            {
+                stdout.WriteLine($"  left: {left}");
+            }
+
+            stdout.WriteLine("Your setup, linked folders, backups and the sync folder were not touched.");
         }
 
         if (output.Message is { } message)
