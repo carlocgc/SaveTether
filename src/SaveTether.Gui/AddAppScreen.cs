@@ -381,7 +381,7 @@ internal sealed class AddAppScreen : UserControl
     }
 
     /// <summary>
-    /// The hand form (section 8, decision 6): the save folder, and for a new folder the app's and the saves' names,
+    /// The hand form (section 8, decision 6): the folder to share, and for a new folder the app's and the folder's names,
     /// from which the mapping ID and the shared folder follow; program names and entry depth. Problems found by Add
     /// are shown beside their fields.
     /// </summary>
@@ -408,8 +408,8 @@ internal sealed class AddAppScreen : UserControl
             }
         }
 
-        Label("Save folder", "Where the app keeps its saves on this device.");
-        var (folder, folderRow) = PathField(input.SaveFolder ?? string.Empty, "Save folder");
+        Label("Folder to share", "The folder on this device: saves, mods, textures or anything else the app keeps in one folder.");
+        var (folder, folderRow) = PathField(input.SaveFolder ?? string.Empty, "Folder to share");
         content.Add(folderRow);
         content.Add(Problems(ManualField.SaveFolder));
 
@@ -422,15 +422,15 @@ internal sealed class AddAppScreen : UserControl
         }
         else
         {
-            Label("App name", "For example Rondo Duo. Every folder of one app shares this name.");
+            Label("App name", "For example Dolphin. Every folder of one app shares this name.");
             appName = new TextBox { Text = input.AppName ?? string.Empty, Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
             AutomationProperties.SetName(appName, "App name");
             content.Add(appName);
             content.Add(Problems(ManualField.AppName));
 
-            Label("Name for these saves", "The shared folder's name. The save folder's own name is usually right.");
+            Label("Name for the shared folder", "The folder's own name is usually right, for example GC.");
             savesName = new TextBox { Text = input.FolderName ?? string.Empty, Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
-            AutomationProperties.SetName(savesName, "Name for these saves");
+            AutomationProperties.SetName(savesName, "Name for the shared folder");
             content.Add(savesName);
             content.Add(Problems(ManualField.FolderName));
 
@@ -443,7 +443,7 @@ internal sealed class AddAppScreen : UserControl
 
             appName.TextChanged += (_, _) => Update();
             savesName.TextChanged += (_, _) => Update();
-            // The saves' name follows the folder until the owner types their own.
+            // The shared folder's name follows the folder until the owner types their own.
             var lastSuggested = string.IsNullOrEmpty(input.FolderName) ? string.Empty : null;
             folder.TextChanged += (_, _) =>
             {
@@ -467,19 +467,42 @@ internal sealed class AddAppScreen : UserControl
         if (form.IsJoin || check?.ExistingDepth is not null)
         {
             var shown = check?.ExistingDepth ?? input.EntryDepth ?? 1;
-            content.Add(new TextBlock { Text = $"Entry depth: {shown}, as set when the folder was first added.", Opacity = 0.75, FontSize = 13 });
+            if (shown > 1)
+            {
+                content.Add(new TextBlock { Text = $"Entry depth {shown}, as set when the folder was first added.", Opacity = 0.75, FontSize = 13 });
+            }
         }
         else
         {
-            Label("Entry depth", "How many folder levels down one game's saves sit. 1 when each game has its own folder directly inside the save folder; 2 for Cemu (title, then user).");
+            // Under Advanced, closed: 1 is right unless items sit deeper, as in Cemu's save folder (design 5.13).
             depth = new NumericUpDown
             {
                 Value = input.EntryDepth ?? 1, Minimum = 1, Maximum = MappingFileMaxDepth, Increment = 1, FormatString = "0", Width = 140,
                 HorizontalAlignment = HorizontalAlignment.Left,
             };
             AutomationProperties.SetName(depth, "Entry depth");
-            content.Add(depth);
-            content.Add(Problems(ManualField.EntryDepth));
+            var advanced = new StackPanel { Spacing = 6 };
+            advanced.Children.Add(new TextBlock { Text = "Entry depth", FontWeight = FontWeight.SemiBold });
+            advanced.Children.Add(new TextBlock
+            {
+                Text = "Where one item starts: one game's saves, or one mod. When this device and the shared folder both have files, "
+                    + "SaveTether copies only whole items the other side lacks, never parts of one. 1 when each item is a folder "
+                    + "directly inside the folder to share. 2 when items sit one level down, as in Cemu's save folder (title group, then title).",
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.75,
+                FontSize = 13,
+            });
+            advanced.Children.Add(depth);
+            advanced.Children.Add(Problems(ManualField.EntryDepth));
+            var hasProblem = check?.Problems.Any(p => p.Field == ManualField.EntryDepth) == true;
+            content.Add(new Expander
+            {
+                Header = "Advanced",
+                Content = advanced,
+                IsExpanded = hasProblem || (input.EntryDepth ?? 1) != 1,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                Margin = new Thickness(0, 8, 0, 0),
+            });
         }
 
         foreach (var note in check?.Notes ?? [])
@@ -489,7 +512,7 @@ internal sealed class AddAppScreen : UserControl
 
         content.Add(new TextBlock
         {
-            Text = "Adding records this folder; it changes no saves. Apply links it afterwards.",
+            Text = "Adding only records this folder; nothing in it changes. Apply links it afterwards.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.75,
             Margin = new Thickness(0, 8, 0, 0),

@@ -69,8 +69,8 @@ public sealed class ManualAddFlow(LocalStore local)
         return new ManualAddStart(
             "Add a folder by hand",
             [
-                "For an app SaveTether has no definition for. Give the folder where the app keeps its saves on this device, "
-                + "and names for the app and its saves. The other devices then add the same folder by name.",
+                "For an app SaveTether has no definition for. Give the folder to share on this device, whether it holds saves, "
+                + "mods, textures or anything else, and names for the app and the folder. Other devices then add the same folder by name.",
             ],
             new ManualAddInput(null, null, null, null, 1),
             null,
@@ -95,8 +95,8 @@ public sealed class ManualAddFlow(LocalStore local)
         var sentences = new List<string>
         {
             own is null
-                ? $"Give the folder where this device keeps the saves that {mappingId} shares."
-                : $"Nothing is at {own.Source} any more. Give the folder where this device keeps these saves now.",
+                ? $"Give the folder on this device that {mappingId} shares."
+                : $"Nothing is at {own.Source} any more. Give where this folder is on this device now.",
         };
         if (setUpOn.Count > 0)
         {
@@ -114,8 +114,8 @@ public sealed class ManualAddFlow(LocalStore local)
     }
 
     /// <summary>
-    /// The mapping ID and shared folder a new folder gets, from the names typed: "Rondo Duo" and "Flash Player"
-    /// give rondo-duo.flash-player, shared as rondo-duo/Flash Player. Null where a name gives nothing usable.
+    /// The mapping ID and shared folder a new folder gets, from the names typed: "Dolphin" and "GC"
+    /// give dolphin.gc, shared as dolphin/GC. Null where a name gives nothing usable.
     /// </summary>
     public static (string? MappingId, string? Target) Derive(string? appName, string? folderName)
     {
@@ -133,7 +133,7 @@ public sealed class ManualAddFlow(LocalStore local)
     }
 
     /// <summary>
-    /// The saves' name after the save folder changed: the folder's own name while the field is empty or still holds
+    /// The shared folder's name after the folder to share changed: the folder's own name while the field is empty or still holds
     /// the last suggestion, so it follows the folder as it is typed; what the owner typed is kept. Found on the Deck:
     /// suggesting only into an empty field left the name at "h", from the first two characters typed.
     /// </summary>
@@ -143,7 +143,7 @@ public sealed class ManualAddFlow(LocalStore local)
         return owned ? current : SuggestFolderName(saveFolder) ?? string.Empty;
     }
 
-    /// <summary>"Shared as rondo-duo/Flash Player (mapping rondo-duo.flash-player)."</summary>
+    /// <summary>"Shared as dolphin/GC (mapping dolphin.gc)."</summary>
     public static string SharedAs(string? mappingId, string? target) =>
         mappingId is null ? "Give both names to see where it is shared." : $"Shared as {target} (mapping {mappingId}).";
 
@@ -201,7 +201,7 @@ public sealed class ManualAddFlow(LocalStore local)
     public static string JoinQuestion(ManualAddCheck check)
     {
         ArgumentNullException.ThrowIfNull(check);
-        return $"Another device already shares {check.Target}. Share the same saves from this device too? "
+        return $"Another device already shares {check.Target}. Share the same folder from this device too? "
             + "Apply then compares the two before anything is replaced.";
     }
 
@@ -239,7 +239,7 @@ public sealed class ManualAddFlow(LocalStore local)
 
             if (string.IsNullOrWhiteSpace(input.FolderName))
             {
-                problems.Add((ManualField.FolderName, "Give the saves a name, for example the folder's own name."));
+                problems.Add((ManualField.FolderName, "Give the shared folder a name, for example the folder's own name."));
             }
             else if (Slug(input.FolderName, MaxRoleLength) is null)
             {
@@ -265,7 +265,7 @@ public sealed class ManualAddFlow(LocalStore local)
                 {
                     joinsExisting = true;
                     existingDepth = existing.Depth;
-                    notes.Add($"Another device already shares {target}: this device would share the same saves.");
+                    notes.Add($"Another device already shares {target}: this device would share the same folder.");
                 }
             }
 
@@ -278,7 +278,7 @@ public sealed class ManualAddFlow(LocalStore local)
         var folder = input.SaveFolder?.Trim();
         if (string.IsNullOrEmpty(folder))
         {
-            problems.Add((ManualField.SaveFolder, "Give the folder where the app keeps its saves."));
+            problems.Add((ManualField.SaveFolder, "Give the folder to share."));
         }
         else if (!Path.IsPathFullyQualified(ExpandHome(folder)))
         {
@@ -286,7 +286,7 @@ public sealed class ManualAddFlow(LocalStore local)
         }
         else if (!Directory.Exists(ExpandHome(folder)))
         {
-            notes.Add("There is no folder there yet. That is fine if the app has not saved yet.");
+            notes.Add("There is no folder there yet. That is fine if the app has not made it yet.");
         }
 
         foreach (var name in SplitProcessNames(input.ProcessNames))
@@ -304,7 +304,7 @@ public sealed class ManualAddFlow(LocalStore local)
     private static string TargetWords(string problem) =>
         "The name cannot be used: " + problem.Replace("The target's save folder name", "it", StringComparison.Ordinal);
 
-    /// <summary>Lowercase letters and digits, with '-' between words: "Rondo Duo" gives "rondo-duo". Null when nothing is left.</summary>
+    /// <summary>Lowercase letters and digits, with '-' between words: "Super Mario" gives "super-mario". Null when nothing is left.</summary>
     private static string? Slug(string? text, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(text))

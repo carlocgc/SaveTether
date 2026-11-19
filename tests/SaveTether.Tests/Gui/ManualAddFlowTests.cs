@@ -25,7 +25,8 @@ public class ManualAddFlowTests
         File.ReadAllText(Path.Combine(device.SyncRoot, "savetether", ".savetether", "devices", device.Name + ".json"));
 
     [Theory]
-    [InlineData("Rondo Duo", "Flash Player", "rondo-duo.flash-player", "rondo-duo/Flash Player")]
+    [InlineData("Dolphin", "GC", "dolphin.gc", "dolphin/GC")]
+    [InlineData("Super Mario Galaxy", "Save Data", "super-mario-galaxy.save-data", "super-mario-galaxy/Save Data")]
     [InlineData("  Pokémon Café ", "SAVEDATA", "pokemon-cafe.savedata", "pokemon-cafe/SAVEDATA")]
     [InlineData("ppsspp", "savedata", "ppsspp.savedata", "ppsspp/savedata")]
     [InlineData("A & B", "Saves (1)", "a-b.saves-1", "a-b/Saves (1)")]
@@ -42,7 +43,7 @@ public class ManualAddFlowTests
     [Fact]
     public void The_form_suggests_the_folder_name_and_splits_program_names()
     {
-        Assert.Equal("Flash Player", ManualAddFlow.SuggestFolderName(Path.Combine("x", "Flash Player") + Path.DirectorySeparatorChar));
+        Assert.Equal("GC", ManualAddFlow.SuggestFolderName(Path.Combine("x", "GC") + Path.DirectorySeparatorChar));
         Assert.Null(ManualAddFlow.SuggestFolderName("  "));
         Assert.Equal(["Game", "Game Launcher", "other"], ManualAddFlow.SplitProcessNames("Game, Game Launcher;\nother,,Game"));
         Assert.Empty(ManualAddFlow.SplitProcessNames(null));
@@ -56,7 +57,7 @@ public class ManualAddFlowTests
         string? name = string.Empty;
         string? last = string.Empty;
         var typed = string.Empty;
-        foreach (var c in "/home/deck/games/Flash Player")
+        foreach (var c in "/home/deck/Dolphin/GC")
         {
             typed += c;
             var next = ManualAddFlow.FollowFolder(name, last, typed);
@@ -67,10 +68,10 @@ public class ManualAddFlowTests
             }
         }
 
-        Assert.Equal("Flash Player", name);
+        Assert.Equal("GC", name);
 
         // A name the owner typed is kept when the folder changes; an emptied field follows again.
-        Assert.Equal("Saves", ManualAddFlow.FollowFolder("Saves", "Flash Player", "/home/deck/games/Other"));
+        Assert.Equal("Saves", ManualAddFlow.FollowFolder("Saves", "GC", "/home/deck/games/Other"));
         Assert.Equal("Other", ManualAddFlow.FollowFolder(string.Empty, "Saves", "/home/deck/games/Other"));
     }
 
@@ -110,29 +111,29 @@ public class ManualAddFlowTests
     {
         using var sandbox = new Sandbox();
         var (deck, flow) = NewDevice(sandbox, "deck", createRoot: true);
-        var saves = sandbox.Dir("deck", "home", "Flash Player");
-        File.WriteAllText(Path.Combine(saves, "save.sol"), "progress");
+        var saves = sandbox.Dir("deck", "home", "GC");
+        File.WriteAllText(Path.Combine(saves, "MemoryCardA.USA.raw"), "progress");
         flow.StartNew();
 
-        var input = new ManualAddInput(saves, "Rondo Duo", "Flash Player", "Rondo Duo, projector", 2);
+        var input = new ManualAddInput(saves, "Dolphin", "GC", "Dolphin, dolphin-emu", 2);
         var check = flow.Check(input);
         Assert.True(check.CanAdd);
-        Assert.Equal("rondo-duo.flash-player", check.MappingId);
+        Assert.Equal("dolphin.gc", check.MappingId);
         Assert.False(check.JoinsExisting);
 
         var result = flow.Add(input, joinAccepted: false);
         Assert.True(result.Succeeded, result.Refused);
-        Assert.Equal("rondo-duo.flash-player", result.Added);
-        var mapping = MappingFile(deck, "rondo-duo.flash-player");
-        Assert.Contains("\"rondo-duo/Flash Player\"", mapping, StringComparison.Ordinal);
+        Assert.Equal("dolphin.gc", result.Added);
+        var mapping = MappingFile(deck, "dolphin.gc");
+        Assert.Contains("\"dolphin/GC\"", mapping, StringComparison.Ordinal);
         Assert.Contains("\"entry_depth\": 2", mapping, StringComparison.Ordinal);
         var device = DeviceFile(deck);
-        Assert.Contains("projector", device, StringComparison.Ordinal);
-        Assert.Contains("Rondo Duo", device, StringComparison.Ordinal);
+        Assert.Contains("dolphin-emu", device, StringComparison.Ordinal);
+        Assert.Contains("Dolphin", device, StringComparison.Ordinal);
 
         // Nothing is linked: the folder is still a real folder holding its file.
         Assert.Equal(EntryKind.Directory, SafeFs.Probe(saves));
-        Assert.Equal("progress", File.ReadAllText(Path.Combine(saves, "save.sol")));
+        Assert.Equal("progress", File.ReadAllText(Path.Combine(saves, "MemoryCardA.USA.raw")));
 
         // Added again under the same names: this device already has it, so the form says to use its row.
         var again = flow.Check(input);
