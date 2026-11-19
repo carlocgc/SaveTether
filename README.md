@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="src/SaveTether.Gui/Assets/savetether.png" alt="SaveTether icon: a save disk with two linked rings" width="96">
+
 # SaveTether
 
 **Keep game save folders in one place, and let your sync tool share them between machines.**

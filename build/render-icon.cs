@@ -7,7 +7,7 @@
 //   dotnet run build/render-icon.cs -- src/SaveTether.Gui/Assets build/windows
 //
 // Sizes of 24 pixels and under use a simpler drawing (no shutter window, heavier rings), so the link still reads in
-// a title bar or tray. The second folder gets the Windows installer's wizard images. The outputs are committed; run
+// a title bar or tray. The second folder gets the Windows installer's side picture. The outputs are committed; run
 // this again after changing a shape.
 
 using System.Text;
@@ -56,23 +56,11 @@ File.WriteAllBytes(Path.Combine(outDir, "savetether-tray.png"), Render(Small, 32
 File.WriteAllText(Path.Combine(outDir, "savetether.svg"), Svg(Large), new UTF8Encoding(false));
 Console.WriteLine($"wrote savetether.ico ({string.Join(", ", sizes)}), savetether.png, savetether-tray.png and savetether.svg to {Path.GetFullPath(outDir)}");
 
-// The installer's wizard images (build/windows/savetether.iss): the side picture of its first and last pages, on a pale
-// blue like Inno Setup's own, and the corner picture of the other pages, on the white of their header. One file per
-// display scale (100, 125, 150 and 200%) at the sizes Inno Setup asks for; it picks the nearest. 24-bit BMP, which every
-// Inno Setup 6 reads.
-(int W, int H)[] side = [(164, 314), (192, 386), (246, 459), (328, 604)];
-(int W, int H)[] corner = [(55, 55), (64, 68), (83, 80), (110, 106)];
-foreach (var (w, h) in side)
-{
-    File.WriteAllBytes(Path.Combine(wizardDir, $"wizard-{w}x{h}.bmp"), Bmp(Large, w, h, w * 0.6f, h * 0.42f, "#E8F1FA"));
-}
-
-foreach (var (w, h) in corner)
-{
-    File.WriteAllBytes(Path.Combine(wizardDir, $"wizard-small-{w}x{h}.bmp"), Bmp(Large, w, h, Math.Min(w, h) * 0.9f, h / 2f, White));
-}
-
-Console.WriteLine($"wrote the wizard images to {Path.GetFullPath(wizardDir)}");
+// The installer's side picture, on its first and last pages (build/windows/savetether.iss): the icon on a transparent
+// background the size of the panel at 200%, which Inno Setup scales down and shows on its WizardImageBackColor. The
+// corner picture of the other pages is savetether.png itself.
+File.WriteAllBytes(Path.Combine(wizardDir, "wizard.png"), Placed(Large, 328, 628, 196, 264));
+Console.WriteLine($"wrote wizard.png to {Path.GetFullPath(wizardDir)}");
 
 static byte[] Render((string Path, string Colour, float Stroke)[] shapes, int size)
 {
@@ -99,52 +87,20 @@ static byte[] Render((string Path, string Colour, float Stroke)[] shapes, int si
     return encoded.ToArray();
 }
 
-// The icon, iconSize wide, centred across and at centreY down a w by h background, as a bottom-up 24-bit BMP.
-static byte[] Bmp((string Path, string Colour, float Stroke)[] shapes, int w, int h, float iconSize, float centreY, string background)
+// The icon, iconSize wide, centred across and at centreY down a transparent w by h PNG.
+static byte[] Placed((string Path, string Colour, float Stroke)[] shapes, int w, int h, int iconSize, float centreY)
 {
-    var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
-    using var bitmap = new SKBitmap(info);
-    using (var canvas = new SKCanvas(bitmap))
-    using (var icon = SKImage.FromEncodedData(Render(shapes, (int)MathF.Round(iconSize))))
+    using var surface = SKSurface.Create(new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul));
+    var canvas = surface.Canvas;
+    canvas.Clear(SKColors.Transparent);
+    using (var icon = SKImage.FromEncodedData(Render(shapes, iconSize)))
     {
-        canvas.Clear(SKColor.Parse(background));
         canvas.DrawImage(icon, (w - icon.Width) / 2f, centreY - (icon.Height / 2f));
     }
 
-    var pixels = bitmap.Bytes;
-    var stride = ((w * 3) + 3) & ~3;
-    using var stream = new MemoryStream();
-    using var writer = new BinaryWriter(stream);
-    writer.Write((byte)'B');
-    writer.Write((byte)'M');
-    writer.Write(54 + (stride * h));
-    writer.Write(0);
-    writer.Write(54);
-    writer.Write(40);
-    writer.Write(w);
-    writer.Write(h);
-    writer.Write((ushort)1);
-    writer.Write((ushort)24);
-    writer.Write(0);
-    writer.Write(stride * h);
-    writer.Write(2835);
-    writer.Write(2835);
-    writer.Write(0);
-    writer.Write(0);
-    for (var y = h - 1; y >= 0; y--)
-    {
-        for (var x = 0; x < w; x++)
-        {
-            var i = ((y * w) + x) * 4;
-            writer.Write(pixels[i]);
-            writer.Write(pixels[i + 1]);
-            writer.Write(pixels[i + 2]);
-        }
-
-        writer.Write(new byte[stride - (w * 3)]);
-    }
-
-    return stream.ToArray();
+    using var image = surface.Snapshot();
+    using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+    return encoded.ToArray();
 }
 
 // An .ico holding a PNG for each size, which Windows reads at every size since Vista.
