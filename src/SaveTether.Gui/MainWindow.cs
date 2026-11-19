@@ -50,7 +50,7 @@ internal sealed class MainWindow : Window
         _checkNow = checkNow;
         _operate = operate;
         Title = Texts.AppName;
-        Icon = Icons.For(amber: false);
+        Icon = Icons.App;
         MinWidth = 800;
         MinHeight = 560;
         Width = 1000;
@@ -109,8 +109,8 @@ internal sealed class MainWindow : Window
             "Something went wrong",
             $"Something went wrong: {message}\n\nSaveTether is still running. The details are in gui.log in {_localFolder}.");
 
-    /// <summary>Shows one check's result. <paramref name="iconState"/> is what the tray shows, which may lag while another process works.</summary>
-    public void Show(CheckResult result, OverallStatus? iconState)
+    /// <summary>Shows one check's result. The window keeps the app's icon; the header and the tray show the state.</summary>
+    public void Show(CheckResult result)
     {
         var status = result.Shown;
         _device.Text = status.Report is { } report ? $"This device: {report.DeviceName}" : Texts.AppName;
@@ -118,7 +118,6 @@ internal sealed class MainWindow : Window
         _dot.Fill = new SolidColorBrush(status.IsAmber ? Icons.Amber : Icons.Green);
         _headline.Text = status.Headline;
         _checkedAt.Text = "Checked " + DateTime.Now.ToString("HH:mm", CultureInfo.InvariantCulture);
-        Icon = Icons.For((iconState ?? status).IsAmber);
 
         // Not set up: the setup pages take the place of the rows (section 6). Made once, so a check in the
         // background does not lose what the owner has typed.

@@ -23,6 +23,7 @@ public class InstallerTests
         }
 
         File.WriteAllText(Path.Combine(folder, "LICENSE"), "MIT");
+        File.WriteAllText(Path.Combine(folder, "savetether.png"), "icon");
         return folder;
     }
 
@@ -72,15 +73,17 @@ public class InstallerTests
         var open = line.IndexOf('(', StringComparison.Ordinal);
         var listed = line[(open + 1)..line.IndexOf(')', open)]
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Except(["LICENSE", "README.md"]);
+            .Except(["LICENSE", "README.md", "savetether.png"]);
         Assert.Equal(listed.Order(StringComparer.Ordinal), Installer.PackageFiles.Order(StringComparer.Ordinal));
     }
 
     [Fact]
     public void The_menu_entry_starts_the_installed_app_with_its_window()
     {
-        var entry = Installer.MenuEntry("/home/deck/.local/lib/savetether/savetether-gui");
+        var entry = Installer.MenuEntry("/home/deck/.local/lib/savetether/savetether-gui", "/home/deck/.local/lib/savetether/savetether.png");
         Assert.Contains("Exec=\"/home/deck/.local/lib/savetether/savetether-gui\"\n", entry, StringComparison.Ordinal);
+        Assert.Contains("Icon=/home/deck/.local/lib/savetether/savetether.png\n", entry, StringComparison.Ordinal);
+        Assert.DoesNotContain("Icon=", Installer.MenuEntry("/x/savetether-gui", null), StringComparison.Ordinal);
         Assert.DoesNotContain("--minimized", entry, StringComparison.Ordinal);
         Assert.Contains("Type=Application\n", entry, StringComparison.Ordinal);
     }
@@ -150,7 +153,7 @@ public class InstallerTests
         Assert.Equal("0.2.0+abc", Installer.InstalledVersion(layout));
         Assert.Equal(EntryKind.Symlink, SafeFs.Probe(layout.AppLink));
         Assert.Equal(layout.AppPath, SafeFs.ReadLinkTarget(layout.AppLink));
-        Assert.Equal(Installer.MenuEntry(layout.AppPath), File.ReadAllText(layout.MenuEntry));
+        Assert.Equal(Installer.MenuEntry(layout.AppPath, Path.Combine(layout.AppFolder, "savetether.png")), File.ReadAllText(layout.MenuEntry));
         Assert.True(File.GetUnixFileMode(layout.CliPath).HasFlag(UnixFileMode.UserExecute));
         Assert.True(File.GetUnixFileMode(layout.AppPath).HasFlag(UnixFileMode.UserExecute));
         // Only programs in the commands folder: the libraries stay with the app.

@@ -104,6 +104,8 @@ Then copy the image to the PC to look at it.
 
 **`xdotool` over SSH on the Deck** needs the session's `XAUTHORITY` as well as `DISPLAY`, read from Plasma's environment as in "Running the app"; without it every call fails with "Authorization required". Keep the exports in a small file that each helper sources, written with a quoted heredoc: inserting the line with `sed` mangled its `'\0'` and `'\n'`.
 
+**The tray icon's image** can be read without a screenshot of the panel: `gdbus call --session --dest org.kde.StatusNotifierWatcher --object-path /StatusNotifierWatcher --method org.freedesktop.DBus.Properties.Get org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems` lists `org.kde.StatusNotifierItem-<pid>-<n>`; the same call on that service for `org.kde.StatusNotifierItem IconPixmap` returns each size as width, height and ARGB bytes in network order, which a few lines of Python turn into a PNG. On Windows, `WM_GETICON` on the app's main window returns its title bar and taskbar icons, and `[System.Drawing.Icon]::ExtractAssociatedIcon` reads a program's or installer's own icon.
+
 **Helpers.** Two small scripts in the scratch folder save typing: `click.sh x y [wait]` (activate the window, click at window coordinates, wait) and `shot.sh name` (wake the display, activate the window, `spectacle -a` to `/tmp`). With `spectacle -a` on the Deck, the window's client area starts about 65 pixels right and 81 down from the capture's corner (shadow and title bar): subtract that from a point in the capture to get the coordinates to click.
 
 ## Testing against a real setup

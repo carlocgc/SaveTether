@@ -40,6 +40,8 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 LicenseFile={#SourceDir}\LICENSE
+; The app's icon (build/render-icon.cs), for the installer itself.
+SetupIconFile=..\..\src\SaveTether.Gui\Assets\savetether.ico
 UninstallDisplayName=SaveTether
 UninstallDisplayIcon={app}\savetether-gui.exe
 ; A running SaveTether is closed before its files are replaced or removed. It quits when Windows asks

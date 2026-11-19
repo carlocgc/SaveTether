@@ -34,7 +34,8 @@ The release workflow builds with the version from the tag, so a binary always re
    Each package is one folder named after it, holding:
    - the CLI, `savetether` (`savetether.exe` on Windows);
    - the desktop app, `savetether-gui`, with the native libraries it loads from beside itself: `libSkiaSharp` and `libHarfBuzzSharp` (`.so` on Linux, `.dll` on Windows), and on Windows `av_libglesv2.dll` (ANGLE);
-   - `README.md` and `LICENSE`.
+   - `README.md` and `LICENSE`;
+   - on Linux, `savetether.png`, the app's icon, for the menu entry the app's install writes (on Windows the icon is inside the program).
 
    `build/package.sh` builds a package from the two publish folders, leaving out debug symbols. `build/check-package.sh` compares it with this exact list, and on Linux checks that both programs are executable. CI runs both on every pull request, so a package that would ship without a library, or with a stray file, fails there first. A change to what the app needs beside it (a new native library, say) updates the list in `build/check-package.sh`, here, `Installer.PackageFiles` in the core (the Linux self-install; a test keeps it equal to the Linux list), and the `[Files]` of `build/windows/savetether.iss` and the list in `build/check-installer.ps1`.
 

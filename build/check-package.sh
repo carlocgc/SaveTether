@@ -21,7 +21,7 @@ esac
 
 case "$rid" in
   win-*) expected=(LICENSE README.md av_libglesv2.dll libHarfBuzzSharp.dll libSkiaSharp.dll savetether-gui.exe savetether.exe) ;;
-  linux-*) expected=(LICENSE README.md libHarfBuzzSharp.so libSkiaSharp.so savetether savetether-gui) ;;
+  linux-*) expected=(LICENSE README.md libHarfBuzzSharp.so libSkiaSharp.so savetether savetether-gui savetether.png) ;;
   *) echo "no expected contents for $rid" >&2; exit 1 ;;
 esac
 
