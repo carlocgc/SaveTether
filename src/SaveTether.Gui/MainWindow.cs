@@ -25,6 +25,7 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _headline = new() { FontSize = 17, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _checkedAt = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _banners = new() { Spacing = 8 };
+    private readonly Border _strip = new() { IsVisible = false, Padding = new Thickness(10, 6), Margin = new Thickness(0, 0, 0, 8), CornerRadius = new CornerRadius(4), Background = new SolidColorBrush(Color.FromArgb(24, 128, 128, 128)) };
     private readonly StackPanel _rows = new() { Spacing = 2 };
 
     /// <summary>
@@ -44,6 +45,48 @@ internal sealed class MainWindow : Window
     private bool _notHereOpen;
 
     /// <param name="operate">Runs one operation: the app marks itself busy around it and checks after it.</param>
+    /// <summary>The background tasks the strip along the bottom shows; a scan registers here.</summary>
+    public BackgroundTasks Tasks { get; } = new();
+
+    private void ShowStrip()
+    {
+        if (Tasks.Current is not { } task)
+        {
+            _strip.IsVisible = false;
+            _strip.Child = null;
+            return;
+        }
+
+        var text = new TextBlock { Text = task.Text, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        var row = new DockPanel();
+        var failed = task.State == BackgroundTaskState.Failed;
+        var button = new Button { Content = failed ? "Dismiss" : "Cancel", Margin = new Thickness(12, 0, 0, 0) };
+        button.Click += (_, _) =>
+        {
+            if (failed)
+            {
+                Tasks.Dismiss();
+            }
+            else
+            {
+                Tasks.CancelCurrent();
+            }
+        };
+        DockPanel.SetDock(button, Avalonia.Controls.Dock.Right);
+        row.Children.Add(button);
+        if (!failed)
+        {
+            var busy = new ProgressBar { IsIndeterminate = task.Total is null, Minimum = 0, Maximum = Math.Max(task.Total ?? 1, 1), Value = task.Done, Width = 120, Margin = new Thickness(0, 0, 12, 0) };
+            DockPanel.SetDock(busy, Avalonia.Controls.Dock.Left);
+            row.Children.Add(busy);
+        }
+
+        row.Children.Add(text);
+        AutomationProperties.SetName(_strip, "Background task");
+        _strip.Child = row;
+        _strip.IsVisible = true;
+    }
+
     public MainWindow(string localFolder, Action checkNow, Action quit, Func<Func<ActionFlow, Task>, Task> operate)
     {
         _localFolder = localFolder;
@@ -77,10 +120,12 @@ internal sealed class MainWindow : Window
                 Dock(_banners, Avalonia.Controls.Dock.Top),
                 Dock(_bar, Avalonia.Controls.Dock.Top),
                 Dock(footer, Avalonia.Controls.Dock.Bottom),
+                Dock(_strip, Avalonia.Controls.Dock.Bottom),
                 _body,
             },
         });
         Content = _overlay;
+        Tasks.Changed += () => Avalonia.Threading.Dispatcher.UIThread.Post(ShowStrip);
         _actions = new ActionFlow(localFolder, _overlay, App.Options.Log);
 
         KeyDown += (_, e) =>

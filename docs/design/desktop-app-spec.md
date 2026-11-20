@@ -79,6 +79,17 @@ Minimum 800 × 560, designed for 1280 × 800 (the Deck's screen) at 100 % scalin
 
 While B1, B2 or B3 is shown, every action on the Apps and Backups pages is disabled, except "Open folder". The core refuses these operations anyway; disabling them avoids a click that can only fail.
 
+### 4.2 Background task strip
+
+A strip along the bottom of the window, above the "Local folder" line, on every page. It shows the one background task that runs (for now a scan): a progress bar, a line such as "Scanning: 412 of 8,943, 3 found" (just the found count when the total is not known), and Cancel. When nothing runs it is hidden and takes no room.
+
+- One task at a time. Any action that starts a scan is disabled while one runs, and says "A scan is already running"; it is enabled again when the scan finishes, is cancelled, or fails.
+- A scan only reads: it does not take the operation lock, does not disable operation buttons, and an operation does not stop it.
+- The strip is separate from the banners (4.1) and the operation dialog's progress (9.3). Leaving Add app does not stop the scan; its result is there on return.
+- A failed scan shows "Scanning failed: <message>" with Dismiss, once; starting the next scan also clears it.
+
+*As built (2026-11-20):* `BackgroundTasks` (presentation) is the registry, `MainWindow.Tasks` holds it and draws the strip. Nothing starts a task yet: page 1's scan buttons (T4b's UI, T5) register through `TryStart` and report with `Report`.
+
 ## 5. Apps page
 
 Mappings are grouped by app: the part of the mapping ID before the dot, named from the app's definition when there is one ("Ryujinx"), otherwise the ID itself. Inside an app, one row per role (mapping), named from the definition's role name ("Saves") or the part after the dot.
