@@ -57,7 +57,7 @@ internal sealed class MainWindow : Window
     private int _stripRefreshPending;
 
     /// <summary>What the footer says when nothing runs in the background.</summary>
-    public const string Idle = "Idle";
+    public const string Idle = BackgroundTasks.Idle;
 
     // The strip only reports, and Dismiss clears a failure; a scan is cancelled where it is started (Add app).
     private void BuildStrip()
@@ -67,17 +67,10 @@ internal sealed class MainWindow : Window
         AutomationProperties.SetName(_stripText, "Background status");
     }
 
-    private readonly StatusPacer _stripPacer = new(Idle);
-
     // The scan runs at its own speed; the footer lags behind it so each line can be read (Pacing.StatusMinimum).
-    // Every change is offered to the pacer the moment it happens, so a scan that starts and ends between two draws
+    // Every change is offered to Tasks.Status the moment it happens, so a scan that starts and ends between two draws
     // is still shown running before the footer says Idle. At most one draw is queued; the flag clears just before
     // the draw, so a change during it queues another.
-    private void OnTasksChanged()
-    {
-        _stripPacer.Offer(Tasks.Current?.Text ?? Idle);
-        RequestStripRefresh();
-    }
 
     private void RequestStripRefresh()
     {
@@ -90,7 +83,7 @@ internal sealed class MainWindow : Window
     private void DrawStrip()
     {
         Volatile.Write(ref _stripRefreshPending, 0);
-        if (_stripPacer.TryNext(out var wait) is { } line)
+        if (Tasks.Status.TryNext(out var wait) is { } line)
         {
             _stripText.Text = line;
         }
@@ -158,7 +151,7 @@ internal sealed class MainWindow : Window
         });
         Content = _overlay;
         BuildStrip();
-        Tasks.Changed += OnTasksChanged;
+        Tasks.Changed += RequestStripRefresh;
         _actions = new ActionFlow(localFolder, _overlay, App.Options.Log);
 
         KeyDown += (_, e) =>

@@ -109,7 +109,16 @@ public sealed class BackgroundTasks
     /// <summary>Shown beside a disabled scan button.</summary>
     public const string ScanRunningReason = "A scan is already running";
 
+    /// <summary>What the footer says when nothing runs in the background.</summary>
+    public const string Idle = "Idle";
+
     private BackgroundTask? _current;
+
+    /// <summary>
+    /// The footer's line, paced so each can be read. It is fed here, in order, on every change; the window draws
+    /// it, and the scan button waits for it (<see cref="StatusPacer.CaughtUp"/>), so the two never disagree.
+    /// </summary>
+    public StatusPacer Status { get; } = new(Idle);
 
     internal object Gate { get; } = new();
 
@@ -202,5 +211,14 @@ public sealed class BackgroundTasks
         Raise();
     }
 
-    internal void Raise() => Changed?.Invoke();
+    internal void Raise()
+    {
+        // Offered under the gate, so two threads cannot hand the footer an older line after a newer one.
+        lock (Gate)
+        {
+            Status.Offer(_current?.Text ?? Idle);
+        }
+
+        Changed?.Invoke();
+    }
 }

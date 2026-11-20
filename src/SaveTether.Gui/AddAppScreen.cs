@@ -134,6 +134,10 @@ internal sealed class AddAppScreen : UserControl, IScreen
         {
             var running = _scans.Tasks.IsRunning;
             cancelTarget = running ? _scans.Tasks.Current : null;
+
+            // The footer lags behind a scan so it can be read; the button waits for it, so the two agree and
+            // clicking over and over cannot queue a drip of lines there.
+            scan.IsEnabled = running || _scans.Tasks.Status.CaughtUp;
             scan.Content = running ? "Cancel scan" : "Scan for games";
             AutomationProperties.SetName(scan, running ? "Cancel the scan" : "Scan for games, including apps that are no longer installed");
             if (!string.IsNullOrWhiteSpace(search.Text))
@@ -345,10 +349,20 @@ internal sealed class AddAppScreen : UserControl, IScreen
         _content.HorizontalAlignment = HorizontalAlignment.Stretch;
         _scans.Changed += OnChanged;
         _scans.Tasks.Changed += OnChanged;
+        void OnAdvanced()
+        {
+            if (!_closed && ReferenceEquals(_page.Content, page))
+            {
+                Refresh();
+            }
+        }
+
+        _scans.Tasks.Status.Advanced += OnAdvanced;
         _unsubscribe = () =>
         {
             _scans.Changed -= OnChanged;
             _scans.Tasks.Changed -= OnChanged;
+            _scans.Tasks.Status.Advanced -= OnAdvanced;
         };
         Refresh();
         search.Focus();

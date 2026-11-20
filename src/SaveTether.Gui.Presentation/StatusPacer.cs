@@ -24,6 +24,24 @@ public sealed class StatusPacer
         _time = time ?? TimeProvider.System;
     }
 
+    /// <summary>Raised, on the thread that drew it, each time <see cref="TryNext"/> hands out a line.</summary>
+    public event Action? Advanced;
+
+    /// <summary>
+    /// True when the line on show is the latest one and none is waiting: the footer has caught up with what
+    /// is happening. The scan button stays locked until then, so the button and the footer agree.
+    /// </summary>
+    public bool CaughtUp
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _waiting.Count == 0 && _shownLine == _last;
+            }
+        }
+    }
+
     /// <summary>The line on show.</summary>
     public string Shown
     {
@@ -64,6 +82,17 @@ public sealed class StatusPacer
     /// <paramref name="wait"/> is how long until it may change (zero when nothing is waiting).
     /// </summary>
     public string? TryNext(out TimeSpan wait)
+    {
+        var next = Take(out wait);
+        if (next is not null)
+        {
+            Advanced?.Invoke();
+        }
+
+        return next;
+    }
+
+    private string? Take(out TimeSpan wait)
     {
         lock (_gate)
         {
