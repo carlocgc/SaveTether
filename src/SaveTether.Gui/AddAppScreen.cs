@@ -130,6 +130,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
         // button says, not on what is true a moment later (a scan may have ended since, and then Cancel does nothing).
         BackgroundTask? cancelTarget = null;
         var showsCancel = false;
+        var countNote = string.Empty;
 
         void Refresh()
         {
@@ -149,11 +150,16 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
             var addedIds = added.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
             var found = _scans.Found.Where(f => !addedIds.Contains(f.App.Id)).ToList();
-            scanNote.Text = running && _scans.Replacing
-                ? "Scanning… The list below stays as it was until the scan finishes."
-                : found.Count == 0
-                    ? (running ? "Looking for apps on this device…" : _scans.WasCancelled ? "Scan cancelled. Nothing was found before it stopped." : "No apps were found on this device. Search for one by name, or scan for games.")
-                    : $"{(!running && _scans.WasCancelled ? "Scan cancelled. " : string.Empty)}{found.Count:N0} found on this device";
+            // The count changes once, when the scan and the footer have both finished, so the three agree; while
+            // either is still going it keeps what it said before (nothing, on the first scan).
+            if (!showsCancel)
+            {
+                countNote = found.Count == 0
+                    ? "No apps were found on this device. Search for one by name, or scan for games."
+                    : $"{found.Count:N0} found on this device";
+            }
+
+            scanNote.Text = countNote;
             var desired = new List<Control>();
             foreach (var f in found)
             {
