@@ -26,7 +26,6 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _checkedAt = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _banners = new() { Spacing = 8 };
     private readonly StackPanel _rows = new() { Spacing = 2 };
-    private readonly Border _rowsBox;
 
     /// <summary>
     /// Above the scrolling area, so it stays in view: the Apps page's buttons, or the open screen's way back
@@ -136,16 +135,17 @@ internal sealed class MainWindow : Window
         footer.Children.Add(_stripText);
         footer.Children.Add(folder);
 
-        _rowsBox = new Border
+        _body = new ScrollViewer { Content = _rows };
+        // The box is the scrollable area's frame: always drawn, outside what scrolls.
+        var bodyBox = new Border
         {
-            Child = _rows,
+            Child = _body,
+            Margin = new Thickness(0, 12, 0, 12),
+            Padding = new Thickness(6),
             BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(10, 4),
-            VerticalAlignment = VerticalAlignment.Top,
         };
-        _body = new ScrollViewer { Content = _rowsBox, Margin = new Thickness(0, 12, 0, 12) };
         _overlay = new Overlay(new DockPanel
         {
             Margin = new Thickness(24),
@@ -156,7 +156,7 @@ internal sealed class MainWindow : Window
                 Dock(_banners, Avalonia.Controls.Dock.Top),
                 Dock(_bar, Avalonia.Controls.Dock.Top),
                 Dock(footer, Avalonia.Controls.Dock.Bottom),
-                _body,
+                bodyBox,
             },
         });
         Content = _overlay;
@@ -214,7 +214,7 @@ internal sealed class MainWindow : Window
 
         // Add app stays open through checks in the background, like setup: it is rebuilt only by the owner.
         _setup = null;
-        _body.Content = _screen ?? _rowsBox;
+        _body.Content = _screen ?? _rows;
         _banners.Children.Clear();
         if (status.Condition == OverallCondition.Unfinished)
         {
@@ -428,7 +428,7 @@ internal sealed class MainWindow : Window
     private void CloseScreen()
     {
         _screen = null;
-        _body.Content = _rowsBox;
+        _body.Content = _rows;
         _bar.Content = _pageActions;
         _checkNow();
     }

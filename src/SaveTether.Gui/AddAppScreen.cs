@@ -96,21 +96,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
         var search = new TextBox { PlaceholderText = "Search all known apps", Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
         AutomationProperties.SetName(search, "Search apps");
         var list = new StackPanel { Spacing = 2 };
-        var listBox = new Border
-        {
-            Child = list,
-            BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(6),
-            IsVisible = false,
-        };
         var scanNote = new TextBlock { Opacity = 0.75, FontSize = 13, TextWrapping = TextWrapping.Wrap };
-        var scan = new Button { Content = "Scan for saved data" };
-        AutomationProperties.SetName(scan, "Scan for saved data, including apps that are no longer installed");
+        var scan = new Button { Content = "Scan for games" };
+        AutomationProperties.SetName(scan, "Scan for games, including apps that are no longer installed");
         var system = new CheckBox { Content = "System files" };
         var states = new CheckBox { Content = "Save states" };
-        var blocked = new TextBlock { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
         var searchVersion = 0;
         StackPanel? page = null;
 
@@ -118,14 +108,12 @@ internal sealed class AddAppScreen : UserControl, IScreen
         {
             var running = _scans.Tasks.IsRunning;
             scan.IsEnabled = !running;
-            blocked.Text = _scans.Tasks.BlockedReason ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(search.Text))
             {
                 return;
             }
 
             list.Children.Clear();
-            listBox.IsVisible = true;
             var addedIds = added.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
             var found = _scans.Found.Where(f => !addedIds.Contains(f.App.Id)).ToList();
             scanNote.Text = found.Count == 0
@@ -166,7 +154,6 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
             // Rows are built only for the (at most 50) matches shown.
             list.Children.Clear();
-            listBox.IsVisible = result.Shown.Count > 0;
             scanNote.Text = result.Total == 0
                 ? "No apps match."
                 : result.HasMore
@@ -219,7 +206,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 classes.Add(Core.Definitions.RoleClass.State);
             }
 
-            _scans.Start(_flow, Core.Detection.ScanOptions.Deep(classes), "Scanning for saved data");
+            _scans.Start(_flow, Core.Detection.ScanOptions.Deep(classes), "Scanning for games");
             Refresh();
         };
 
@@ -250,22 +237,44 @@ internal sealed class AddAppScreen : UserControl, IScreen
         AutomationProperties.SetName(byHand, "Add a folder by hand, for an app not in the list");
         byHand.Click += (_, _) => _ = ShowManualAsync(() => _manual.StartNew(), fromCatalog: true);
         ToolTip.SetTip(scan, "Also lists saves left by apps that are no longer installed");
-        // Pinned above the scrolling list with the way back, so the actions stay in reach however long the list is.
+        // Everything but the list is pinned above the scrolling area, so it stays in reach however long the list is:
+        // the title and what the page is for, the way back, the actions, then the search and how many were found.
+        // The scan and its two choices share a frame to show that the choices belong to the scan.
+        var scanGroup = new Border
+        {
+            Child = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 12,
+                Children = { scan, system, states },
+            },
+            BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(6, 4),
+        };
         var actions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { byHand, scan, system, states, blocked },
+            Children = { byHand, scanGroup },
         };
-        var bar = new StackPanel { Spacing = 8, Children = { Navigation.BackRow("Back to apps", Leave), actions } };
-        page = Page(
-            bar,
-            "Add app",
-            [ScanIntro],
-            search,
-            scanNote,
-            listBox);
+        scanNote.Margin = new Thickness(0, 0, 0, 2);
+        Bar.Content = new StackPanel
+        {
+            Spacing = 8,
+            Children =
+            {
+                new TextBlock { Text = "Add app", FontSize = 22, FontWeight = FontWeight.SemiBold },
+                new TextBlock { Text = ScanIntro, TextWrapping = TextWrapping.Wrap },
+                Navigation.BackRow("Back to apps", Leave),
+                actions,
+                search,
+                scanNote,
+            },
+        };
+        page = list;
         _page.Content = page;
         // This page's list uses the whole width; the form pages keep a readable one (Page() sets it back).
         _content.MaxWidth = double.PositiveInfinity;
