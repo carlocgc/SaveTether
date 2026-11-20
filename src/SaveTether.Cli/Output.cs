@@ -165,10 +165,12 @@ internal static class OutputWriter
 
         if (output.Apps is { } apps)
         {
+            var width = apps.Count == 0 ? 0 : apps.Max(e => e.Id.Length);
             foreach (var entry in apps)
             {
                 var from = entry.Source switch { DefinitionSource.Shared => "shared", DefinitionSource.Imported => "imported (unverified)", _ => "built-in" };
-                stdout.WriteLine(entry.Error is null ? $"  {entry.Id,-20} {entry.Name}  ({from})" : $"  {entry.Id,-20} not usable: {entry.Error}  ({from})");
+                var id = entry.Id.PadRight(width);
+                stdout.WriteLine(entry.Error is null ? $"  {id}  {entry.Name}  ({from})" : $"  {id}  not usable: {entry.Error}  ({from})");
             }
 
             stdout.WriteLine($"{apps.Count.ToString("N0", CultureInfo.InvariantCulture)} app(s).");
