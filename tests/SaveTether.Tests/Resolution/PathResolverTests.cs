@@ -371,6 +371,17 @@ public partial class PathResolverTests
     }
 
     [Fact]
+    public void A_winpath_with_no_prefix_in_the_definition_needs_the_one_set_for_the_device()
+    {
+        using var sandbox = new Sandbox();
+        var set = Prefix(sandbox, "set", "steamuser");
+        var resolver = new PathResolver(Linux("/home/deck"));
+
+        Assert.Equal(Path.Combine(set, "drive_c", "users", "steamuser", "AppData", "Roaming", "x"), Ok(resolver.ResolveWinPath("{appdata}/x", null, new DeviceValues(WinePrefix: set))));
+        Fails(resolver.ResolveWinPath("{appdata}/x", null, DeviceValues.None), ResolveProblem.NeedsValue, "Wine prefix");
+    }
+
+    [Fact]
     public void A_prefix_set_for_the_device_wins_over_the_definition()
     {
         using var sandbox = new Sandbox();

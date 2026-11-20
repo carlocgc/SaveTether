@@ -107,6 +107,25 @@ public class AppAddCliTests
     }
 
     [Fact]
+    public void A_winpath_with_no_prefix_in_the_definition_asks_for_the_wine_prefix_flag()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        ShareDefinition(deck, "winapp", """
+            {
+              "schema": 1, "id": "winapp", "name": "Win App", "kind": "game",
+              "installs": [ { "id": "win", "os": "linux", "detect": { "dir": "{install_dir}" }, "base": { "winpath": "{appdata}/WinApp" } } ],
+              "roles": [ { "id": "saves", "class": "save", "default": true, "path": "saves", "target": "saves" } ],
+            }
+            """);
+
+        var run = deck.Expect(CliApp.ExitRefused, "app", "add", "winapp");
+
+        Assert.Contains("--wine-prefix", run.Out + run.Err, StringComparison.Ordinal);
+        Assert.False(MappingExists(deck, "winapp"));
+    }
+
+    [Fact]
     public void An_app_that_is_not_installed_is_refused_with_what_was_looked_at_and_nothing_is_written()
     {
         using var sandbox = new Sandbox();

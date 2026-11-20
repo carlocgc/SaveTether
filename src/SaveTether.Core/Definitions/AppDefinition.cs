@@ -31,6 +31,16 @@ public enum RoleClass
     Media,
 }
 
+/// <summary>Who vouches for a definition: written and tried by hand, or converted from another source and not tried.</summary>
+public enum DefinitionTier
+{
+    Verified,
+    Imported,
+}
+
+/// <summary>Store IDs of the app, for search and for finding it by ID. Only Steam's app ID for now.</summary>
+public sealed record StoreIds(long? Steam = null);
+
 /// <summary>How an install of the app is recognised on a device. Exactly one field is set.</summary>
 public sealed record DetectRule(string? Dir = null, string? File = null, string? Flatpak = null, long? Steam = null);
 
@@ -42,7 +52,11 @@ public sealed record PrefixRule(long? Steam = null, string? SteamShortcut = null
 /// on Linux is looked up inside a Wine prefix (design 5.2, "winpath").
 /// </summary>
 /// <param name="Path">Set for a plain location.</param>
-/// <param name="WinPath">Set, with <paramref name="Prefix"/>, for a Windows path.</param>
+/// <param name="WinPath">Set for a Windows path.</param>
+/// <param name="Prefix">
+/// For a Windows path: which Wine prefix, by kind. Null when the definition names none; the prefix
+/// set for the device is used, and the install is refused until one is set.
+/// </param>
 public sealed record BaseLocation(string? Path = null, string? WinPath = null, PrefixRule? Prefix = null);
 
 /// <summary>One way the app can exist on a device.</summary>
@@ -82,7 +96,12 @@ public sealed record AppDefinition(
     AppKind Kind,
     IReadOnlyList<InstallDefinition> Installs,
     IReadOnlyList<RoleDefinition> Roles,
-    IReadOnlyList<string> Quirks)
+    IReadOnlyList<string> Quirks,
+    DefinitionTier Tier,
+    string? Origin,
+    StoreIds? StoreIds,
+    IReadOnlyList<string> CloudSaves,
+    IReadOnlyList<string> TestedOn)
 {
     public const int CurrentSchema = 1;
 
