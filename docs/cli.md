@@ -141,7 +141,7 @@ Lists the apps that have a definition, and whether each is built in, shared or i
 
 `--search` keeps the apps whose name or ID contains the text, ignoring case, or whose Steam app ID is the text. The list is long without it.
 
-`--found` lists only the apps found on this device, as the desktop app's Add app page does: an app is found when one of its installs for this system is detected and a save folder of it exists. Newest save first, each with its install, its save folder and when that folder last changed; imported ones show `(unverified)`. It only reads, and it can take a few seconds because every definition is looked at. `--search` then keeps the found apps whose name or ID contains the text.
+`--found` lists only the apps found on this device, as the desktop app's Add app page does: an app is found when one of its installs for this system is detected and a save folder of it exists. For an imported definition with a Steam ID, detected also means that Steam has the game installed (when this device has Steam). Newest save first, each with its install, its save folder and when that folder last changed; imported ones show `(unverified)`. It only reads, and it can take a few seconds because every definition is looked at. `--search` then keeps the found apps whose name or ID contains the text.
 
 ## status
 

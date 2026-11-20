@@ -150,6 +150,14 @@ public static class InstallScan
         {
             cancel.ThrowIfCancellationRequested();
             var installed = resolver.Detect(install, values).IsResolved;
+            // An imported definition detects a game by its own save folder, which stays after the game is gone. When
+            // the game has a Steam ID and this device has Steam, the game must be in a Steam library too.
+            if (installed && definition.Tier == DefinitionTier.Imported && definition.StoreIds?.Steam is { } steamId
+                && resolver.IsSteamInstalled(steamId) == false)
+            {
+                installed = false;
+            }
+
             if (!installed && options.RequireInstall)
             {
                 continue;
