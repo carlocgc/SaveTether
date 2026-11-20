@@ -150,7 +150,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             var addedIds = added.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
             var found = _scans.Found.Where(f => !addedIds.Contains(f.App.Id)).ToList();
             scanNote.Text = running && _scans.Replacing
-                ? $"Scanning… {_scans.Pending:N0} found so far. The list below stays as it was until the scan finishes."
+                ? "Scanning… The list below stays as it was until the scan finishes."
                 : found.Count == 0
                     ? (running ? "Looking for apps on this device…" : _scans.WasCancelled ? "Scan cancelled. Nothing was found before it stopped." : "No apps were found on this device. Search for one by name, or scan for games.")
                     : $"{(!running && _scans.WasCancelled ? "Scan cancelled. " : string.Empty)}{found.Count:N0} found on this device";

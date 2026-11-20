@@ -89,7 +89,8 @@ public class BackgroundTasksTests
         Assert.Equal("Scanning: 412 of 8,943, 3 found", task.Text);
 
         task.Report(500, null, 4);
-        Assert.Equal("Scanning: 4 found", task.Text);
+        Assert.Equal("Scanning…", task.Text);
+        Assert.Equal(4, task.Found);
         Assert.Equal(3, changes);
     }
 

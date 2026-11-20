@@ -46,12 +46,15 @@ public sealed class BackgroundTask : IDisposable
     /// <summary>The task's work watches this; it is signalled by <see cref="Cancel"/>.</summary>
     public CancellationToken Token { get; }
 
-    /// <summary>The strip's line: "Scanning: 412 of 8,943, 3 found", or the failure's message.</summary>
+    /// <summary>
+    /// The strip's line: "Scanning: 412 of 8,943, 3 found" when the total is known, otherwise just "Scanning…" (a count
+    /// that starts at 0 and jumps, and that counts what the page lists differently, said nothing), or the failure's message.
+    /// </summary>
     public string Text => State == BackgroundTaskState.Failed
         ? $"{Name} failed: {Error}"
         : Total is { } total
             ? string.Create(CultureInfo.InvariantCulture, $"{Name}: {Done:N0} of {total:N0}, {Found:N0} found")
-            : string.Create(CultureInfo.InvariantCulture, $"{Name}: {Found:N0} found");
+            : $"{Name}…";
 
     /// <summary>From the task's thread.</summary>
     public void Report(int done, int? total, int found)
