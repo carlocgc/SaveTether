@@ -419,6 +419,14 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             return (none, "single file");
         }
 
+        // The manifest reaches a sibling of Roaming, Local or LocalLow by going up; the same folder is the token's own.
+        var up = Regex.Match(path, @"^<win(?:LocalAppData|AppData)>/\.\./(Roaming|LocalLow|Local)/", RegexOptions.IgnoreCase);
+        if (up.Success)
+        {
+            var sibling = up.Groups[1].Value.ToLowerInvariant() switch { "roaming" => "<winAppData>", "locallow" => "<winLocalAppDataLow>", _ => "<winLocalAppData>" };
+            path = sibling + "/" + path[up.Length..];
+        }
+
         var slash = path.IndexOf('/', StringComparison.Ordinal);
         var head = slash < 0 ? path : path[..slash];
         var rest = slash < 0 ? string.Empty : path[(slash + 1)..];
