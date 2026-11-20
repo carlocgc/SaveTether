@@ -68,12 +68,29 @@ public class StatusCheckTests
         Assert.Equal(OverallCondition.AllLinked, ready.Condition);
         Assert.Equal("Ready to link", Assert.Single(ready.Mappings).Word.Word);
 
+        // Green, but not "All linked" while nothing is (found by the owner with every link reverted).
+        Assert.Equal("1 ready to link", ready.Headline);
+        Assert.False(ready.IsAmber);
+
         pc.Save("GAME1/save.bin", "one");
         pc.Ok("apply", Id, "--copy");
         var linked = StatusCheck.Run(local);
         Assert.Equal(OverallCondition.AllLinked, linked.Condition);
         Assert.Equal("All linked", linked.Headline);
         Assert.False(linked.IsAmber);
+
+        // A second folder here, not linked yet: both counted. A mapping only another device has is not counted.
+        var states = sandbox.Dir("pc", "states");
+        pc.Ok("map", "add", "ppsspp.states", "--target", "ppsspp/STATES", "--source", states);
+        var deck = new CliDevice(sandbox, "deck");
+        deck.Ok("init", "--sync-root", pc.SyncRoot, "--device", "deck");
+        deck.Ok("map", "add", "other.saves", "--target", "other/Saves", "--source", sandbox.Dir("deck", "other"));
+        var mixed = StatusCheck.Run(local);
+        Assert.Equal(OverallCondition.AllLinked, mixed.Condition);
+        Assert.Contains(mixed.Mappings, m => m.Word.Word == "Not on this device");
+        Assert.Equal("1 linked, 1 ready to link", mixed.Headline);
+        pc.Ok("apply", "ppsspp.states");
+        Assert.Equal("All linked", StatusCheck.Run(local).Headline);
 
         // The link replaced by a real folder with files: the app's folder was restored from a backup, say.
         Directory.Delete(pc.Source);
