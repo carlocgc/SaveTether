@@ -371,7 +371,7 @@ public partial class PathResolverTests
     }
 
     [Fact]
-    public void A_winpath_with_no_prefix_in_the_definition_needs_the_one_set_for_the_device_and_the_hint_names_the_flag()
+    public void A_winpath_with_no_prefix_in_the_definition_needs_the_one_set_for_the_device()
     {
         using var sandbox = new Sandbox();
         var set = Prefix(sandbox, "set", "steamuser");

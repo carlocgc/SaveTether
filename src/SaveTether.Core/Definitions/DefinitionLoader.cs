@@ -90,6 +90,9 @@ public static class DefinitionLoader
         ["verified"] = DefinitionTier.Verified, ["imported"] = DefinitionTier.Imported,
     };
 
+    /// <summary>The stores whose copies of a game can have cloud saves, as "cloud_saves" names them.</summary>
+    internal static readonly string[] CloudStores = ["steam", "gog", "epic", "xbox", "ubisoft", "ea"];
+
     /// <summary>
     /// Reads a bundle: gzip-compressed JSON Lines, one definition per line. A bad line is reported
     /// with its line number in the bundle and the other lines still load. Blank lines are skipped.
@@ -103,8 +106,25 @@ public static class DefinitionLoader
         var ids = new HashSet<string>(StringComparer.Ordinal);
         try
         {
-            using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress, leaveOpen: true);
-            using var reader = new StreamReader(gzip, System.Text.Encoding.UTF8);
+            // A cut-off gzip stream usually ends quietly instead of throwing, so the length the
+            // file trailer promises is checked against what came out.
+            using var raw = new MemoryStream();
+            stream.CopyTo(raw);
+            var rawBytes = raw.GetBuffer().AsSpan(0, (int)raw.Length);
+            using var text = new MemoryStream();
+            using (var gzip = new System.IO.Compression.GZipStream(new MemoryStream(raw.GetBuffer(), 0, (int)raw.Length), System.IO.Compression.CompressionMode.Decompress))
+            {
+                gzip.CopyTo(text);
+            }
+
+            if (rawBytes.Length > 0 && (rawBytes.Length < 18 || System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(rawBytes[^4..]) != (uint)text.Length))
+            {
+                errors.Add(new DefinitionError(BundleName, 1, "the bundle ends early: it is cut off or damaged"));
+                return (definitions, errors);
+            }
+
+            text.Position = 0;
+            using var reader = new StreamReader(text, new System.Text.UTF8Encoding(false, throwOnInvalidBytes: true));
             while (reader.ReadLine() is { } line)
             {
                 lineNumber++;
@@ -133,6 +153,10 @@ public static class DefinitionLoader
         catch (InvalidDataException e)
         {
             errors.Add(new DefinitionError(BundleName, lineNumber + 1, $"the bundle is not readable gzip: {e.Message}"));
+        }
+        catch (System.Text.DecoderFallbackException)
+        {
+            errors.Add(new DefinitionError(BundleName, lineNumber + 1, "the bundle is not valid UTF-8"));
         }
 
         return (definitions, errors);
@@ -200,18 +224,18 @@ public static class DefinitionLoader
             RequireDistinctTargets(roles);
 
             var quirks = Strings(Field(root, "quirks"), "\"quirks\"");
-            var tier = Field(root, "tier") is { } tierNode ? OneOf(tierNode, "\"tier\"", Tiers) : DefinitionTier.Verified;
+            var tier = Field(root, "tier") is { } tierNode ? OneOf(tierNode, "\"tier\"", Tiers) ?? DefinitionTier.Verified : DefinitionTier.Verified;
             var origin = Field(root, "origin") is { } originNode ? Text(originNode, "\"origin\"") : null;
             var storeIds = ReadStoreIds(Field(root, "store_ids"));
             var cloudSaves = ReadCloudSaves(Field(root, "cloud_saves"));
-            var testedOn = Field(root, "tested_on") is { } testedNode ? Strings(testedNode, "\"tested_on\"") : null;
+            var testedOn = Strings(Field(root, "tested_on"), "\"tested_on\"");
 
             return Errors.Count > 0
                 ? null
                 : new AppDefinition(
                     (int)schema!.Value, id!, name!, kind!.Value,
                     installs.Select(i => i!.Value.Install).ToList(), roles.Select(r => r!.Value.Role).ToList(), quirks,
-                    tier ?? DefinitionTier.Verified, origin, storeIds, cloudSaves, testedOn);
+                    tier, origin, storeIds, cloudSaves, testedOn);
         }
 
         private StoreIds? ReadStoreIds(JsonTreeNode? node)
@@ -222,30 +246,31 @@ public static class DefinitionLoader
             }
 
             var steam = Field(node, "steam") is { } steamNode ? PositiveInteger(steamNode, "\"steam\"") : null;
-            return new StoreIds(steam);
+            return steam is null ? null : new StoreIds(steam);
         }
 
-        private List<string>? ReadCloudSaves(JsonTreeNode? node)
+        private List<string> ReadCloudSaves(JsonTreeNode? node)
         {
+            var stores = new List<string>();
             if (node is null)
             {
-                return null;
+                return stores;
             }
 
-            var items = List(node, "\"cloud_saves\"", mustHaveItems: true);
-            var stores = new List<string>();
+            var items = List(node, "\"cloud_saves\"", mustHaveItems: false);
+            if (node.Items is { Count: 0 })
+            {
+                Fail(node.Line, "\"cloud_saves\" is empty: leave it out when no store keeps saves in the cloud");
+            }
+
             foreach (var item in items)
             {
-                if (Text(item, "an entry of \"cloud_saves\"") is not { } store)
+                if (OneOfKey(item, "an entry of \"cloud_saves\"", CloudStores) is not { } store)
                 {
                     continue;
                 }
 
-                if (!AppDefinition.CloudStores.Contains(store))
-                {
-                    Fail(item.Line, $"an entry of \"cloud_saves\" must be one of {string.Join(", ", AppDefinition.CloudStores.Select(s => $"\"{s}\""))}, but is \"{store}\"");
-                }
-                else if (stores.Contains(store))
+                if (stores.Contains(store))
                 {
                     Fail(item.Line, $"\"cloud_saves\" names \"{store}\" twice");
                 }
@@ -654,19 +679,25 @@ public static class DefinitionLoader
         private T? OneOf<T>(JsonTreeNode? node, string what, Dictionary<string, T> allowed)
             where T : struct
         {
+            var text = OneOfKey(node, what, allowed.Keys);
+            return text is null ? null : allowed[text];
+        }
+
+        private string? OneOfKey(JsonTreeNode? node, string what, IEnumerable<string> allowed)
+        {
             var text = Text(node, what);
             if (text is null)
             {
                 return null;
             }
 
-            if (!allowed.TryGetValue(text, out var value))
+            if (!allowed.Contains(text, StringComparer.Ordinal))
             {
-                Fail(node!.Line, $"{what} must be one of {string.Join(", ", allowed.Keys.Select(k => $"\"{k}\""))}, but is \"{text}\"");
+                Fail(node!.Line, $"{what} must be one of {string.Join(", ", allowed.Select(k => $"\"{k}\""))}, but is \"{text}\"");
                 return null;
             }
 
-            return value;
+            return text;
         }
 
         private List<JsonTreeNode> List(JsonTreeNode? node, string what, bool mustHaveItems)

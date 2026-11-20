@@ -97,18 +97,15 @@ public sealed record AppDefinition(
     IReadOnlyList<InstallDefinition> Installs,
     IReadOnlyList<RoleDefinition> Roles,
     IReadOnlyList<string> Quirks,
-    DefinitionTier Tier = DefinitionTier.Verified,
-    string? Origin = null,
-    StoreIds? StoreIds = null,
-    IReadOnlyList<string>? CloudSaves = null,
-    IReadOnlyList<string>? TestedOn = null)
+    DefinitionTier Tier,
+    string? Origin,
+    StoreIds? StoreIds,
+    IReadOnlyList<string> CloudSaves,
+    IReadOnlyList<string> TestedOn)
 {
     public const int CurrentSchema = 1;
 
     public const string FileExtension = ".jsonc";
-
-    /// <summary>The stores whose copies of a game can have cloud saves, as "cloud_saves" names them.</summary>
-    public static readonly IReadOnlyList<string> CloudStores = ["steam", "gog", "epic", "xbox", "ubisoft", "ea"];
 }
 
 /// <summary>One problem in a definition file, with where it is.</summary>

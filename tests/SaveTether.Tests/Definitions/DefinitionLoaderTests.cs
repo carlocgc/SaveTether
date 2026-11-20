@@ -136,7 +136,7 @@ public partial class DefinitionLoaderTests
     [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"store_ids\": { \"steam\": 0 },", 14, "\"steam\" must be greater than 0")]
     [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"store_ids\": { \"gog\": 5 },", 14, "unknown field \"gog\"")]
     [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"store_ids\": [1],", 14, "\"store_ids\" must be an object")]
-    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"cloud_saves\": [],", 14, "\"cloud_saves\" is empty")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"cloud_saves\": [],", 14, "\"cloud_saves\" is empty: leave it out")]
     [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"cloud_saves\": [\"itch\"],", 14, "must be one of \"steam\", \"gog\", \"epic\", \"xbox\", \"ubisoft\", \"ea\", but is \"itch\"")]
     [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"cloud_saves\": [\"gog\", \"gog\"],", 14, "names \"gog\" twice")]
     [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"cloud_saves\": \"steam\",", 14, "\"cloud_saves\" must be a list")]
@@ -180,8 +180,8 @@ public partial class DefinitionLoaderTests
         Assert.Equal(DefinitionTier.Verified, plain.Tier);
         Assert.Null(plain.Origin);
         Assert.Null(plain.StoreIds);
-        Assert.Null(plain.CloudSaves);
-        Assert.Null(plain.TestedOn);
+        Assert.Empty(plain.CloudSaves);
+        Assert.Empty(plain.TestedOn);
 
         var full = Load(Valid.Replace(
             "\"quirks\": [\"Link usr/save, not mlc01.\"],",
@@ -193,7 +193,7 @@ public partial class DefinitionLoaderTests
         Assert.Equal(["steam", "epic"], full.CloudSaves);
         Assert.Equal(["Steam Deck", "Windows 11"], full.TestedOn);
 
-        Assert.Null(Load(Valid.Replace("\"quirks\"", "\"store_ids\": { }, \"quirks\"", StringComparison.Ordinal)).StoreIds!.Steam);
+        Assert.Null(Load(Valid.Replace("\"quirks\"", "\"store_ids\": { }, \"quirks\"", StringComparison.Ordinal)).StoreIds);
     }
 
     [Fact]
@@ -261,6 +261,36 @@ public partial class DefinitionLoaderTests
         Assert.Contains("\"id\" must be lowercase letters", errors[0].Message, StringComparison.Ordinal);
         Assert.Contains("another line already has the id \"alpha\"", errors[2].Message, StringComparison.Ordinal);
         Assert.StartsWith("bundle(2): ", errors[0].ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_truncated_bundle_is_reported_once()
+    {
+        using var whole = Bundle(Line("alpha"), Line("beta"), Line("gamma"));
+        var bytes = whole.ToArray();
+
+        foreach (var keep in new[] { bytes.Length - 1, bytes.Length - 9, bytes.Length / 2 })
+        {
+            using var cut = new MemoryStream(bytes[..keep]);
+            var (_, errors) = DefinitionLoader.ParseBundle(cut);
+            Assert.Contains(errors, e => e.Message.Contains("ends early", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void A_bundle_with_invalid_utf8_is_an_error_not_a_garbled_definition()
+    {
+        var bytes = new MemoryStream();
+        using (var gzip = new System.IO.Compression.GZipStream(bytes, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true))
+        {
+            gzip.Write(System.Text.Encoding.UTF8.GetBytes(Line("alpha") + "\n"));
+            gzip.Write([0xFF, 0xFE, (byte)'\n']);
+        }
+
+        bytes.Position = 0;
+        var (_, errors) = DefinitionLoader.ParseBundle(bytes);
+
+        Assert.Contains(errors, e => e.Message.Contains("not valid UTF-8", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -419,7 +449,7 @@ public partial class DefinitionLoaderTests
         Assert.Equal(DefinitionLoader.Systems.Keys, Values(defs.GetProperty("os")));
         Assert.Equal(DefinitionLoader.Classes.Keys, Values(role.GetProperty("properties").GetProperty("class")));
         Assert.Equal(DefinitionLoader.Tiers.Keys, Values(root.GetProperty("properties").GetProperty("tier")));
-        Assert.Equal(AppDefinition.CloudStores, root.GetProperty("properties").GetProperty("cloud_saves").GetProperty("items").GetProperty("enum").EnumerateArray().Select(v => v.GetString()!));
+        Assert.Equal(DefinitionLoader.CloudStores, root.GetProperty("properties").GetProperty("cloud_saves").GetProperty("items").GetProperty("enum").EnumerateArray().Select(v => v.GetString()!));
 
         Assert.Equal(AppDefinition.CurrentSchema, root.GetProperty("properties").GetProperty("schema").GetProperty("const").GetInt32());
         Assert.Equal(8, role.GetProperty("properties").GetProperty("entry_depth").GetProperty("maximum").GetInt32());
