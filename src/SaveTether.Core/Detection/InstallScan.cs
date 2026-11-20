@@ -127,6 +127,25 @@ public static class InstallScan
         }
     }
 
+    /// <summary>
+    /// Whether an install of the app is on this device: its detect rule matches. An imported definition detects a game by its own
+    /// save folder, which stays after the game is gone, so when the game has a Steam ID and this device has Steam, Steam
+    /// must have the game installed too. The scan and page 1's per-app label both ask this, so they agree.
+    /// </summary>
+    public static bool IsInstalled(AppDefinition definition, InstallDefinition install, PathResolver resolver, DeviceValues values)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(install);
+        ArgumentNullException.ThrowIfNull(resolver);
+        if (!resolver.Detect(install, values).IsResolved)
+        {
+            return false;
+        }
+
+        return !(definition.Tier == DefinitionTier.Imported && definition.StoreIds?.Steam is { } steamId
+            && resolver.IsSteamInstalled(steamId) == false);
+    }
+
     /// <summary>The hits of one app: at most one per install.</summary>
     public static IEnumerable<ScanHit> Scan(
         AppDefinition definition,
@@ -149,15 +168,7 @@ public static class InstallScan
         foreach (var install in definition.Installs.Where(i => i.Os.Contains(environment.Os)))
         {
             cancel.ThrowIfCancellationRequested();
-            var installed = resolver.Detect(install, values).IsResolved;
-            // An imported definition detects a game by its own save folder, which stays after the game is gone. When
-            // the game has a Steam ID and this device has Steam, the game must be in a Steam library too.
-            if (installed && definition.Tier == DefinitionTier.Imported && definition.StoreIds?.Steam is { } steamId
-                && resolver.IsSteamInstalled(steamId) == false)
-            {
-                installed = false;
-            }
-
+            var installed = IsInstalled(definition, install, resolver, values);
             if (!installed && options.RequireInstall)
             {
                 continue;

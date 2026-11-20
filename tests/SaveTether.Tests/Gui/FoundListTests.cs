@@ -108,6 +108,24 @@ public class FoundListTests
     }
 
     [Fact]
+    public void Page_1_labels_an_imported_steam_game_found_only_when_steam_has_it_installed_as_the_scan_does()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var imported = AppAddCliTests.TestApp.Replace("\"quirks\"", "\"tier\": \"imported\", \"store_ids\": { \"steam\": 424242 }, \"quirks\"", StringComparison.Ordinal);
+        AppAddCliTests.ShareDefinition(deck, "testapp", imported);
+        // The game's own folder is here, as it is after an uninstall; Steam is here and has no manifest for the game.
+        Directory.CreateDirectory(Path.Combine(deck.Home, "native", "data"));
+        Directory.CreateDirectory(Path.Combine(deck.Home, ".local", "share", "Steam", "steamapps"));
+
+        Assert.Equal(CatalogStatus.NotFound, flow.Detect("testapp"));
+
+        File.WriteAllText(Path.Combine(deck.Home, ".local", "share", "Steam", "steamapps", "appmanifest_424242.acf"), "x");
+
+        Assert.Equal(CatalogStatus.Found, flow.Detect("testapp"));
+    }
+
+    [Fact]
     public void Page_2_of_an_imported_app_is_marked_unverified_and_a_built_in_one_is_not()
     {
         using var sandbox = new Sandbox();

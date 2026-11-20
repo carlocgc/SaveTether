@@ -230,7 +230,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         var stored = device?.Apps?.GetValueOrDefault(appId);
         var values = new DeviceValues(stored?.InstallDir, stored?.SdCard, stored?.WinePrefix);
         var resolver = new PathResolver(environment);
-        return definition.Installs.Where(i => i.Os.Contains(environment.Os)).Any(i => resolver.Detect(i, values).IsResolved)
+        return definition.Installs.Where(i => i.Os.Contains(environment.Os)).Any(i => InstallScan.IsInstalled(definition, i, resolver, values))
             ? CatalogStatus.Found
             : CatalogStatus.NotFound;
     }
