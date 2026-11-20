@@ -166,7 +166,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     }
 
     public static string FirstDeviceTitle(int count, string firstRole) =>
-        count == 1 ? $"{firstRole} has saves only on this device" : $"{count} apps have saves only on this device";
+        count == 1 ? $"{firstRole} has saves only on this device" : $"{count} save folders have saves only on this device";
 
     public const string FirstDeviceShare = "Share these saves";
     public const string FirstDeviceStartEmpty = "Start empty";

@@ -338,7 +338,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                     var choice = pressed == share ? SetupChoice.Copy : SetupChoice.NoCopy;
                     var batch = firstDevice.Select(r => r.MappingId).ToList();
                     var (more, still) = await Work("Checking each mapping…", () => session.PlanApplyAll(batch, choice));
-                    foreach (var plan in more)
+                    foreach (var plan in more.Where(p => p.Classification == Classification.FirstDevice))
                     {
                         chosen[plan.MappingId] = choice;
                     }
