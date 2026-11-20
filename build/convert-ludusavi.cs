@@ -796,7 +796,7 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
     }
 
     /// <summary>
-    /// An ID is a slug of the name. Games with the same slug each get their Steam app ID appended; those without one are
+    /// An ID is a slug of the name, with the Steam app ID appended when the game has one; games without one share the plain slug and are
     /// numbered after the first. A slug a verified definition uses drops every game with it.
     /// </summary>
     private void AssignIds(List<GameOut> games, ConversionResult result)
@@ -822,20 +822,16 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
                 continue;
             }
 
-            if (members.Count > 1)
-            {
-                result.Bump("games whose ID needed the Steam app ID or a number", members.Count);
-            }
-
             var plainTaken = false;
             var number = 1;
             foreach (var member in members)
             {
-                var candidate = members.Count == 1 ? group.Key
-                    : member.Steam is not null ? $"{group.Key}-{member.Steam}"
-                    : !plainTaken ? group.Key
+                // A game with a Steam app ID always gets it appended, so its ID does not change when another game with the same slug appears.
+                // Those without one take the plain slug, then numbers.
+                var candidate = member.Steam is not null && member.Slug.Length > 0 ? $"{group.Key}-{member.Steam}"
+                    : member.Steam is not null || !plainTaken ? group.Key
                     : $"{group.Key}-{++number}";
-                if (members.Count > 1 && member.Steam is null)
+                if (member.Steam is null)
                 {
                     plainTaken = true;
                 }
@@ -855,6 +851,10 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
                 }
 
                 member.Id = candidate;
+                if (candidate != group.Key)
+                {
+                    result.Bump("games whose ID has the Steam app ID or a number");
+                }
             }
         }
 
