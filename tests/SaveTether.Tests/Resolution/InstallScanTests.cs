@@ -226,6 +226,43 @@ public class InstallScanTests
     }
 
     [Fact]
+    public void A_linked_install_folder_with_a_real_save_folder_inside_has_no_newest_write()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.Dir("home", ".local", "share");
+        sandbox.FileAt("x", "elsewhere", "saves", "a.sav");
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(home, ".local", "share", "game"), Path.Combine(sandbox.Work, "elsewhere"));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return; // This machine may not create links; the check is covered where it can.
+        }
+
+        Assert.Null(Assert.Single(Scan(Linux(home), Native())).NewestWrite);
+    }
+
+    [Fact]
+    public void A_link_above_the_install_folder_is_the_owners_layout_and_is_not_a_link_to_avoid()
+    {
+        using var sandbox = new Sandbox();
+        sandbox.FileAt("x", "real", ".local", "share", "game", "saves", "a.sav");
+        var home = Path.Combine(sandbox.Work, "home");
+        try
+        {
+            Directory.CreateSymbolicLink(home, Path.Combine(sandbox.Work, "real"));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        Assert.NotNull(Assert.Single(Scan(Linux(home), Native())).NewestWrite);
+    }
+
+    [Fact]
     public void A_scan_changes_nothing()
     {
         using var sandbox = new Sandbox();

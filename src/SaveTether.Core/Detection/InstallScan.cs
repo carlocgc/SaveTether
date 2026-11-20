@@ -121,7 +121,10 @@ public static class InstallScan
                     continue;
                 }
 
-                var hit = new ScanHit(definition.Id, install.Id, folder.Path!, NewestWrite(folder.Path!, cancel));
+                // A link anywhere from the install's own folder down to the save folder would show another place's files.
+                var baseFolder = resolver.ResolveBase(install.Base, values);
+                var linked = IsLinkedWithin(baseFolder.IsResolved ? baseFolder.Path : null, folder.Path!);
+                var hit = new ScanHit(definition.Id, install.Id, folder.Path!, linked ? null : NewestWrite(folder.Path!, cancel));
                 if (best is null || (hit.NewestWrite ?? DateTime.MinValue) > (best.NewestWrite ?? DateTime.MinValue))
                 {
                     best = hit;
@@ -133,6 +136,41 @@ public static class InstallScan
                 yield return best;
             }
         }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="folder"/>, or a folder above it down to <paramref name="top"/> (the install's own folder),
+    /// is a link. Folders above <paramref name="top"/> are not looked at: a linked home or library drive is the owner's own layout.
+    /// </summary>
+    internal static bool IsLinkedWithin(string? top, string folder)
+    {
+        try
+        {
+            var current = new DirectoryInfo(Path.GetFullPath(folder));
+            var stop = top is null ? null : Path.TrimEndingDirectorySeparator(Path.GetFullPath(top));
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            var underTop = stop is not null && current.FullName.StartsWith(stop + Path.DirectorySeparatorChar, comparison);
+            while (current is not null)
+            {
+                if (current.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    return true;
+                }
+
+                if (!underTop || string.Equals(Path.TrimEndingDirectorySeparator(current.FullName), stop, comparison))
+                {
+                    return false;
+                }
+
+                current = current.Parent;
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>The newest file write within <see cref="MaxDepth"/> levels, looking at no more than <see cref="MaxEntries"/> entries.</summary>
