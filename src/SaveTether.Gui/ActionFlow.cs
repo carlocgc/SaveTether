@@ -21,6 +21,12 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
     private readonly LocalStore _local = new(localFolder);
 
+    /// <summary>
+    /// Checks now and shows the result, from inside an operation at a point where it holds no lock: after an add,
+    /// before "Apply it now?", so the page behind the question shows the app just added. Set by the app.
+    /// </summary>
+    public Func<Task> Refresh { get; set; } = () => Task.CompletedTask;
+
     public Task ApplyAsync(MappingState mapping, bool useThisCopy)
     {
         ArgumentNullException.ThrowIfNull(mapping);

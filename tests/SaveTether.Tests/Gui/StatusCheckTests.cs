@@ -113,8 +113,22 @@ public class StatusCheckTests
         Directory.Move(pc.SyncRoot, aside);
         var unplugged = StatusCheck.Run(local);
         Assert.Equal(OverallCondition.SyncRootUnavailable, unplugged.Condition);
-        Assert.NotNull(unplugged.Detail);
-        Assert.Contains(pc.SyncRoot, Texts.Banner(unplugged), StringComparison.Ordinal);
+        Assert.Equal("it does not exist", unplugged.Detail);
+        Assert.Equal($"The sync folder {pc.SyncRoot} is not available: it does not exist. If it is on a drive or a network share, connect it.", Texts.Banner(unplugged));
+
+        // One sentence, with the reason in it: no second line repeating it.
+        Assert.Null(Texts.BannerDetail(unplugged));
+
+        // A sync folder that cannot be read (on the Deck, a FUSE mount whose process had died) is row 4 too, not a failed check.
+        if (!OperatingSystem.IsWindows())
+        {
+            File.CreateSymbolicLink(pc.SyncRoot, Path.GetFileName(pc.SyncRoot));
+            var unreadable = StatusCheck.Run(local);
+            Assert.Equal(OverallCondition.SyncRootUnavailable, unreadable.Condition);
+            Assert.Contains("is not available: it cannot be read (", Texts.Banner(unreadable), StringComparison.Ordinal);
+            File.Delete(pc.SyncRoot);
+        }
+
         Directory.Move(aside, pc.SyncRoot);
 
         // Row 5: another install took the device name over.

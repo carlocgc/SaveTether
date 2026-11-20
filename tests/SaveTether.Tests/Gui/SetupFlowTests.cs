@@ -149,6 +149,28 @@ public class SetupFlowTests
         Assert.False(Directory.Exists(sdCard));
     }
 
+    // Found on the Deck: step 1 on a FUSE mount whose process had died showed "Something went wrong".
+    [Fact]
+    public void Step_1_says_a_folder_that_cannot_be_read_cannot_be_read()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // Making a symbolic link needs a privilege there.
+        }
+
+        using var sandbox = new Sandbox();
+        var (flow, local) = NewFlow(sandbox, "pc");
+        var loop = sandbox.At("loop");
+        File.CreateSymbolicLink(loop, "loop");
+
+        var check = flow.CheckSyncFolder(loop);
+
+        Assert.Equal(SyncFolderFinding.Missing, check.Finding);
+        Assert.Contains("cannot be read", check.Sentence, StringComparison.Ordinal);
+        Assert.False(check.CanContinue);
+        Assert.Null(local.TryReadBootstrap());
+    }
+
     [Fact]
     public void A_refusal_says_its_step_and_writes_nothing()
     {

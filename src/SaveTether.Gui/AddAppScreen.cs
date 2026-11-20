@@ -352,6 +352,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
         App.Options.Log.Write($"app add {view.AppId}: added {string.Join(", ", result.Added)}");
         Leave();
+        await actions.Refresh();
         var text = AddAppFlow.AddedText(result.Added, result.AlreadyLinked);
         if (result.ToApply.Count == 0)
         {
@@ -650,6 +651,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
         App.Options.Log.Write($"map add {result.Added}: added by hand");
         Leave();
+        await actions.Refresh();
         var name = form.IsJoin ? result.Added! : input.AppName!.Trim();
         var notNow = new Button { Content = "Not now" };
         var apply = new Button { Content = "Apply" };

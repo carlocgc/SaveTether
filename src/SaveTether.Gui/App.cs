@@ -193,6 +193,7 @@ internal sealed class App : Application
         if (_window is null)
         {
             _window = new MainWindow(Options.LocalFolder, CheckNow, Quit, OperateAsync);
+            _window.Actions.Refresh = RefreshAsync;
             _window.Closing += OnWindowClosing;
             if (_last is not null)
             {
@@ -246,6 +247,19 @@ internal sealed class App : Application
                 Dispatcher.UIThread.Post(() => Apply(result));
             }
         });
+    }
+
+    /// <summary>
+    /// A check run by an operation itself, between its steps, while no lock is held (<see cref="ActionFlow.Refresh"/>);
+    /// <see cref="CheckNow"/> does not run while an operation is under way.
+    /// </summary>
+    private async Task RefreshAsync()
+    {
+        var result = await Task.Run(() => _monitor.Run());
+        if (result is not null)
+        {
+            Apply(result);
+        }
     }
 
     public void Quit()

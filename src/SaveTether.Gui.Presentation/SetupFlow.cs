@@ -117,6 +117,12 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
             return _syncFolder = new SyncFolderCheck(SyncFolderFinding.NetworkDrive, path, [], Workspace.NetworkSyncRootMessage(path));
         }
 
+        if (SharedStore.ReadProblem(path) is { } problem)
+        {
+            return _syncFolder = new SyncFolderCheck(
+                SyncFolderFinding.Missing, path, [], $"{path} cannot be read ({problem}). If it is on a network share or a mounted drive, reconnect or mount it again.");
+        }
+
         if (SafeFs.Probe(PathRules.ResolveAll(path)) != EntryKind.Directory)
         {
             return _syncFolder = new SyncFolderCheck(
