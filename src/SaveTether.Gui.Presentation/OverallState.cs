@@ -128,7 +128,11 @@ public static class StatusCheck
                 : report.DeviceFileMismatch ? OverallCondition.DeviceNameInUse
                 : mappings.Any(m => m.Word.NeedsAttention) ? OverallCondition.NeedsAttention
                 : OverallCondition.AllLinked;
-            return new OverallStatus(condition, report, mappings, report.SyncRootProblem);
+            // Banner B3 is one sentence with the reason in a few words; the core's longer message would repeat it.
+            var detail = condition == OverallCondition.SyncRootUnavailable
+                ? new SharedStore(report.SyncRoot).NotAvailableReason
+                : report.SyncRootProblem;
+            return new OverallStatus(condition, report, mappings, detail);
         }
         catch (StoreException e) when (e.Problem == StoreProblem.SchemaTooNew)
         {

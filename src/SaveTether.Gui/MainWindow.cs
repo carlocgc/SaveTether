@@ -144,7 +144,7 @@ internal sealed class MainWindow : Window
         }
         else if (Texts.Banner(status) is { } banner)
         {
-            _banners.Children.Add(Banner(banner, status.Detail));
+            _banners.Children.Add(Banner(banner, Texts.BannerDetail(status)));
         }
 
         // Banner B5: the entry that starts the app with the session names a program that is gone (section 11).

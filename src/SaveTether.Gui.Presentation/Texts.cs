@@ -16,6 +16,13 @@ public static class Texts
 
     public const string Quit = "Quit";
 
+    /// <summary>The banner's second line: the core's message, except for B3, whose one sentence holds its reason.</summary>
+    public static string? BannerDetail(OverallStatus status)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+        return status.Condition == OverallCondition.SyncRootUnavailable ? null : status.Detail;
+    }
+
     /// <summary>The banner sentence for a device-wide condition (section 4.1), or null when there is none.</summary>
     public static string? Banner(OverallStatus status)
     {
@@ -28,7 +35,7 @@ public static class Texts
             OverallCondition.CannotCheck => "SaveTether cannot check this device.",
             OverallCondition.Unfinished => "An operation did not finish. Nothing else can be done until it is recovered.",
             OverallCondition.SyncRootUnavailable =>
-                $"The sync folder {status.Report?.SyncRoot} is not available. If it is on a drive or a network share, connect it.",
+                $"The sync folder {status.Report?.SyncRoot} is not available: {status.Detail ?? "it does not exist"}. If it is on a drive or a network share, connect it.",
             OverallCondition.DeviceNameInUse =>
                 $"Another SaveTether install uses the device name '{status.Report?.DeviceName}'. Two machines with one name would apply each other's folders.",
             OverallCondition.CheckFailed => "SaveTether's health checks keep failing. The details are in gui.log in its local folder.",

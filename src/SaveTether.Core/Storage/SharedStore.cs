@@ -39,21 +39,62 @@ public sealed class SharedStore
     public string MetaRoot { get; }
 
     /// <summary>
-    /// True when the marker folder is present. Without it nothing may run (design 5.3, invariant 5):
-    /// an unmounted drive or a sync that has not arrived yet both look like "not initialized".
+    /// True when the marker folder is present and can be read. Without it nothing may run (design 5.3, invariant 5):
+    /// an unmounted drive, a mount that stopped answering, and a sync that has not arrived yet all look like "not
+    /// initialized".
     /// </summary>
-    public bool IsInitialized => SafeFs.Probe(MetaRoot) == EntryKind.Directory;
+    public bool IsInitialized => ReadProblem(MetaRoot) is null && SafeFs.Probe(MetaRoot) == EntryKind.Directory;
+
+    /// <summary>
+    /// Why <paramref name="folder"/> cannot be read, or null when it can be or is simply not there. A network share or
+    /// a FUSE mount whose server or process has gone ("Transport endpoint is not connected") can still look present,
+    /// from what the system has cached, until something is read from it; so this opens the folder as well as looking
+    /// at it. Found on the Deck with a dead FUSE mount, which setup and status reported as an unexpected error.
+    /// </summary>
+    public static string? ReadProblem(string folder)
+    {
+        try
+        {
+            var resolved = PathRules.ResolveAll(folder);
+            if (SafeFs.Probe(resolved) == EntryKind.Directory)
+            {
+                using var entries = Directory.EnumerateFileSystemEntries(resolved).GetEnumerator();
+                entries.MoveNext();
+            }
+
+            return null;
+        }
+        catch (IOException e) when (e is not (FileNotFoundException or DirectoryNotFoundException))
+        {
+            // The system's own words, without the path it appends (" : '<path>'"), which the caller names already.
+            var cut = e.Message.IndexOf(" : '", StringComparison.Ordinal);
+            return (cut > 0 ? e.Message[..cut] : e.Message).TrimEnd('.');
+        }
+    }
 
     /// <summary>
     /// Why the sync root cannot be used, for when <see cref="IsInitialized"/> is false. A missing
     /// sync root folder and a missing marker folder get different advice.
     /// </summary>
+    /// <summary>
+    /// Why the sync root cannot be used, in a few words, for when <see cref="IsInitialized"/> is false: "it cannot be
+    /// read (...)", "it does not exist", or "the SaveTether folder is not in it". The desktop app's banner B3 puts it
+    /// in its one sentence.
+    /// </summary>
+    public string NotAvailableReason =>
+        (ReadProblem(SyncRoot) ?? ReadProblem(MetaRoot)) is { } problem ? $"it cannot be read ({problem})"
+        : SafeFs.Probe(PathRules.ResolveAll(SyncRoot)) == EntryKind.Directory ? "the SaveTether folder is not in it"
+        : "it does not exist";
+
     public string NotAvailableMessage =>
-        SafeFs.Probe(PathRules.ResolveAll(SyncRoot)) == EntryKind.Directory
-            ? $"'{SyncRoot}' is not set up for SaveTether: the folder '{Path.Combine(ToolFolderName, MetaFolderName)}' is missing. " +
-              "If this device syncs with one that is already set up, wait for the sync to finish. " +
-              "If the sync root is on a removable drive, check that it is connected."
-            : $"The sync root '{SyncRoot}' does not exist. If it is on a removable drive, check that it is connected.";
+        (ReadProblem(SyncRoot) ?? ReadProblem(MetaRoot)) is { } problem
+            ? $"The sync root '{SyncRoot}' cannot be read ({problem}). If it is on a network share or a mounted drive, " +
+              "reconnect or mount it again."
+            : SafeFs.Probe(PathRules.ResolveAll(SyncRoot)) == EntryKind.Directory
+                ? $"'{SyncRoot}' is not set up for SaveTether: the folder '{Path.Combine(ToolFolderName, MetaFolderName)}' is missing. " +
+                  "If this device syncs with one that is already set up, wait for the sync to finish. " +
+                  "If the sync root is on a removable drive, check that it is connected."
+                : $"The sync root '{SyncRoot}' does not exist. If it is on a removable drive, check that it is connected.";
 
     /// <summary>
     /// Creates the marker folder. Only for the first device ever ("init --create-root"); every
