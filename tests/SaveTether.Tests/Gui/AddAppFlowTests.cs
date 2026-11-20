@@ -1,3 +1,4 @@
+using SaveTether.Core.Detection;
 using SaveTether.Core.Definitions;
 using SaveTether.Core.Health;
 using SaveTether.Core.Model;
@@ -313,6 +314,30 @@ public class AddAppFlowTests
         Assert.True(all.Total >= all.Shown.Count);
         Assert.Equal(all.Total > AddAppFlow.MaxSearchRows, all.HasMore);
         Assert.Contains(flow.Search("test app").Shown, a => a.Id == "testapp");
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_deep_scan_finds_saves_of_an_app_that_is_not_installed_and_is_read_only()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        // The detect folder (ghost/bin) is absent; only the save folder exists.
+        AppAddCliTests.ShareDefinition(deck, "ghost", """
+            {
+              "schema": 1, "id": "ghost", "name": "Ghost", "kind": "game",
+              "installs": [{ "id": "native", "os": "linux", "detect": { "dir": "{home}/ghost/bin" }, "base": "{home}/ghost/data" }],
+              "roles": [{ "id": "saves", "class": "save", "default": true, "path": "saves", "target": "saves" }],
+            }
+            """);
+        var saves = Path.Combine(deck.Home, "ghost", "data", "saves");
+        CliDevice.Write(Path.Combine(deck.Home, "ghost", "data"), "saves/a.sav", "x");
+
+        Assert.DoesNotContain(flow.FoundApps(), f => f.App.Id == "ghost");
+        var row = Assert.Single(flow.FoundApps(ScanOptions.Deep()), f => f.App.Id == "ghost");
+
+        Assert.False(row.Installed);
+        Assert.Equal(saves, row.SaveFolder);
         sandbox.AssertCanaryIntact();
     }
 }

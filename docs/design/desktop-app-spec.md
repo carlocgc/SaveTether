@@ -202,6 +202,8 @@ A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmati
 
 *Decided (2026-11-20):* page 1's automatic scan finds installed apps only. **Scan for saved data** is an opt-in deeper scan that also lists saves left by uninstalled apps, with a choice of role classes (plan T4b). Scans show their progress and Cancel in a strip along the bottom of every page (T5a); a second scan cannot start while one runs. The strip is separate from the operation lock and does not block operations.
 
+*As built (T4b, core and presentation only; the button comes with T5):* `InstallScan.Run` and `AddAppFlow.FoundApps` take `ScanOptions` (`RoleClasses`, default `save`; `RequireInstall`, default true; `ScanOptions.Deep(...)` turns the gate off). `ScanHit` and `FoundApp` carry `Installed`; page 1 marks `Installed == false` rows "Not installed". One row per app: a detected install wins over a newer write in an undetected one.
+
 **Page 2, the plan.** `PlanAppAdd` with what is known so far; then, by outcome:
 
 | Outcome | Shown | Offered |

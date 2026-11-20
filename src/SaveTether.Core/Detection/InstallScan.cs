@@ -6,10 +6,31 @@ namespace SaveTether.Core.Detection;
 
 /// <summary>An app found on this device: the install that is here, its save folder, and when that folder last changed.</summary>
 /// <param name="NewestWrite">The newest file write found a few levels inside the folder (UTC); null when it holds no file.</param>
-public sealed record ScanHit(string AppId, string InstallId, string SaveFolder, DateTime? NewestWrite);
+/// <param name="Installed">Whether the install's detect rule matches. False only in a deep scan, for saves left by an app that is gone.</param>
+public sealed record ScanHit(string AppId, string InstallId, string SaveFolder, DateTime? NewestWrite, bool Installed = true)
+{
+    /// <summary>Whether this hit is a better row for its app than <paramref name="other"/>: a detected install first, then the newer write.</summary>
+    public bool IsBetterThan(ScanHit? other) =>
+        other is null
+        || (Installed != other.Installed ? Installed : (NewestWrite ?? DateTime.MinValue) > (other.NewestWrite ?? DateTime.MinValue));
+}
+
+/// <summary>What a scan looks for.</summary>
+/// <param name="RoleClasses">Which role classes count; null means <see cref="RoleClass.Save"/> only.</param>
+/// <param name="RequireInstall">True (the default) lists an app only when an install is detected; false lists any folder of a wanted role that exists.</param>
+public sealed record ScanOptions(IReadOnlySet<RoleClass>? RoleClasses = null, bool RequireInstall = true)
+{
+    /// <summary>The automatic scan: installed apps, save folders.</summary>
+    public static ScanOptions Default { get; } = new();
+
+    /// <summary>The deep scan: any wanted folder that exists, installed or not.</summary>
+    public static ScanOptions Deep(IReadOnlySet<RoleClass>? roleClasses = null) => new(roleClasses, RequireInstall: false);
+
+    internal bool Wants(RoleClass roleClass) => RoleClasses is null ? roleClass == RoleClass.Save : RoleClasses.Contains(roleClass);
+}
 
 /// <summary>
-/// A read-only look at every definition's installs on this device (phase 3.5, T4). An app is found
+/// A read-only look at every definition's installs on this device (phase 3.5, T4). By default an app is found
 /// when one of its installs for this OS is detected by the app's own folder and a folder of a
 /// <see cref="RoleClass.Save"/> role exists. Nothing is created, changed or followed through a link.
 /// </summary>
@@ -33,9 +54,19 @@ public static class InstallScan
         IEnumerable<AppDefinition> definitions,
         ResolverEnvironment environment,
         Func<string, DeviceValues>? valuesFor = null,
+        CancellationToken cancel = default) =>
+        Run(definitions, environment, valuesFor, ScanOptions.Default, cancel);
+
+    /// <summary>As <see cref="Run(IEnumerable{AppDefinition}, ResolverEnvironment, Func{string, DeviceValues}?, CancellationToken)"/>, with the scan's options (for example <see cref="ScanOptions.Deep"/>).</summary>
+    public static IEnumerable<ScanHit> Run(
+        IEnumerable<AppDefinition> definitions,
+        ResolverEnvironment environment,
+        Func<string, DeviceValues>? valuesFor,
+        ScanOptions options,
         CancellationToken cancel = default)
     {
         ArgumentNullException.ThrowIfNull(definitions);
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(environment);
 
         var resolver = new PathResolver(environment, cacheSteamLibraries: true);
@@ -55,9 +86,9 @@ public static class InstallScan
                         {
                             // One hit per app: its newest-written install, chosen before it is published.
                             ScanHit? best = null;
-                            foreach (var hit in Scan(definition, resolver, environment, valuesFor?.Invoke(definition.Id) ?? DeviceValues.None, token))
+                            foreach (var hit in Scan(definition, resolver, environment, valuesFor?.Invoke(definition.Id) ?? DeviceValues.None, options, token))
                             {
-                                if (best is null || (hit.NewestWrite ?? DateTime.MinValue) > (best.NewestWrite ?? DateTime.MinValue))
+                                if (hit.IsBetterThan(best))
                                 {
                                     best = hit;
                                 }
@@ -102,18 +133,30 @@ public static class InstallScan
         PathResolver resolver,
         ResolverEnvironment environment,
         DeviceValues values,
+        CancellationToken cancel = default) =>
+        Scan(definition, resolver, environment, values, ScanOptions.Default, cancel);
+
+    /// <summary>As the overload without options, with the scan's options.</summary>
+    public static IEnumerable<ScanHit> Scan(
+        AppDefinition definition,
+        PathResolver resolver,
+        ResolverEnvironment environment,
+        DeviceValues values,
+        ScanOptions options,
         CancellationToken cancel = default)
     {
+        ArgumentNullException.ThrowIfNull(options);
         foreach (var install in definition.Installs.Where(i => i.Os.Contains(environment.Os)))
         {
             cancel.ThrowIfCancellationRequested();
-            if (!resolver.Detect(install, values).IsResolved)
+            var installed = resolver.Detect(install, values).IsResolved;
+            if (!installed && options.RequireInstall)
             {
                 continue;
             }
 
             ScanHit? best = null;
-            foreach (var role in definition.Roles.Where(r => r.Class == RoleClass.Save))
+            foreach (var role in definition.Roles.Where(r => options.Wants(r.Class)))
             {
                 var folder = resolver.ResolveRole(install, role, values);
                 if (!folder.IsResolved || !Directory.Exists(folder.Path))
@@ -124,8 +167,8 @@ public static class InstallScan
                 // A link anywhere from the install's own folder down to the save folder would show another place's files.
                 var baseFolder = resolver.ResolveBase(install.Base, values);
                 var linked = IsLinkedWithin(baseFolder.IsResolved ? baseFolder.Path : null, folder.Path!);
-                var hit = new ScanHit(definition.Id, install.Id, folder.Path!, linked ? null : NewestWrite(folder.Path!, cancel));
-                if (best is null || (hit.NewestWrite ?? DateTime.MinValue) > (best.NewestWrite ?? DateTime.MinValue))
+                var hit = new ScanHit(definition.Id, install.Id, folder.Path!, linked ? null : NewestWrite(folder.Path!, cancel), installed);
+                if (hit.IsBetterThan(best))
                 {
                     best = hit;
                 }
