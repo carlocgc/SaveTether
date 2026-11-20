@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using SaveTether.Core.Definitions;
+using SaveTether.Core.Detection;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Resolution;
@@ -122,6 +123,36 @@ public sealed partial class Workspace
 {
     /// <summary>The catalog this device reads definitions from: the shared folder, then the built-in ones.</summary>
     public DefinitionCatalog Definitions => new(Path.Combine(Shared.MetaRoot, DefinitionCatalog.SharedFolderName));
+
+    /// <summary>
+    /// The apps found on this device (<see cref="InstallScan"/>), as they are found, each app once with its best
+    /// install. Uses the install folders and Wine prefixes this device recorded. Read-only; slow, so run it off the UI thread.
+    /// </summary>
+    public IEnumerable<(ScanHit Hit, CatalogEntry Entry)> ScanFound(ResolverEnvironment environment, ScanOptions options, CancellationToken cancel = default)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(options);
+        var catalog = Definitions;
+        var device = Shared.TryReadDevice(DeviceName);
+        var definitions = catalog.FindAll(catalog.AvailableIds())
+            .Where(e => e.Entry.Definition is not null)
+            .ToDictionary(e => e.Id, e => e.Entry, StringComparer.Ordinal);
+        DeviceValues ValuesFor(string id) =>
+            device?.Apps?.GetValueOrDefault(id) is { } stored ? new DeviceValues(stored.InstallDir, stored.SdCard, stored.WinePrefix) : DeviceValues.None;
+
+        var best = new Dictionary<string, ScanHit>(StringComparer.Ordinal);
+        foreach (var hit in InstallScan.Run(definitions.Values.Select(e => e.Definition!), environment, ValuesFor, options, cancel))
+        {
+            // One row per app: a later hit for another install of the same app replaces it only when newer.
+            if (best.TryGetValue(hit.AppId, out var seen) && !hit.IsBetterThan(seen))
+            {
+                continue;
+            }
+
+            best[hit.AppId] = hit;
+            yield return (hit, definitions[hit.AppId]);
+        }
+    }
 
     /// <summary>
     /// Works out what "app add" would do: which install, which roles, where each save folder is and

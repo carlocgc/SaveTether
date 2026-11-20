@@ -28,6 +28,12 @@ public sealed class ResolverEnvironment
     /// <summary>Windows only: the user's Documents folder.</summary>
     public string? Documents { get; init; }
 
+    /// <summary>
+    /// Folders that hold a Steam install's <c>steamapps</c> folder, when they are not under <see cref="Home"/> as on Linux.
+    /// On Windows, Steam's install folder from the registry and the default under Program Files (x86).
+    /// </summary>
+    public IReadOnlyList<string> SteamRoots { get; init; } = [];
+
     /// <summary>Reads an environment variable. Used for XDG_CONFIG_HOME and XDG_DATA_HOME.</summary>
     public Func<string, string?> GetVariable { get; init; } = _ => null;
 
@@ -62,6 +68,7 @@ public sealed class ResolverEnvironment
                 LocalLow = Path.Combine(Path.GetDirectoryName(local) ?? home, "LocalLow"),
                 Documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 GetVariable = Environment.GetEnvironmentVariable,
+                SteamRoots = WindowsSteamRoots(),
             };
         }
 
@@ -74,6 +81,40 @@ public sealed class ResolverEnvironment
             ReadMounts = ReadProcMounts,
             FlatpakSystemInstallation = "/var/lib/flatpak",
         };
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static string? SteamPathFromRegistry()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
+            return key?.GetValue("SteamPath") as string;
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static List<string> WindowsSteamRoots()
+    {
+        var roots = new List<string>();
+        if (SteamPathFromRegistry() is { Length: > 0 } registered)
+        {
+            roots.Add(Path.GetFullPath(registered));
+        }
+
+        foreach (var variable in new[] { "ProgramFiles(x86)", "ProgramFiles" })
+        {
+            if (Environment.GetEnvironmentVariable(variable) is { Length: > 0 } programs)
+            {
+                roots.Add(Path.Combine(programs, "Steam"));
+            }
+        }
+
+        return roots;
     }
 
     private static string? ReadProcMounts()

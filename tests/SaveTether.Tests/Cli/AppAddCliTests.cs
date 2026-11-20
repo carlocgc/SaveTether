@@ -120,6 +120,51 @@ public class AppAddCliTests
     }
 
     [Fact]
+    public void App_list_found_lists_apps_on_this_device_newest_save_first_and_marks_imported_ones()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        var cemu = Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save");
+        CliDevice.Write(cemu, "a.sav", "x");
+        CliDevice.Write(Path.Combine(deck.Home, ".local", "share", "AAAAXY"), "save.json", "{}");
+        File.SetLastWriteTimeUtc(Path.Combine(cemu, "a.sav"), DateTime.UtcNow.AddDays(-30));
+
+        var found = deck.Ok("app", "list", "--found", "--json").Json().GetProperty("found");
+        var ids = found.EnumerateArray().Select(f => f.GetProperty("id").GetString()).ToList();
+
+        Assert.Contains("cemu", ids);
+        Assert.True(ids.IndexOf("aaaaxy") < ids.IndexOf("cemu"), "the newer save comes first");
+        var row = found.EnumerateArray().Single(f => f.GetProperty("id").GetString() == "aaaaxy");
+        Assert.False(row.GetProperty("verified").GetBoolean());
+        Assert.Equal(cemu, found.EnumerateArray().Single(f => f.GetProperty("id").GetString() == "cemu").GetProperty("save_folder").GetString());
+
+        var text = deck.Ok("app", "list", "--found").Out;
+        Assert.Contains("(unverified)", text, StringComparison.Ordinal);
+        Assert.Contains("app(s) found on this device.", text, StringComparison.Ordinal);
+        var searched = deck.Ok("app", "list", "--found", "--search", "cemu", "--json").Json().GetProperty("found");
+        Assert.Equal(["cemu"], searched.EnumerateArray().Select(f => f.GetProperty("id").GetString()).ToList());
+    }
+
+    [Fact]
+    public void App_list_found_search_matches_a_steam_app_id_as_the_plain_list_does()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        ShareDefinition(deck, "testapp", TestApp.Replace("\"quirks\"", "\"store_ids\": { \"steam\": 424242 }, \"quirks\"", StringComparison.Ordinal));
+        var install = Path.Combine(deck.Home, "portable");
+        CliDevice.Write(install, "app.cfg", "config");
+        CliDevice.Write(install, "saves/slot1.sav", "save");
+        deck.Ok("app", "add", "testapp", "--install-dir", install);
+
+        var plain = deck.Ok("app", "list", "--search", "424242", "--json").Json().GetProperty("apps");
+        var found = deck.Ok("app", "list", "--found", "--search", "424242", "--json").Json().GetProperty("found");
+
+        Assert.Equal(["testapp"], plain.EnumerateArray().Select(a => a.GetProperty("id").GetString()).ToList());
+        Assert.Equal(["testapp"], found.EnumerateArray().Select(a => a.GetProperty("id").GetString()).ToList());
+        Assert.Equal(0, deck.Ok("app", "list", "--found", "--search", "999999", "--json").Json().GetProperty("found").GetArrayLength());
+    }
+
+    [Fact]
     public void App_add_of_an_imported_app_says_it_is_unverified()
     {
         using var sandbox = new Sandbox();

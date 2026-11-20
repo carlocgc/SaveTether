@@ -12,14 +12,17 @@ internal sealed class SteamLibraries
 {
     private readonly string _home;
     private readonly string _dataHome;
+    private readonly IReadOnlyList<string> _extraRoots;
 
     /// <param name="home">The user's home folder.</param>
     /// <param name="dataHome">The XDG data folder, normally ~/.local/share.</param>
     /// <param name="cache">Read the library files once and keep the answer, for a scan that asks about thousands of apps.</param>
-    public SteamLibraries(string home, string dataHome, bool cache = false)
+    /// <param name="extraRoots">More folders that may hold a Steam install, such as the ones Windows has.</param>
+    public SteamLibraries(string home, string dataHome, bool cache = false, IReadOnlyList<string>? extraRoots = null)
     {
         _home = home;
         _dataHome = dataHome;
+        _extraRoots = extraRoots ?? [];
         if (cache)
         {
             _cached = new Lazy<(IReadOnlyList<Library>, List<string>)>(() =>
@@ -43,6 +46,7 @@ internal sealed class SteamLibraries
     {
         string[] candidates =
         [
+            .. _extraRoots,
             Path.Combine(_home, ".steam", "steam"),
             Path.Combine(_home, ".steam", "root"),
             Path.Combine(_dataHome, "Steam"),
@@ -150,6 +154,12 @@ internal sealed class SteamLibraries
 
         return FindExistingCompatData(libraries, id, $"Steam app {id} is not installed in any Steam library on this device." + Explain(problems));
     }
+
+    /// <summary>
+    /// Whether a Steam game is installed: true or false when a Steam library is found, null when this device has no
+    /// Steam at all, so the answer is not known.
+    /// </summary>
+    public bool? IsInstalled(ulong appId) => FindLibraries([]).Count == 0 ? null : FindAppManifest(appId) is not null;
 
     /// <summary>The app manifest of an installed Steam game, in whichever library has one; null when none does.</summary>
     public string? FindAppManifest(ulong appId)

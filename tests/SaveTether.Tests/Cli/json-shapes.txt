@@ -135,6 +135,20 @@ $.exit_code: number
 $.schema: number
 $: object
 
+## app-list-found
+$.command: string
+$.exit_code: number
+$.found: array
+$.found[].id: string
+$.found[].install: string
+$.found[].name: string
+$.found[].save_folder: string
+$.found[].source: string
+$.found[].verified: boolean
+$.found[]: object
+$.schema: number
+$: object
+
 ## apply-all
 $.command: string
 $.exit_code: number

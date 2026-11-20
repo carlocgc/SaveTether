@@ -185,6 +185,7 @@ public class JsonContractTests
         RecordOn(deck, "app-add-dry-run", 0, "app", "add", "testapp", "--install-dir", install, "--dry-run");
         RecordOn(deck, "app-add", 0, "app", "add", "testapp", "--install-dir", install);
         deck.Ok("apply", "testapp.saves", "--copy");
+        RecordOn(deck, "app-list-found", 0, "app", "list", "--found", "--search", "testapp");
         var moved = Path.Combine(deck.Home, "moved");
         CliDevice.Write(moved, "app.cfg", "config");
         RecordOn(deck, "app-add-conflict", 1, "app", "add", "testapp", "--install-dir", moved);

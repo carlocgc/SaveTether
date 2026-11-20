@@ -27,6 +27,61 @@ public class InstallScanTests
     private static List<ScanHit> Deep(ResolverEnvironment env, ScanOptions options, params AppDefinition[] definitions) =>
         [.. InstallScan.Run(definitions, env, null, options)];
 
+    private static AppDefinition WithSteamId(AppDefinition app, long id) => app with { StoreIds = new StoreIds(Steam: id) };
+
+    [Fact]
+    public void An_imported_steam_game_is_found_only_when_steam_has_it_installed()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.FileAt("x", "home", ".local", "share", "game", "saves", "a.sav");
+        sandbox.FileAt("x", "home", ".local", "share", "Steam", "steamapps", "appmanifest_111.acf");
+        var installed = WithSteamId(Native("game"), 111);
+        var leftover = WithSteamId(Native("game"), 222);
+
+        Assert.Single(Scan(Linux(home), installed));
+        // Steam is here and does not have 222: the save folder is only what the game left behind.
+        Assert.Empty(Scan(Linux(home), leftover));
+        var hit = Assert.Single(Deep(Linux(home), ScanOptions.Deep(), leftover));
+        Assert.False(hit.Installed);
+    }
+
+    [Fact]
+    public void A_steam_game_is_still_found_by_its_save_folder_when_the_device_has_no_steam()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.FileAt("x", "home", ".local", "share", "game", "saves", "a.sav");
+
+        Assert.Single(Scan(Linux(home), WithSteamId(Native("game"), 222)));
+    }
+
+    [Fact]
+    public void Steam_roots_the_environment_names_are_looked_in_too()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.FileAt("x", "home", ".local", "share", "game", "saves", "a.sav");
+        var root = sandbox.Dir("elsewhere", "Steam");
+        sandbox.FileAt("x", "elsewhere", "Steam", "steamapps", "appmanifest_111.acf");
+        var environment = new ResolverEnvironment { Os = TargetOs.Linux, Home = home, UserName = "deck", SteamRoots = [root] };
+
+        Assert.Single(Scan(environment, WithSteamId(Native("game"), 111)));
+        Assert.Empty(Scan(environment, WithSteamId(Native("game"), 222)));
+    }
+
+    [Fact]
+    public void A_verified_definition_with_a_steam_id_is_not_held_to_the_steam_check()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.FileAt("x", "home", ".local", "share", "game", "saves", "a.sav");
+        sandbox.FileAt("x", "home", ".local", "share", "Steam", "steamapps", "appmanifest_111.acf");
+        var verified = WithSteamId(Native("game"), 222) with { Tier = DefinitionTier.Verified };
+
+        Assert.Single(Scan(Linux(home), verified));
+    }
+
     [Fact]
     public void A_deep_scan_lists_a_save_folder_with_no_detected_install_as_not_installed()
     {
@@ -165,6 +220,10 @@ public class InstallScanTests
                 new BaseLocation(WinPath: "{appdata}", Prefix: new PrefixRule(Steam: 123)))],
             [new RoleDefinition("save", RoleClass.Save, true, new Dictionary<string, string> { ["steam-proton"] = "Game" }, "save", 1, [], null)],
             [], DefinitionTier.Imported, null, new StoreIds(123), [], []);
+
+        // The prefix is left behind when a game is uninstalled, so it alone does not make the game found.
+        Assert.Empty(Scan(Linux(home), game));
+        sandbox.FileAt("x", "home", ".local", "share", "Steam", "steamapps", "appmanifest_123.acf");
 
         var hit = Assert.Single(Scan(Linux(home), game));
 

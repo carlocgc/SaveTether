@@ -326,8 +326,11 @@ public sealed class PathResolver
 
     private SteamLibraries Steam() =>
         _cacheSteam
-            ? LazyInitializer.EnsureInitialized(ref _steam, () => new SteamLibraries(_env.Home, Xdg("XDG_DATA_HOME", Path.Combine(".local", "share")), cache: true))
-            : new(_env.Home, Xdg("XDG_DATA_HOME", Path.Combine(".local", "share")));
+            ? LazyInitializer.EnsureInitialized(ref _steam, () => new SteamLibraries(_env.Home, Xdg("XDG_DATA_HOME", Path.Combine(".local", "share")), cache: true, _env.SteamRoots))
+            : new(_env.Home, Xdg("XDG_DATA_HOME", Path.Combine(".local", "share")), cache: false, _env.SteamRoots);
+
+    /// <summary>Whether Steam has the game installed in a library: null when no Steam is found, so it cannot be told.</summary>
+    public bool? IsSteamInstalled(long appId) => appId > 0 ? Steam().IsInstalled((ulong)appId) : null;
 
     private ResolveResult? LinuxOnly(string name) =>
         _env.Os == TargetOs.Linux

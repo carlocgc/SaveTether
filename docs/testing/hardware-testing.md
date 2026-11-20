@@ -128,9 +128,9 @@ Each flow lists what to set up, what to do, and what to check. Run the flows of 
 - The CI scenario against the native binary: `bash tests/e2e/scenario1.sh <path to savetether>`.
 - For behaviour a test cannot reach (a real Flatpak, an SD card, a running emulator), the matching lines of plan section 8.
 
-### Background task strip (from the first scan button on)
+### Background status in the footer (from the first scan button on)
 
-Start a scan on page 1 with the real bundle. Check: the strip shows on every page at the Deck's window size without covering the footer or buttons; counts move; a second scan button is disabled with "A scan is already running"; leave Add app and return mid-scan, the scan kept running; an Apply meanwhile is not blocked; Cancel clears the strip and re-enables the button.
+Start a scan on page 1 with the real bundle. Check: the footer's right corner says Idle, then "Scanning: N found" with Cancel, on every page at the Deck's window size, and nothing on the page moves when it changes; counts move; a second scan button is disabled while one runs; leave Add app and return mid-scan, the scan kept running; an Apply meanwhile is not blocked; Cancel returns it to Idle and re-enables the button.
 
 ### App shell: tray, health checks, one copy at a time
 
@@ -190,7 +190,9 @@ Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME`
 
 A throwaway device, and a shared definition in its sync folder's `.savetether/definitions` with paths under the scratch folder (`{home}/sttest/<feature>/...`): a native install whose folder is absent, and a portable one (`detect: { file: "{install_dir}/app.cfg" }`) holding `app.cfg` and a save. Built-in definitions are detected against the real home; that only reads, but do not add them.
 
-- Add app: page 1 lists the apps and labels each; typing in Search filters them.
+- Add app: page 1 starts a scan at once (the strip shows it) and lists what it finds as it finds it, newest save first, each with "Last played <date>"; then "Already added". Imported apps are marked "Unverified". Typing in Search lists at most 50 matches over every definition and says "Showing 50 of N matches" when there are more; clearing it brings the found list back. Time the scan on the PC and on the Deck and note both.
+- Found list: leave Add app mid-scan and come back: the rows found so far are there and the scan went on. Scan for games (with and without System files / Save states ticked) lists an app whose install folder is gone as "Not installed"; it is disabled while one runs. `savetether app list --found` lists the same apps as the page.
+- Page 2 of an imported app starts with the unverified note; of an app with `cloud_saves`, a note naming the stores.
 - Open the test app: "was not found", the native install's reason, and only the Install folder field. Give the portable folder, Look again: the plan, with the default roles ticked and sized, an off-by-default role saying why, the quirks.
 - Tick and untick a role: the page is made again each time. Add: "Apply it now?" with Not now focused. Apply: the ordinary Apply flow; on disk the link and the shared copy; the row Linked.
 - Add the app again with one role applied: the dialog names it under "Already linked here" and Apply goes to the other role only. With every role applied: "<App> added" with OK alone, nothing to apply.
@@ -201,7 +203,7 @@ A throwaway device, and a shared definition in its sync folder's `.savetether/de
 Two throwaway devices sharing one throwaway sync folder, set up with the CLI: the "other" device with `map add other-game.saves --target other-game/Saves --source <its folder> --entry-depth 2`, so the device under test has a hand mapping with no definition; and on the device under test, a folder holding a file to add, for example `games/Dolphin/GC/MemoryCardA.USA.raw`.
 
 - The way back is at the top, in the bar where the Apps page has its buttons, on every page (Add app, the hand form, Backups, Settings), and stays in view when the hand form is scrolled to its end.
-- Add app: "Add a folder by hand" is a link below the list. It opens the form with the focus in "Folder to share", and "Advanced" (entry depth) closed.
+- Add app: **Add folder** is the first button above the list. It opens the form with the focus in "Folder to share", and "Advanced" (entry depth) closed.
 - Type the folder a character at a time (`xdotool type`): "Name for the shared folder" follows it to the folder's own name. Type an app name: "Shared as <app>/<name> (mapping <id>)" below. Choose running app: the list of running processes with the search box focused; type `plasma` and double-click `plasmashell`, which puts it in the field (it always runs in Desktop Mode, so the running-app refusal appears). Add: "<App> added. Apply it now?". Apply: the running-app refusal, then the ordinary Apply flow; on disk the link and the shared copy.
 - The Apps page groups it under its ID. "Not on this device" lists the other device's mapping with Add. Add opens the form for it: "Set up on <other device>", its shared folder, "Entry depth 2". Add with the folder empty: the problem under the field, and the focus back in it. Give the folder and press Return: "Apply it now?".
 - Apply that row, then remove only its link (`rm` on the link, not the folder it points to), Check now: Folder gone with Choose the folder again. It opens the form with the old folder prefilled and focused. Select all, type a new folder, Return, Not now: the device file has the new folder and the row says Link missing.
