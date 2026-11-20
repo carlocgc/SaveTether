@@ -123,9 +123,18 @@ public class AppsPageTests
             }
         }
 
-        Assert.Equal("1 linked. 1 need you: PPSSPP savedata.", AppsPage.ApplyAllSummary(1, ["PPSSPP savedata"]));
+        Assert.StartsWith("1 linked. 1 not linked, each needs a choice or a fix first: PPSSPP savedata.", AppsPage.ApplyAllSummary(1, ["PPSSPP savedata"]), StringComparison.Ordinal);
         Assert.Equal("2 linked.", AppsPage.ApplyAllSummary(2, []));
         sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_status_line_stays_long_enough_to_read()
+    {
+        Assert.Equal(Pacing.StatusMinimum, Pacing.StatusWait(TimeSpan.Zero));
+        Assert.Equal(Pacing.StatusMinimum - TimeSpan.FromMilliseconds(200), Pacing.StatusWait(TimeSpan.FromMilliseconds(200)));
+        Assert.Equal(TimeSpan.Zero, Pacing.StatusWait(Pacing.StatusMinimum));
+        Assert.Equal(TimeSpan.Zero, Pacing.StatusWait(TimeSpan.FromSeconds(30)));
     }
 
     [Fact]

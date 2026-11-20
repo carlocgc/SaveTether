@@ -22,6 +22,18 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     private readonly LocalStore _local = new(localFolder);
 
     /// <summary>
+    /// Work off the UI thread behind a busy dialog (<see cref="Overlay.WorkAsync{T}"/>): the page is locked at once,
+    /// so nothing can be opened meanwhile, and the dialog shows if the work is not quick.
+    /// </summary>
+    private Task<T> Work<T>(string what, Func<T> work) => overlay.WorkAsync("Working", what, work);
+
+    private Task<bool> Work(string what, Action work) => overlay.WorkAsync("Working", what, () =>
+    {
+        work();
+        return true;
+    });
+
+    /// <summary>
     /// Checks now and shows the result, from inside an operation at a point where it holds no lock: after an add,
     /// before "Apply it now?", so the page behind the question shows the app just added. Set by the app.
     /// </summary>
@@ -65,7 +77,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             var request = useThisCopy ? new ApplyRequest(SetupChoice.ReplaceShared, ConfirmReplace: true) : new ApplyRequest();
             while (true)
             {
-                var outcome = await Task.Run(() => session.PlanApply(mapping.MappingId, request));
+                var outcome = await Work("Checking what applying involves…", () => session.PlanApply(mapping.MappingId, request));
                 if (outcome.Plan is { } plan)
                 {
                     await ConfirmAndRunAsync(session, plan, role);
@@ -145,7 +157,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             var request = new RestoreRequest(ConfirmReplace: row.OfSharedCopy);
             while (true)
             {
-                var outcome = await Task.Run(() => session.PlanRestore(row.Info.Id, request));
+                var outcome = await Work("Checking what restoring involves…", () => session.PlanRestore(row.Info.Id, request));
                 if (outcome.Plan is { } plan)
                 {
                     await ConfirmAndRunAsync(session, plan, role, row.OfSharedCopy ? null : BackupsPage.RestoreLocalText(row));
@@ -209,7 +221,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         {
             try
             {
-                var deleted = await Task.Run(() => session.DeleteBackup(row.Info.Id));
+                var deleted = await Work("Deleting the backup…", () => session.DeleteBackup(row.Info.Id));
                 log.Write($"backup delete {row.Info.Id}: done{(deleted.WasFirst ? ", the first backup" : string.Empty)}, {deleted.Remaining} left");
                 return true;
             }
@@ -236,7 +248,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             var assumeClosed = false;
             while (true)
             {
-                var outcome = await Task.Run(() => session.PlanRevert(mapping.MappingId, assumeClosed));
+                var outcome = await Work("Checking what reverting involves…", () => session.PlanRevert(mapping.MappingId, assumeClosed));
                 if (outcome.Plan is { } plan)
                 {
                     if (await ConfirmAndRunAsync(session, plan, role) is { Status: ExecutionStatus.Completed })
@@ -279,7 +291,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         {
             try
             {
-                await Task.Run(() => session.StopUsing(mapping.MappingId));
+                await Work("Updating the mapping…", () => session.StopUsing(mapping.MappingId));
                 log.Write($"map remove {mapping.MappingId}: done");
             }
             catch (StoreException e)
@@ -307,13 +319,13 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         using (session)
         {
-            var (plans, needYou) = await Task.Run(() => session.PlanApplyAll(rows.Select(r => r.Mapping.MappingId)));
+            var (plans, needYou) = await Work("Checking each mapping…", () => session.PlanApplyAll(rows.Select(r => r.Mapping.MappingId)));
             var waiting = needYou.Select(r => roles[r.MappingId]).ToList();
             var linked = 0;
             if (plans.Count > 0)
             {
                 var list = string.Join("\n", plans.Select(p => roles[p.MappingId]));
-                var intro = waiting.Count == 0 ? string.Empty : $"\n\nNot these, which need you first: {string.Join(", ", waiting)}.";
+                var intro = waiting.Count == 0 ? string.Empty : $"\n\nNot these, which need a choice or a fix first: {string.Join(", ", waiting)}.";
                 if (!await overlay.ConfirmAsync(
                         plans.Count == 1
                             ? $"Link {roles[plans[0].MappingId]} on this device to its shared folder?"
@@ -373,7 +385,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
     private async Task<OperationSession?> BeginAsync(string command)
     {
-        var (session, refused) = await Task.Run(() => OperationSession.Begin(_local, command, Processes, FlatpakCheck.ForSystem()));
+        var (session, refused) = await Work("Checking nothing else is running…", () => OperationSession.Begin(_local, command, Processes, FlatpakCheck.ForSystem()));
         if (refused is not null)
         {
             log.Write($"{command} not started: {refused}");
@@ -386,7 +398,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     /// <summary>A refusal with the actions it allows. Answers the action chosen, or null to stop.</summary>
     private async Task<RefusalAction?> HandleRefusalAsync(OperationSession session, Subject mapping, string role, Refusal refusal)
     {
-        var grant = await Task.Run(() => session.GrantableSandbox(mapping.MappingId, refusal));
+        var grant = await Work("Checking the sandbox…", () => session.GrantableSandbox(mapping.MappingId, refusal));
         var view = ActionTexts.Describe(refusal, role, mapping.AppName, grant is not null);
         var close = new Button { Content = view.Actions.Count == 0 ? "Close" : "Cancel" };
         var buttons = new List<Button> { close };
@@ -419,7 +431,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         if (chosen == RefusalAction.GiveAccess)
         {
-            var granted = await Task.Run(() => session.GrantSandbox(grant!));
+            var granted = await Work("Giving access…", () => session.GrantSandbox(grant!));
             log.Write($"flatpak grant for {grant!.AppId}: {(granted ? "done" : "failed")}");
             if (!granted)
             {
@@ -568,7 +580,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     /// <summary>After a revert (section 9.6): take back a Flatpak grant no mapping needs now. Keep is the safe choice.</summary>
     private async Task OfferRevokeAsync(OperationSession session, string mappingId)
     {
-        if (await Task.Run(() => session.GrantNoLongerNeeded(mappingId)) is not { } grant)
+        if (await Work("Checking the sandbox…", () => session.GrantNoLongerNeeded(mappingId)) is not { } grant)
         {
             return;
         }
@@ -581,7 +593,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             [keep, remove], keep, Overlay.OperationDialogTimeout);
         if (pressed == remove)
         {
-            var revoked = await Task.Run(() => session.RevokeSandbox(grant));
+            var revoked = await Work("Removing access…", () => session.RevokeSandbox(grant));
             log.Write($"flatpak revoke for {grant.AppId}: {(revoked ? "done" : "failed")}");
             if (!revoked)
             {

@@ -108,6 +108,52 @@ public class FoundListTests
     }
 
     [Fact]
+    public void A_cancelled_rescan_leaves_the_earlier_list_as_it_was()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        CliDevice.Write(Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save"), "a.sav", "x");
+        var tasks = new BackgroundTasks();
+        var session = new ScanSession(tasks);
+        Assert.True(session.Start(flow, ScanOptions.Default));
+        WaitUntilIdle(session);
+        Assert.Contains(session.Found, f => f.App.Id == "cemu");
+        Assert.False(session.WasCancelled);
+
+        // A scan is replacing the list: it is held back until it ends, and a cancel drops it.
+        var rescanned = false;
+        session.Changed += () => rescanned |= session.Replacing;
+        Assert.True(session.Start(flow, ScanOptions.Default));
+        Assert.True(session.Replacing);
+        Assert.Contains(session.Found, f => f.App.Id == "cemu");
+        tasks.CancelCurrent();
+        WaitUntilIdle(session);
+
+        Assert.False(session.Replacing);
+        Assert.Contains(session.Found, f => f.App.Id == "cemu");
+        Assert.True(rescanned);
+    }
+
+    [Fact]
+    public void A_finished_rescan_replaces_the_earlier_list()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var save = Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save");
+        CliDevice.Write(save, "a.sav", "x");
+        var session = new ScanSession(new BackgroundTasks());
+        session.Start(flow, ScanOptions.Default);
+        WaitUntilIdle(session);
+
+        session.Start(flow, ScanOptions.Default);
+        WaitUntilIdle(session);
+
+        Assert.Single(session.Found, f => f.App.Id == "cemu");
+        Assert.False(session.WasCancelled);
+        Assert.Equal(0, session.Pending);
+    }
+
+    [Fact]
     public void Page_1_labels_an_imported_steam_game_found_only_when_steam_has_it_installed_as_the_scan_does()
     {
         using var sandbox = new Sandbox();

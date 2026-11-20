@@ -130,7 +130,9 @@ Each flow lists what to set up, what to do, and what to check. Run the flows of 
 
 ### Background status in the footer (from the first scan button on)
 
-Start a scan on page 1 with the real bundle. Check: the footer's right corner says Idle, then "Scanning: N found" with Cancel, on every page at the Deck's window size, and nothing on the page moves when it changes; counts move; a second scan button is disabled while one runs; leave Add app and return mid-scan, the scan kept running; an Apply meanwhile is not blocked; Cancel returns it to Idle and re-enables the button.
+Start a scan on page 1 with the real bundle. Check: the footer's right corner says Idle, then "Scanning: N found" (no Cancel there), on every page at the Deck's window size, and nothing on the page moves when it changes; counts move at a readable pace (each line stays about a second); the Scan button reads "Cancel scan" while one runs, and pressing it returns the footer to Idle and the button to "Scan for games"; with a finished list on show, a rescan keeps that list until it ends and cancelling it leaves the list unchanged ("Scan cancelled."); Back to apps, Add folder and the scan sit on one row at the Deck's window size; leave Add app and return mid-scan, the scan kept running; an Apply meanwhile is not blocked.
+
+Busy dialog: press Apply on a row and Apply all; the page is locked at once (no other button or page opens), a "Working" dialog with a spinner shows if it takes a moment, and every dialog that follows appears on the page you started from.
 
 ### App shell: tray, health checks, one copy at a time
 

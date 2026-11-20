@@ -242,6 +242,12 @@ This differs from the CLI's `apply --all`, which stops at the first mapping need
 
 *As built (2026-11-18):* all rows are planned in one operation session; the confirmation names those it will link and those that need you first; a run that stops part way ends Apply all, since nothing else may run until it is recovered. The summary names the rows still needing you; each is opened from its own Apply button.
 
+*As built (2026-11-20):* the wording says "<m> not linked, each needs a choice or a fix first" and tells the owner to press Apply on each to see what it needs. Every step an operation does off the UI thread (starting the session, planning, deleting, granting) runs through `Overlay.WorkAsync`: the page is locked from the first moment, so nothing can be opened while the operation is pending, and a busy dialog with a spinner shows if the work lasts more than 250 ms (a quicker step shows none, so there is no flash) and stays at least 500 ms once shown. Apply, Apply all, Revert, Restore, Stop using here and Delete backup all use it, so their dialogs can no longer appear over a different page.
+
+*Background strip, as built (2026-11-20):* the footer line only reports (and offers Dismiss for a failed task). A scan is cancelled with the Scan button on Add app, which reads "Cancel scan" while one runs. The scan runs at its own speed; the footer line lags behind it, each line staying at least 1.2 s so it can be read. The first scan shows its finds as they come; a later scan keeps the earlier list on show (with "Scanning… N found so far") and replaces it only when it finishes, so a cancelled scan changes nothing ("Scan cancelled."). On Add app, Back to apps, Add folder and the scan (button and its two choices) share one row.
+
+*Screen headers, as built (2026-11-20):* on Backups and Settings the title (and on Backups its description) sits above the way back, outside the scrolling area; Backups' app filter shares a row with Back to apps. An app's name above its rows, on Apps and Backups, is a tinted band with a line under it.
+
 ### 9.5 Recover
 
 Banner B2's **Recover** runs `Workspace.Recover()` after a confirmation that shows what is unfinished (the journal's operation and mapping) and that recovery either undoes or completes it (5.3, journal table). The result is shown as in 9.3. A shared-folder restore that recovery will not carry through reports the backup ID; the result shows it with "Open Backups".

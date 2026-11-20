@@ -13,6 +13,12 @@ public sealed class ScanSession(BackgroundTasks tasks)
     private readonly object _gate = new();
     private readonly List<FoundApp> _found = [];
     private bool _hasRun;
+    private bool _hasCompleted;
+    private bool _wasCancelled;
+
+    // While a scan replaces an earlier, finished one, its finds are kept here and the earlier list stays on show:
+    // a half-done scan must not stand in for a whole one, and a cancelled scan changes nothing.
+    private List<FoundApp>? _staging;
 
     /// <summary>Raised when a row arrives or a scan starts or ends. Possibly on the scan's thread.</summary>
     public event Action? Changed;
@@ -27,6 +33,42 @@ public sealed class ScanSession(BackgroundTasks tasks)
             lock (_gate)
             {
                 return _hasRun;
+            }
+        }
+    }
+
+    /// <summary>True while a scan runs that will replace a finished scan's list; <see cref="Found"/> is still that list.</summary>
+    public bool Replacing
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _staging is not null;
+            }
+        }
+    }
+
+    /// <summary>How many the running scan has found so far, when it is replacing an earlier list; otherwise 0.</summary>
+    public int Pending
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _staging?.Count ?? 0;
+            }
+        }
+    }
+
+    /// <summary>Whether the last scan was cancelled, so the list is the one from before it.</summary>
+    public bool WasCancelled
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _wasCancelled;
             }
         }
     }
@@ -58,8 +100,19 @@ public sealed class ScanSession(BackgroundTasks tasks)
 
         lock (_gate)
         {
-            _found.Clear();
+            // The first scan shows its finds as they come; a later one is shown only once it has finished.
+            if (_hasCompleted)
+            {
+                _staging = [];
+            }
+            else
+            {
+                _found.Clear();
+                _staging = null;
+            }
+
             _hasRun = true;
+            _wasCancelled = false;
         }
 
         Changed?.Invoke();
@@ -77,33 +130,55 @@ public sealed class ScanSession(BackgroundTasks tasks)
                 lock (_gate)
                 {
                     // One row per app: a better hit for an app already listed replaces its row.
-                    _found.RemoveAll(f => f.App.Id == app.App.Id);
-                    _found.Add(app);
-                    count = _found.Count;
+                    var target = _staging ?? _found;
+                    target.RemoveAll(f => f.App.Id == app.App.Id);
+                    target.Add(app);
+                    count = target.Count;
                 }
 
                 task.Report(count, null, count);
                 Changed?.Invoke();
             }
 
+            Settle(complete: !task.Token.IsCancellationRequested, cancelled: task.Token.IsCancellationRequested);
             task.Finish();
         }
         catch (OperationCanceledException)
         {
+            Settle(complete: false, cancelled: true);
             task.Finish();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or StoreException)
         {
+            Settle(complete: false, cancelled: false);
             task.Fail(e.Message);
         }
         catch (Exception e)
         {
             // Anything else ends the task too, so the strip never shows a scan that has stopped.
+            Settle(complete: false, cancelled: false);
             task.Fail(e.Message);
         }
         finally
         {
             Changed?.Invoke();
+        }
+    }
+
+    /// <summary>A finished scan's list takes the place of the earlier one; a cancelled or failed one is dropped.</summary>
+    private void Settle(bool complete, bool cancelled)
+    {
+        lock (_gate)
+        {
+            if (_staging is { } staged && complete)
+            {
+                _found.Clear();
+                _found.AddRange(staged);
+            }
+
+            _staging = null;
+            _hasCompleted |= complete;
+            _wasCancelled = cancelled;
         }
     }
 }
