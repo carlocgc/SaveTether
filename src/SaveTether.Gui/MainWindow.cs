@@ -48,22 +48,23 @@ internal sealed class MainWindow : Window
     /// <summary>The background tasks the strip along the bottom shows; a scan registers here.</summary>
     public BackgroundTasks Tasks { get; } = new();
 
-    private void ShowStrip()
-    {
-        if (Tasks.Current is not { } task)
-        {
-            _strip.IsVisible = false;
-            _strip.Child = null;
-            return;
-        }
+    private readonly TextBlock _stripText = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly ProgressBar _stripBar = new() { Minimum = 0, Width = 120, Margin = new Thickness(0, 0, 12, 0) };
+    private readonly Button _stripButton = new() { Margin = new Thickness(12, 0, 0, 0) };
+    private int _stripRefreshPending;
 
-        var text = new TextBlock { Text = task.Text, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+    // The strip's controls are built once and updated in place, so a progress report never detaches a focused Cancel.
+    private void BuildStrip()
+    {
         var row = new DockPanel();
-        var failed = task.State == BackgroundTaskState.Failed;
-        var button = new Button { Content = failed ? "Dismiss" : "Cancel", Margin = new Thickness(12, 0, 0, 0) };
-        button.Click += (_, _) =>
+        DockPanel.SetDock(_stripButton, Avalonia.Controls.Dock.Right);
+        DockPanel.SetDock(_stripBar, Avalonia.Controls.Dock.Left);
+        row.Children.Add(_stripButton);
+        row.Children.Add(_stripBar);
+        row.Children.Add(_stripText);
+        _stripButton.Click += (_, _) =>
         {
-            if (failed)
+            if (Tasks.Current is { State: BackgroundTaskState.Failed })
             {
                 Tasks.Dismiss();
             }
@@ -72,18 +73,39 @@ internal sealed class MainWindow : Window
                 Tasks.CancelCurrent();
             }
         };
-        DockPanel.SetDock(button, Avalonia.Controls.Dock.Right);
-        row.Children.Add(button);
-        if (!failed)
-        {
-            var busy = new ProgressBar { IsIndeterminate = task.Total is null, Minimum = 0, Maximum = Math.Max(task.Total ?? 1, 1), Value = task.Done, Width = 120, Margin = new Thickness(0, 0, 12, 0) };
-            DockPanel.SetDock(busy, Avalonia.Controls.Dock.Left);
-            row.Children.Add(busy);
-        }
-
-        row.Children.Add(text);
         AutomationProperties.SetName(_strip, "Background task");
         _strip.Child = row;
+    }
+
+    // At most one refresh is queued: a burst of reports shows the latest counts once. The flag clears first,
+    // so a change during the refresh queues another.
+    private void RequestStripRefresh()
+    {
+        if (Interlocked.Exchange(ref _stripRefreshPending, 1) == 0)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                Volatile.Write(ref _stripRefreshPending, 0);
+                ShowStrip();
+            });
+        }
+    }
+
+    private void ShowStrip()
+    {
+        if (Tasks.Current is not { } task)
+        {
+            _strip.IsVisible = false;
+            return;
+        }
+
+        var failed = task.State == BackgroundTaskState.Failed;
+        _stripText.Text = task.Text;
+        _stripButton.Content = failed ? "Dismiss" : "Cancel";
+        _stripBar.IsVisible = !failed;
+        _stripBar.IsIndeterminate = task.Total is null;
+        _stripBar.Maximum = Math.Max(task.Total ?? 1, 1);
+        _stripBar.Value = task.Done;
         _strip.IsVisible = true;
     }
 
@@ -125,7 +147,8 @@ internal sealed class MainWindow : Window
             },
         });
         Content = _overlay;
-        Tasks.Changed += () => Avalonia.Threading.Dispatcher.UIThread.Post(ShowStrip);
+        BuildStrip();
+        Tasks.Changed += RequestStripRefresh;
         _actions = new ActionFlow(localFolder, _overlay, App.Options.Log);
 
         KeyDown += (_, e) =>

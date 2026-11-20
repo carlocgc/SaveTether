@@ -58,7 +58,8 @@ public sealed class BackgroundTask : IDisposable
     {
         lock (_owner.Gate)
         {
-            if (State != BackgroundTaskState.Running)
+            // A finished task's handle still says Running, so also check it is the registered one.
+            if (!ReferenceEquals(_owner.Current, this) || State != BackgroundTaskState.Running)
             {
                 return;
             }

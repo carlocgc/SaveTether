@@ -107,4 +107,22 @@ public class BackgroundTasksTests
         Assert.Equal(BackgroundTaskState.Failed, task.State);
         Assert.Same(task, tasks.Current);
     }
+
+    [Fact]
+    public void A_late_report_from_a_finished_task_changes_nothing_even_after_the_next_scan_starts()
+    {
+        var tasks = new BackgroundTasks();
+        var old = tasks.TryStart("Scanning")!;
+        old.Report(5, 10, 1);
+        old.Finish();
+        var next = tasks.TryStart("Scanning")!;
+        var changes = 0;
+        tasks.Changed += () => changes++;
+
+        old.Report(9, 10, 7);
+
+        Assert.Equal((5, 1), (old.Done, old.Found));
+        Assert.Equal((0, 0), (next.Done, next.Found));
+        Assert.Equal(0, changes);
+    }
 }
