@@ -34,6 +34,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly Action _close;
     private readonly ContentControl _page = new();
+    private readonly StackPanel _content;
 
     /// <summary>The current page's way back, shown by the window above the scrolling page.</summary>
     public ContentControl Bar { get; } = new();
@@ -54,7 +55,8 @@ internal sealed class AddAppScreen : UserControl, IScreen
         _overlay = overlay;
         _operate = operate;
         _close = close;
-        Content = new StackPanel { Spacing = 16, MaxWidth = 820, HorizontalAlignment = HorizontalAlignment.Left, Children = { _page } };
+        _content = new StackPanel { Spacing = 16, MaxWidth = 820, HorizontalAlignment = HorizontalAlignment.Left, Children = { _page } };
+        Content = _content;
         if (startAt.AppId is { } appId)
         {
             _ = PlanAsync(() => _flow.Start(appId));
@@ -94,6 +96,15 @@ internal sealed class AddAppScreen : UserControl, IScreen
         var search = new TextBox { PlaceholderText = "Search all known apps", Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
         AutomationProperties.SetName(search, "Search apps");
         var list = new StackPanel { Spacing = 2 };
+        var listBox = new Border
+        {
+            Child = list,
+            BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(6),
+            IsVisible = false,
+        };
         var scanNote = new TextBlock { Opacity = 0.75, FontSize = 13, TextWrapping = TextWrapping.Wrap };
         var scan = new Button { Content = "Scan for saved data" };
         AutomationProperties.SetName(scan, "Scan for saved data, including apps that are no longer installed");
@@ -114,6 +125,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             }
 
             list.Children.Clear();
+            listBox.IsVisible = true;
             var addedIds = added.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
             var found = _scans.Found.Where(f => !addedIds.Contains(f.App.Id)).ToList();
             scanNote.Text = found.Count == 0
@@ -154,6 +166,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
             // Rows are built only for the (at most 50) matches shown.
             list.Children.Clear();
+            listBox.IsVisible = result.Shown.Count > 0;
             scanNote.Text = result.Total == 0
                 ? "No apps match."
                 : result.HasMore
@@ -233,27 +246,30 @@ internal sealed class AddAppScreen : UserControl, IScreen
         }
 
         // Decision 6: the way to add an app that is not in the list, without the CLI.
-        var byHand = new HyperlinkButton { Content = "Add a folder by hand", Padding = new Thickness(0) };
+        var byHand = new Button { Content = "Add folder" };
         AutomationProperties.SetName(byHand, "Add a folder by hand, for an app not in the list");
         byHand.Click += (_, _) => _ = ShowManualAsync(() => _manual.StartNew(), fromCatalog: true);
-        var deep = new StackPanel
+        ToolTip.SetTip(scan, "Also lists saves left by apps that are no longer installed");
+        // Pinned above the scrolling list with the way back, so the actions stay in reach however long the list is.
+        var actions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 12,
-            Children = { scan, system, states, blocked },
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { byHand, scan, system, states, blocked },
         };
+        var bar = new StackPanel { Spacing = 8, Children = { Navigation.BackRow("Back to apps", Leave), actions } };
         page = Page(
-            Navigation.BackRow("Back to apps", Leave),
+            bar,
             "Add app",
             [ScanIntro],
             search,
             scanNote,
-            list,
-            new TextBlock { Text = "Scan for saved data also lists saves left by apps that are no longer installed.", Opacity = 0.75, FontSize = 13, Margin = new Thickness(0, 8, 0, 0) },
-            deep,
-            new TextBlock { Text = "Not in the list?", Opacity = 0.75, Margin = new Thickness(0, 8, 0, 0) },
-            byHand);
+            listBox);
         _page.Content = page;
+        // This page's list uses the whole width; the form pages keep a readable one (Page() sets it back).
+        _content.MaxWidth = double.PositiveInfinity;
+        _content.HorizontalAlignment = HorizontalAlignment.Stretch;
         _scans.Changed += OnChanged;
         _scans.Tasks.Changed += OnChanged;
         _unsubscribe = () =>
@@ -295,7 +311,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Content = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("*,200,150"),
+                ColumnDefinitions = new ColumnDefinitions("3*,1.5*,2*"),
                 Children =
                 {
                     Column(new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis }, 0),
@@ -870,6 +886,8 @@ internal sealed class AddAppScreen : UserControl, IScreen
     private StackPanel Page(Control back, string title, IReadOnlyList<string> sentences, params Control[] content)
     {
         Bar.Content = back;
+        _content.MaxWidth = 820;
+        _content.HorizontalAlignment = HorizontalAlignment.Left;
         var page = new StackPanel { Spacing = 10 };
         page.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
         foreach (var sentence in sentences)
