@@ -1,4 +1,5 @@
 using SaveTether.Core.Definitions;
+using SaveTether.Core.Detection;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
@@ -25,6 +26,15 @@ public enum CatalogStatus
 
 /// <summary>One app of the catalog, as page 1 lists it.</summary>
 public sealed record CatalogApp(string Id, string Name, DefinitionSource Source, bool IsValid);
+
+/// <summary>An app the scan found on this device, with where and when it was last used.</summary>
+public sealed record FoundApp(CatalogApp App, string InstallId, string SaveFolder, DateTime? NewestWrite);
+
+/// <summary>Page 1's search result: at most <see cref="AddAppFlow.MaxSearchRows"/> apps, and how many matched in all.</summary>
+public sealed record SearchResult(IReadOnlyList<CatalogApp> Shown, int Total)
+{
+    public bool HasMore => Total > Shown.Count;
+}
 
 /// <summary>A value only the owner can give, because it cannot be found by looking (section 8, "Fields").</summary>
 public enum LocationField
@@ -115,6 +125,59 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             .Select(e => new CatalogApp(e.Id, e.Entry.Definition?.Name ?? e.Id, e.Entry.Source, e.Entry.IsValid))
             .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>The most rows a search shows; the rest are reached by typing more.</summary>
+    public const int MaxSearchRows = 50;
+
+    /// <summary>
+    /// Page 1's list of apps found on this device, as they are found (so the window can show progress),
+    /// each app once, with its newest-written install first. Read-only; slow, so call it off the UI thread.
+    /// The caller orders what it has by <see cref="FoundApp.NewestWrite"/>, newest first, nulls last.
+    /// </summary>
+    public IEnumerable<FoundApp> FoundApps(CancellationToken cancel = default)
+    {
+        var workspace = Open();
+        var catalog = workspace.Definitions;
+        var device = workspace.Shared.TryReadDevice(workspace.DeviceName);
+        var definitions = catalog.FindAll(catalog.AvailableIds())
+            .Where(e => e.Entry.Definition is not null)
+            .ToDictionary(e => e.Id, e => e.Entry, StringComparer.Ordinal);
+        DeviceValues ValuesFor(string id) =>
+            device?.Apps?.GetValueOrDefault(id) is { } stored ? new DeviceValues(stored.InstallDir, stored.SdCard, stored.WinePrefix) : DeviceValues.None;
+
+        var best = new Dictionary<string, ScanHit>(StringComparer.Ordinal);
+        foreach (var hit in InstallScan.Run(definitions.Values.Select(e => e.Definition!), environment, ValuesFor, cancel))
+        {
+            // One row per app: a later hit for another install of the same app replaces it only when newer.
+            if (best.TryGetValue(hit.AppId, out var seen) && (hit.NewestWrite ?? DateTime.MinValue) <= (seen.NewestWrite ?? DateTime.MinValue))
+            {
+                continue;
+            }
+
+            best[hit.AppId] = hit;
+            var entry = definitions[hit.AppId];
+            yield return new FoundApp(new CatalogApp(hit.AppId, entry.Definition!.Name, entry.Source, true), hit.InstallId, hit.SaveFolder, hit.NewestWrite);
+        }
+    }
+
+    /// <summary>Orders found apps newest save first; an app with no file in its folder goes last.</summary>
+    public static IReadOnlyList<FoundApp> Newest(IEnumerable<FoundApp> found) =>
+        found.OrderByDescending(f => f.NewestWrite ?? DateTime.MinValue).ThenBy(f => f.App.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    /// Page 1's search over every definition, imported ones too: by name, ID or Steam app ID. Shows
+    /// at most <see cref="MaxSearchRows"/>, built only for those.
+    /// </summary>
+    public SearchResult Search(string? text)
+    {
+        var catalog = Open().Definitions;
+        var ids = catalog.Search(text);
+        var shown = catalog.FindAll(ids.Take(MaxSearchRows))
+            .Select(e => new CatalogApp(e.Id, e.Entry.Definition?.Name ?? e.Id, e.Entry.Source, e.Entry.IsValid))
+            .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return new SearchResult(shown, ids.Count);
     }
 
     /// <summary>Page 1's search: the apps whose name or ID contains the text, ignoring case.</summary>
