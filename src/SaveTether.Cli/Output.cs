@@ -71,6 +71,13 @@ internal sealed record AppListEntry(string Id, string? Name, DefinitionSource So
     public bool Verified => Source != DefinitionSource.Imported;
 }
 
+/// <summary>"app list --found": an app found on this device, with its install and when its save folder last changed.</summary>
+internal sealed record FoundEntry(string Id, string Name, DefinitionSource Source, string Install, string SaveFolder, DateTime? NewestWrite)
+{
+    /// <summary>False for an imported definition.</summary>
+    public bool Verified => Source != DefinitionSource.Imported;
+}
+
 internal sealed record MappingOutput(
     string Id, string Target, string Source, IReadOnlyList<string> ProcessNames, int EntryDepth,
     bool CreatedMapping, bool EntryDepthChanged, bool Removed);
@@ -110,6 +117,9 @@ internal sealed record CliOutput
     public AppOutput? App { get; init; }
 
     public IReadOnlyList<AppListEntry>? Apps { get; init; }
+
+    /// <summary>"app list --found": the apps found on this device, newest save first.</summary>
+    public IReadOnlyList<FoundEntry>? Found { get; init; }
 
     public StatusReport? Status { get; init; }
 
@@ -174,6 +184,19 @@ internal static class OutputWriter
             }
 
             stdout.WriteLine($"{apps.Count.ToString("N0", CultureInfo.InvariantCulture)} app(s).");
+        }
+
+        if (output.Found is { } found)
+        {
+            var width = found.Count == 0 ? 0 : found.Max(e => e.Id.Length);
+            foreach (var entry in found)
+            {
+                var when = entry.NewestWrite is { } w ? w.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) : "no files";
+                var mark = entry.Verified ? string.Empty : "  (unverified)";
+                stdout.WriteLine($"  {entry.Id.PadRight(width)}  {entry.Name}  last played {when}{mark}");
+            }
+
+            stdout.WriteLine($"{found.Count.ToString("N0", CultureInfo.InvariantCulture)} app(s) found on this device.");
         }
 
         if (output.Status is { } status)

@@ -120,6 +120,32 @@ public class AppAddCliTests
     }
 
     [Fact]
+    public void App_list_found_lists_apps_on_this_device_newest_save_first_and_marks_imported_ones()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        var cemu = Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save");
+        CliDevice.Write(cemu, "a.sav", "x");
+        CliDevice.Write(Path.Combine(deck.Home, ".local", "share", "AAAAXY"), "save.json", "{}");
+        File.SetLastWriteTimeUtc(Path.Combine(cemu, "a.sav"), DateTime.UtcNow.AddDays(-30));
+
+        var found = deck.Ok("app", "list", "--found", "--json").Json().GetProperty("found");
+        var ids = found.EnumerateArray().Select(f => f.GetProperty("id").GetString()).ToList();
+
+        Assert.Contains("cemu", ids);
+        Assert.True(ids.IndexOf("aaaaxy") < ids.IndexOf("cemu"), "the newer save comes first");
+        var row = found.EnumerateArray().Single(f => f.GetProperty("id").GetString() == "aaaaxy");
+        Assert.False(row.GetProperty("verified").GetBoolean());
+        Assert.Equal(cemu, found.EnumerateArray().Single(f => f.GetProperty("id").GetString() == "cemu").GetProperty("save_folder").GetString());
+
+        var text = deck.Ok("app", "list", "--found").Out;
+        Assert.Contains("(unverified)", text, StringComparison.Ordinal);
+        Assert.Contains("app(s) found on this device.", text, StringComparison.Ordinal);
+        var searched = deck.Ok("app", "list", "--found", "--search", "cemu", "--json").Json().GetProperty("found");
+        Assert.Equal(["cemu"], searched.EnumerateArray().Select(f => f.GetProperty("id").GetString()).ToList());
+    }
+
+    [Fact]
     public void App_add_of_an_imported_app_says_it_is_unverified()
     {
         using var sandbox = new Sandbox();

@@ -190,7 +190,9 @@ Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME`
 
 A throwaway device, and a shared definition in its sync folder's `.savetether/definitions` with paths under the scratch folder (`{home}/sttest/<feature>/...`): a native install whose folder is absent, and a portable one (`detect: { file: "{install_dir}/app.cfg" }`) holding `app.cfg` and a save. Built-in definitions are detected against the real home; that only reads, but do not add them.
 
-- Add app: page 1 lists the apps and labels each; typing in Search filters them.
+- Add app: page 1 starts a scan at once (the strip shows it) and lists what it finds as it finds it, newest save first, each with "Last played <date>"; then "Already added". Imported apps are marked "Unverified". Typing in Search lists at most 50 matches over every definition and says "Showing 50 of N matches" when there are more; clearing it brings the found list back. Time the scan on the PC and on the Deck and note both.
+- Found list: leave Add app mid-scan and come back: the rows found so far are there and the scan went on. Scan for saved data (with and without System files / Save states ticked) lists an app whose install folder is gone as "Not installed"; it is disabled with "A scan is already running" while one runs. `savetether app list --found` lists the same apps as the page.
+- Page 2 of an imported app starts with the unverified note; of an app with `cloud_saves`, a note naming the stores.
 - Open the test app: "was not found", the native install's reason, and only the Install folder field. Give the portable folder, Look again: the plan, with the default roles ticked and sized, an off-by-default role saying why, the quirks.
 - Tick and untick a role: the page is made again each time. Add: "Apply it now?" with Not now focused. Apply: the ordinary Apply flow; on disk the link and the shared copy; the row Linked.
 - Add the app again with one role applied: the dialog names it under "Already linked here" and Apply goes to the other role only. With every role applied: "<App> added" with OK alone, nothing to apply.

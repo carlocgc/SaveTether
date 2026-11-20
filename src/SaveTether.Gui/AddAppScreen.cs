@@ -39,11 +39,15 @@ internal sealed class AddAppScreen : UserControl, IScreen
     public ContentControl Bar { get; } = new();
     private readonly Dictionary<string, TextBlock> _labels = new(StringComparer.Ordinal);
     private bool _closed;
+    private Action? _unsubscribe;
+    private readonly ScanSession _scans;
 
     /// <param name="startAt">Page 1; page 2 for an app, from a row's "Find the app again" or "Add"; or the hand form for a mapping.</param>
-    public AddAppScreen(string localFolder, Overlay overlay, Func<Func<ActionFlow, Task>, Task> operate, Action close, AddAppStart startAt)
+    public AddAppScreen(string localFolder, Overlay overlay, Func<Func<ActionFlow, Task>, Task> operate, Action close, AddAppStart startAt, ScanSession scans)
     {
         ArgumentNullException.ThrowIfNull(startAt);
+        ArgumentNullException.ThrowIfNull(scans);
+        _scans = scans;
         var local = new LocalStore(localFolder);
         _flow = new AddAppFlow(local, ResolverEnvironment.FromSystem());
         _manual = new ManualAddFlow(local);
@@ -69,97 +73,237 @@ internal sealed class AddAppScreen : UserControl, IScreen
     public void Leave()
     {
         _closed = true;
+        _unsubscribe?.Invoke();
         _close();
     }
 
     // ---- Page 1 ----
 
+    private const string ScanIntro =
+        "Choose an app. SaveTether looks for apps on this device, newest saves first, and shows what it would share before anything is written.";
+
     private async Task ShowCatalogAsync()
     {
-        var apps = await Guard(() => _flow.Catalog());
-        if (apps is null)
+        _page.Content = null;
+        var added = await Guard(() => _flow.AddedApps());
+        if (added is null)
         {
             return;
         }
 
-        var search = new TextBox { PlaceholderText = "Search", Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+        var search = new TextBox { PlaceholderText = "Search all known apps", Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
         AutomationProperties.SetName(search, "Search apps");
         var list = new StackPanel { Spacing = 2 };
-        _labels.Clear();
-        var rows = new Dictionary<string, Control>(StringComparer.Ordinal);
-        foreach (var app in apps)
+        var scanNote = new TextBlock { Opacity = 0.75, FontSize = 13, TextWrapping = TextWrapping.Wrap };
+        var scan = new Button { Content = "Scan for saved data" };
+        AutomationProperties.SetName(scan, "Scan for saved data, including apps that are no longer installed");
+        var system = new CheckBox { Content = "System files" };
+        var states = new CheckBox { Content = "Save states" };
+        var blocked = new TextBlock { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+        var searchVersion = 0;
+        StackPanel? page = null;
+
+        void Refresh()
         {
-            var status = new TextBlock { Text = "Looking…", Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
-            _labels[app.Id] = status;
-            var source = app.Source == Core.Definitions.DefinitionSource.Shared ? "shared definition" : "built in";
-            var open = new Button
+            var running = _scans.Tasks.IsRunning;
+            scan.IsEnabled = !running;
+            blocked.Text = _scans.Tasks.BlockedReason ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(search.Text))
             {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                Content = new Grid
+                return;
+            }
+
+            list.Children.Clear();
+            var addedIds = added.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
+            var found = _scans.Found.Where(f => !addedIds.Contains(f.App.Id)).ToList();
+            scanNote.Text = found.Count == 0
+                ? (running ? "Looking for apps on this device…" : "No apps were found on this device. Search for one by name, or scan for saved data.")
+                : $"{found.Count:N0} found on this device";
+            foreach (var f in found)
+            {
+                var app = f.App;
+                list.Children.Add(Row(app.Name, AddAppFlow.LastPlayed(f.NewestWrite), Marks(app, f.Installed), () => _ = PlanAsync(() => _flow.Start(app.Id))));
+            }
+
+            if (added.Count > 0)
+            {
+                list.Children.Add(new TextBlock { Text = "Already added", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 12, 0, 4) });
+                foreach (var app in added)
                 {
-                    ColumnDefinitions = new ColumnDefinitions("*,160,120"),
-                    Children =
-                    {
-                        Column(new TextBlock { Text = app.Name, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center }, 0),
-                        Column(new TextBlock { Text = source, Opacity = 0.65, FontSize = 13, VerticalAlignment = VerticalAlignment.Center }, 1),
-                        Column(status, 2),
-                    },
-                },
-            };
-            AutomationProperties.SetName(open, app.Name);
-            open.Click += (_, _) => _ = PlanAsync(() => _flow.Start(app.Id));
-            rows[app.Id] = open;
-            list.Children.Add(open);
+                    var id = app.Id;
+                    list.Children.Add(Row(app.Name, string.Empty, "Added", () => _ = PlanAsync(() => _flow.Start(id))));
+                }
+            }
         }
 
-        search.TextChanged += (_, _) =>
+        async Task SearchAsync()
         {
-            var shown = AddAppFlow.Filter(apps, search.Text).Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
-            foreach (var (id, row) in rows)
+            var text = search.Text;
+            var version = ++searchVersion;
+            if (string.IsNullOrWhiteSpace(text))
             {
-                row.IsVisible = shown.Contains(id);
+                Refresh();
+                return;
             }
+
+            var result = await Task.Run(() => _flow.Search(text));
+            if (version != searchVersion || _closed)
+            {
+                return;
+            }
+
+            // Rows are built only for the (at most 50) matches shown.
+            list.Children.Clear();
+            scanNote.Text = result.Total == 0
+                ? "No apps match."
+                : result.HasMore
+                    ? $"Showing {result.Shown.Count:N0} of {result.Total:N0} matches. Type more to narrow them."
+                    : $"{result.Total:N0} match{(result.Total == 1 ? string.Empty : "es")}";
+            _labels.Clear();
+            foreach (var app in result.Shown)
+            {
+                var status = new TextBlock { Text = "Looking…", Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+                _labels[app.Id] = status;
+                list.Children.Add(Row(app.Name, Marks(app, installed: true), status, () => _ = PlanAsync(() => _flow.Start(app.Id))));
+            }
+
+            var labels = _labels.ToList();
+            _ = Task.Run(() =>
+            {
+                foreach (var (id, label) in labels)
+                {
+                    if (_closed || version != searchVersion)
+                    {
+                        return;
+                    }
+
+                    string shown;
+                    try
+                    {
+                        shown = AddAppFlow.Label(_flow.Detect(id));
+                    }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException or StoreException)
+                    {
+                        shown = "Cannot tell";
+                    }
+
+                    Dispatcher.UIThread.Post(() => label.Text = shown);
+                }
+            });
+        }
+
+        search.TextChanged += (_, _) => _ = SearchAsync();
+        scan.Click += (_, _) =>
+        {
+            var classes = new HashSet<Core.Definitions.RoleClass> { Core.Definitions.RoleClass.Save };
+            if (system.IsChecked == true)
+            {
+                classes.Add(Core.Definitions.RoleClass.System);
+            }
+
+            if (states.IsChecked == true)
+            {
+                classes.Add(Core.Definitions.RoleClass.State);
+            }
+
+            _scans.Start(_flow, Core.Detection.ScanOptions.Deep(classes), "Scanning for saved data");
+            Refresh();
         };
+
+        // Rows arrive from the scan's thread; one refresh at a time is queued.
+        var pending = 0;
+        void OnChanged()
+        {
+            if (Interlocked.Exchange(ref pending, 1) == 1)
+            {
+                return;
+            }
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                Interlocked.Exchange(ref pending, 0);
+                if (!_closed && ReferenceEquals(_page.Content, page))
+                {
+                    Refresh();
+                }
+            });
+        }
 
         // Decision 6: the way to add an app that is not in the list, without the CLI.
         var byHand = new HyperlinkButton { Content = "Add a folder by hand", Padding = new Thickness(0) };
         AutomationProperties.SetName(byHand, "Add a folder by hand, for an app not in the list");
         byHand.Click += (_, _) => _ = ShowManualAsync(() => _manual.StartNew(), fromCatalog: true);
-        _page.Content = Page(
+        var deep = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            Children = { scan, system, states, blocked },
+        };
+        page = Page(
             Navigation.BackRow("Back to apps", Leave),
             "Add app",
-            ["Choose an app. SaveTether looks for it on this device and shows what it would share before anything is written."],
+            [ScanIntro],
             search,
+            scanNote,
             list,
+            new TextBlock { Text = "Scan for saved data also lists saves left by apps that are no longer installed.", Opacity = 0.75, FontSize = 13, Margin = new Thickness(0, 8, 0, 0) },
+            deep,
             new TextBlock { Text = "Not in the list?", Opacity = 0.75, Margin = new Thickness(0, 8, 0, 0) },
             byHand);
-        search.Focus();
-
-        // Filled in the background: opening the page does not wait for detection (section 8).
-        var labels = _labels.ToList();
-        _ = Task.Run(() =>
+        _page.Content = page;
+        _scans.Changed += OnChanged;
+        _scans.Tasks.Changed += OnChanged;
+        _unsubscribe = () =>
         {
-            foreach (var (id, label) in labels)
+            _scans.Changed -= OnChanged;
+            _scans.Tasks.Changed -= OnChanged;
+        };
+        Refresh();
+        search.Focus();
+        if (!_scans.HasRun)
+        {
+            _scans.Start(_flow, Core.Detection.ScanOptions.Default);
+        }
+    }
+
+    /// <summary>"Unverified" for an imported definition, "Not installed" for a deep-scan row with no install; else nothing.</summary>
+    private static string Marks(CatalogApp app, bool installed)
+    {
+        var marks = new List<string>();
+        if (app.Source == Core.Definitions.DefinitionSource.Imported)
+        {
+            marks.Add("Unverified");
+        }
+
+        if (!installed)
+        {
+            marks.Add("Not installed");
+        }
+
+        return string.Join(", ", marks);
+    }
+
+    private static Button Row(string name, string detail, object trailing, Action open)
+    {
+        var right = trailing as Control ?? new TextBlock { Text = trailing.ToString(), Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+        var button = new Button
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Content = new Grid
             {
-                if (_closed)
+                ColumnDefinitions = new ColumnDefinitions("*,200,150"),
+                Children =
                 {
-                    return;
-                }
-
-                string text;
-                try
-                {
-                    text = AddAppFlow.Label(_flow.Detect(id));
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException or StoreException)
-                {
-                    text = "Cannot tell";
-                }
-
-                Dispatcher.UIThread.Post(() => label.Text = text);
-            }
-        });
+                    Column(new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis }, 0),
+                    Column(new TextBlock { Text = detail, Opacity = 0.65, FontSize = 13, VerticalAlignment = VerticalAlignment.Center }, 1),
+                    Column(right, 2),
+                },
+            },
+        };
+        AutomationProperties.SetName(button, name);
+        button.Click += (_, _) => open();
+        return button;
     }
 
     // ---- Page 2 ----
@@ -270,6 +414,16 @@ internal sealed class AddAppScreen : UserControl, IScreen
         if (view.Found is { } found)
         {
             yield return new TextBlock { Text = found, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 };
+        }
+
+        if (view.Unverified)
+        {
+            yield return new TextBlock { Text = AddAppFlow.UnverifiedNote, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Icons.Amber) };
+        }
+
+        if (view.CloudNote is { } cloud)
+        {
+            yield return new TextBlock { Text = cloud, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 };
         }
 
         yield return new TextBlock { Text = "Folders to share", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };

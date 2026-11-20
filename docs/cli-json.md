@@ -51,7 +51,7 @@ The contract is checked by `JsonContractTests` against `tests/SaveTether.Tests/C
 | `conflict` | object | When `problem` is `conflict`: what is in the way. See "Conflict". |
 | `message` | string | A sentence the owner should read: `apply --all` with nothing to apply, or `app list` when the shared definitions could not be read. |
 
-Then one section, depending on the command: `init`, `mapping`, `app`, `apps`, `status`, `operations` or `backups`.
+Then one section, depending on the command: `init`, `mapping`, `app`, `apps`, `found`, `status`, `operations` or `backups`.
 
 ## Commands
 
@@ -126,6 +126,8 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 `candidates[]`: `id`, `is_detected`, `found` (what showed the install is there, when found), `reason` (why not, when not found), `problem` (why not, as a resolve problem below).
 
 `app list` takes `--search <text>`. `apps` is an array of `id`, `name`, `source` (`built-in`, `shared` or `imported`), `verified` (false for `imported`), and `error` when the definition has mistakes (then `name` may be absent).
+
+`app list --found` has `found` instead of `apps`: an array of `id`, `name`, `source` (as above), `verified`, `install` (the install ID found), `save_folder` (the folder found) and `newest_write` (when that folder last changed, UTC; absent when it holds no file), newest first. The `--search` filter applies to it.
 
 ### `status`
 

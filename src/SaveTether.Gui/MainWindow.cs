@@ -46,7 +46,10 @@ internal sealed class MainWindow : Window
 
     /// <param name="operate">Runs one operation: the app marks itself busy around it and checks after it.</param>
     /// <summary>The background tasks the strip along the bottom shows; a scan registers here.</summary>
-    public BackgroundTasks Tasks { get; } = new();
+    public BackgroundTasks Tasks { get; }
+
+    /// <summary>What the scans found, kept while the window is open.</summary>
+    private readonly ScanSession _scans;
 
     private readonly TextBlock _stripText = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly ProgressBar _stripBar = new() { Minimum = 0, Width = 120, Margin = new Thickness(0, 0, 12, 0) };
@@ -111,6 +114,8 @@ internal sealed class MainWindow : Window
 
     public MainWindow(string localFolder, Action checkNow, Action quit, Func<Func<ActionFlow, Task>, Task> operate)
     {
+        Tasks = new BackgroundTasks();
+        _scans = new ScanSession(Tasks);
         _localFolder = localFolder;
         _checkNow = checkNow;
         _operate = operate;
@@ -242,7 +247,7 @@ internal sealed class MainWindow : Window
         // (found on the Deck hidden with one left).
         var pageActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var addApp = new Button { Content = "Add app", IsEnabled = actionsAllowed };
-        addApp.Click += (_, _) => OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Catalog));
+        addApp.Click += (_, _) => OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Catalog, _scans));
         pageActions.Children.Add(addApp);
         if (page.ForApplyAll.Count > 0)
         {
@@ -442,11 +447,11 @@ internal sealed class MainWindow : Window
                 _checkNow();
                 break;
             case RowAction.FindAppAgain or RowAction.AddHere when mapping.HasDefinition:
-                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.App(mapping.AppId)));
+                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.App(mapping.AppId), _scans));
                 break;
             case RowAction.ChooseFolderAgain or RowAction.AddHere:
                 // A folder added by hand: the hand form for this mapping (section 8).
-                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Folder(mapping.MappingId)));
+                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Folder(mapping.MappingId), _scans));
                 break;
             case RowAction.Backups:
                 OpenScreen(new BackupsScreen(_localFolder, _operate, CloseScreen, mapping.AppId));

@@ -85,6 +85,12 @@ public sealed record AddAppView(
     AppAddPlan? Plan,
     string? Details)
 {
+    /// <summary>True for an imported definition: converted from the Ludusavi manifest, not tried by hand.</summary>
+    public bool Unverified { get; init; }
+
+    /// <summary>For a plan: a note that some store's copy of the app keeps saves in the cloud too; null when none does.</summary>
+    public string? CloudNote { get; init; }
+
     /// <summary>Add is offered for a plan with at least one role ticked.</summary>
     public bool CanAdd => Plan is not null && Roles.Any(r => r.Ticked);
 }
@@ -127,6 +133,33 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             .ToList();
     }
 
+    /// <summary>Page 1's "already added" rows: apps with a folder set on this device, in name order. Reads only.</summary>
+    public IReadOnlyList<CatalogApp> AddedApps()
+    {
+        var workspace = Open();
+        var device = workspace.Shared.TryReadDevice(workspace.DeviceName);
+        if (device is null)
+        {
+            return [];
+        }
+
+        // A mapping ID is "<app>.<role>"; a hand-added folder has no definition and is not listed here.
+        var ids = device.Paths.Keys
+            .Select(id => id.Split('.', 2)[0])
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return workspace.Definitions.FindAll(ids.Where(id => workspace.Definitions.Find(id) is not null).ToList())
+            .Select(e => new CatalogApp(e.Id, e.Entry.Definition?.Name ?? e.Id, e.Entry.Source, e.Entry.IsValid))
+            .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>A found row's "last played": the newest save's date (local), or why there is none.</summary>
+    public static string LastPlayed(DateTime? newestWrite) =>
+        newestWrite is { } when
+            ? "Last played " + when.ToLocalTime().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+            : "No save files yet";
+
     /// <summary>The most rows a search shows; the rest are reached by typing more.</summary>
     public const int MaxSearchRows = 50;
 
@@ -142,26 +175,8 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     public IEnumerable<FoundApp> FoundApps(ScanOptions options, CancellationToken cancel = default)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var workspace = Open();
-        var catalog = workspace.Definitions;
-        var device = workspace.Shared.TryReadDevice(workspace.DeviceName);
-        var definitions = catalog.FindAll(catalog.AvailableIds())
-            .Where(e => e.Entry.Definition is not null)
-            .ToDictionary(e => e.Id, e => e.Entry, StringComparer.Ordinal);
-        DeviceValues ValuesFor(string id) =>
-            device?.Apps?.GetValueOrDefault(id) is { } stored ? new DeviceValues(stored.InstallDir, stored.SdCard, stored.WinePrefix) : DeviceValues.None;
-
-        var best = new Dictionary<string, ScanHit>(StringComparer.Ordinal);
-        foreach (var hit in InstallScan.Run(definitions.Values.Select(e => e.Definition!), environment, ValuesFor, options, cancel))
+        foreach (var (hit, entry) in Open().ScanFound(environment, options, cancel))
         {
-            // One row per app: a later hit for another install of the same app replaces it only when newer.
-            if (best.TryGetValue(hit.AppId, out var seen) && !hit.IsBetterThan(seen))
-            {
-                continue;
-            }
-
-            best[hit.AppId] = hit;
-            var entry = definitions[hit.AppId];
             yield return new FoundApp(new CatalogApp(hit.AppId, entry.Definition!.Name, entry.Source, true), hit.InstallId, hit.SaveFolder, hit.NewestWrite, hit.Installed);
         }
     }
@@ -397,12 +412,40 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         return view;
     }
 
+    /// <summary>Page 2's unverified note, for an imported definition.</summary>
+    public const string UnverifiedNote =
+        "Unverified: this definition was converted from the Ludusavi manifest and has not been tried by hand. Check the folders below before you add.";
+
+    /// <summary>Page 2's cloud-saves note for the stores whose copies keep saves in the cloud, or null when none does.</summary>
+    public static string? CloudNoteFor(AppDefinition? definition)
+    {
+        if (definition is null || definition.CloudSaves.Count == 0)
+        {
+            return null;
+        }
+
+        var stores = string.Join(", ", definition.CloudSaves.Select(StoreName));
+        return $"The {stores} copy of this game also keeps its saves in the cloud. The cloud and SaveTether can overwrite each other's changes, so check that store's cloud sync before you share these folders. A copy from another store or launcher has no cloud saves.";
+    }
+
+    private static string StoreName(string store) => store switch
+    {
+        "steam" => "Steam",
+        "gog" => "GOG",
+        "epic" => "Epic",
+        "xbox" => "Xbox",
+        "ubisoft" => "Ubisoft",
+        "ea" => "EA",
+        _ => store,
+    };
+
     /// <summary>Section 8's table: one outcome as page 2 shows it.</summary>
     private AddAppView View(AppAddOutcome outcome)
     {
         var request = Request;
         var workspace = Open();
-        var definition = workspace.Definitions.Find(request.AppId)?.Definition;
+        var entry = workspace.Definitions.Find(request.AppId);
+        var definition = entry?.Definition;
         var name = definition?.Name ?? request.AppId;
         var details = outcome.Message?.Text;
         var empty = new AddAppView(AddAppPage.Refused, request.AppId, name, string.Empty, [], null, outcome.Candidates, [], [], [], null, details);
@@ -427,6 +470,8 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 Roles = roles,
                 Quirks = plan.Quirks,
                 Plan = plan,
+                Unverified = entry?.Source == DefinitionSource.Imported,
+                CloudNote = CloudNoteFor(definition),
                 Sentences = plan.Roles.Where(r => r.Note is not null).Select(r => $"{r.MappingId}: {r.Note!.Text}").ToList(),
                 Details = null,
             };

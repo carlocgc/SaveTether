@@ -88,7 +88,7 @@ A strip along the bottom of the window, above the "Local folder" line, on every 
 - The strip is separate from the banners (4.1) and the operation dialog's progress (9.3). Leaving Add app does not stop the scan; its result is there on return.
 - A failed scan shows "Scanning failed: <message>" with Dismiss, once; starting the next scan also clears it.
 
-*As built (2026-11-20):* `BackgroundTasks` (presentation) is the registry, `MainWindow.Tasks` holds it and draws the strip. Nothing starts a task yet: page 1's scan buttons (T4b's UI, T5) register through `TryStart` and report with `Report`.
+*As built (2026-11-20):* `BackgroundTasks` (presentation) is the registry, `MainWindow.Tasks` holds it and draws the strip. Page 1's scan buttons start tasks through `ScanSession` (T5), which registers with `TryStart` and reports with `Report`.
 
 ## 5. Apps page
 
@@ -213,13 +213,15 @@ A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmati
 
 *Decided (2026-11-20):* page 1's automatic scan finds installed apps only. **Scan for saved data** is an opt-in deeper scan that also lists saves left by uninstalled apps, with a choice of role classes (plan T4b). Scans show their progress and Cancel in a strip along the bottom of every page (T5a); a second scan cannot start while one runs. The strip is separate from the operation lock and does not block operations.
 
-*As built (T4b, core and presentation only; the button comes with T5):* `InstallScan.Run` and `AddAppFlow.FoundApps` take `ScanOptions` (`RoleClasses`, default `save`; `RequireInstall`, default true; `ScanOptions.Deep(...)` turns the gate off). `ScanHit` and `FoundApp` carry `Installed`; page 1 marks `Installed == false` rows "Not installed". One row per app: a detected install wins over a newer write in an undetected one.
+*As built (T4b, core and presentation; the button came with T5):* `InstallScan.Run` and `AddAppFlow.FoundApps` take `ScanOptions` (`RoleClasses`, default `save`; `RequireInstall`, default true; `ScanOptions.Deep(...)` turns the gate off). `ScanHit` and `FoundApp` carry `Installed`; page 1 marks `Installed == false` rows "Not installed". One row per app: a detected install wins over a newer write in an undetected one.
+
+*As built (T5, 2026-11-20):* page 1 is the found list. Opening it starts the automatic scan once per window session (`ScanSession`, which the window owns, so leaving Add app keeps the rows and the scan); rows appear as they are found, newest save first, each "Last played <date>" (or "No save files yet"), then "Already added" (`AddAppFlow.AddedApps`: apps with a folder set on this device). Search lists at most 50 matches over every definition (imported ones too; `AddAppFlow.Search`), says how many there are in all, and builds rows only for those shown; each shown row is checked in the background for Found / Not found / Added. Imported rows say "Unverified"; a deep-scan row with no install says "Not installed". **Scan for saved data** runs the deep scan, with System files and Save states as the optional extra classes (Save is always on); it is disabled beside "A scan is already running" while one runs. The strip's count is the found count: the core reports no total. The scan loop moved to `Workspace.ScanFound`, shared with the CLI's `app list --found`. Not built: the full per-class choice (cache, mods, media are never offered).
 
 **Page 2, the plan.** `PlanAppAdd` with what is known so far; then, by outcome:
 
 | Outcome | Shown | Offered |
 |---|---|---|
-| Plan | The install used and what showed it is there; each role with its class, folder, size and file count, "already a link" or "not there yet" where so; the definition's quirks; each role's note | Role checkboxes (the definition's defaults ticked; `cache` and `media` classes unticked and labelled why), **Add** |
+| Plan | For an imported definition an unverified note, and for one with `cloud_saves` a note naming those stores' cloud saves; the install used and what showed it is there; each role with its class, folder, size and file count, "already a link" or "not there yet" where so; the definition's quirks; each role's note | Role checkboxes (the definition's defaults ticked; `cache` and `media` classes unticked and labelled why), **Add** |
 | `install-choice-needed` | "More than one install of <app> was found." and the candidates, each with what was found | Pick one, then the plan |
 | `not-installed` | "<App> was not found on this device." with each install looked for and why it was not found | The fields below, for installs whose `ResolveProblem` is `needs-value`; Back |
 | `unresolved` | "<Role>'s folder could not be worked out: <reason>." | The field that would resolve it, if any; Back |

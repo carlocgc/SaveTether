@@ -112,7 +112,7 @@ internal static class CliApp
               --install picks the install when more than one is found. --role picks roles other
               than the default ones. The path options give what cannot be found by looking; they
               are remembered for this device, so running app add again later finds moved folders.
-          savetether app list [--search <text>]
+          savetether app list [--found] [--search <text>]
               List the apps that have a definition: built in, imported (unverified), or in the
               shared definitions folder. --search keeps those whose name or ID contains the text,
               or whose Steam app ID it is.
@@ -381,6 +381,20 @@ internal static class CliApp
             var workspace = Open();
             var catalog = workspace.Definitions;
             var search = command.Value("--search");
+            if (command.Has("--found"))
+            {
+                var typed = search?.Trim();
+                var found = workspace.ScanFound(environment.Resolver, SaveTether.Core.Detection.ScanOptions.Default)
+                    .Where(f => string.IsNullOrEmpty(typed)
+                        || f.Entry.Definition!.Name.Contains(typed, StringComparison.OrdinalIgnoreCase)
+                        || f.Hit.AppId.Contains(typed, StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(f => f.Hit.NewestWrite ?? DateTime.MinValue)
+                    .ThenBy(f => f.Entry.Definition!.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(f => new FoundEntry(f.Hit.AppId, f.Entry.Definition!.Name, f.Entry.Source, f.Hit.InstallId, f.Hit.SaveFolder, f.Hit.NewestWrite))
+                    .ToList();
+                return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Found = found };
+            }
+
             var ids = search is null ? catalog.AvailableIds() : catalog.Search(search);
             var apps = catalog.FindAll(ids)
                 .Select(e => new AppListEntry(e.Id, e.Entry.Definition?.Name, e.Entry.Source, e.Entry.IsValid ? null : string.Join("; ", e.Entry.Errors)))
