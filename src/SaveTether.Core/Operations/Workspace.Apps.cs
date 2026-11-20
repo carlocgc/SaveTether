@@ -144,7 +144,7 @@ public sealed partial class Workspace
         {
             return AppAddOutcome.Refuse(
                 AppAddProblem.UnknownApp,
-                $"There is no definition for '{request.AppId}'. Known apps: {string.Join(", ", catalog.AvailableIds(includeImported: false))}. Imported definitions are not listed here; search the app list by name to find one.");
+                $"There is no definition for '{request.AppId}'. Known apps: {string.Join(", ", catalog.AvailableIds(includeImported: false))}. Imported definitions are not listed here.");
         }
 
         if (entry.Definition is not { } definition)
