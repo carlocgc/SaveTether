@@ -1,5 +1,6 @@
 using SaveTether.Core.Execution;
 using SaveTether.Core.Health;
+using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
 using SaveTether.Core.Storage;
@@ -87,15 +88,17 @@ public sealed class OperationSession : IDisposable
     /// <summary>
     /// Apply all's first half (section 9.4): each mapping planned with no choice, in the order given. Those
     /// that plan can all be run after one confirmation; the others need the owner, each with why.
+    /// <paramref name="choice"/> is the one answer the owner gave for the mappings that were waiting on a first-device
+    /// choice (<see cref="AppsPage.NeedsFirstDeviceChoice"/>); the others are planned with it too and refused as they would be.
     /// </summary>
-    public (IReadOnlyList<Plan> Plans, IReadOnlyList<Refusal> NeedYou) PlanApplyAll(IEnumerable<string> mappingIds)
+    public (IReadOnlyList<Plan> Plans, IReadOnlyList<Refusal> NeedYou) PlanApplyAll(IEnumerable<string> mappingIds, SetupChoice? choice = null)
     {
         ArgumentNullException.ThrowIfNull(mappingIds);
         var plans = new List<Plan>();
         var needYou = new List<Refusal>();
         foreach (var id in mappingIds)
         {
-            var outcome = Workspace.PlanApply(id, new ApplyRequest());
+            var outcome = Workspace.PlanApply(id, new ApplyRequest(Choice: choice));
             if (outcome.Plan is { } plan)
             {
                 plans.Add(plan);

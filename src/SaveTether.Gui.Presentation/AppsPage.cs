@@ -1,4 +1,5 @@
 using SaveTether.Core.Health;
+using SaveTether.Core.Planning;
 
 namespace SaveTether.Gui.Presentation;
 
@@ -153,6 +154,31 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     /// <summary>"Stop using here"'s confirmation (section 5).</summary>
     public static string StopUsingWarning(string role) =>
         $"Forget this device's folder for {role}? Nothing is deleted; the shared copy and other devices are not affected.";
+
+    /// <summary>
+    /// A mapping Apply all can ask about together with the others: this device has saves in its folder and the shared
+    /// location is empty, so the only question is share them or start empty. Both-sides-have-saves is never batched.
+    /// </summary>
+    public static bool NeedsFirstDeviceChoice(Refusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+        return refusal is { Kind: RefusalKind.ChoiceNeeded, Classification: Classification.FirstDevice };
+    }
+
+    public static string FirstDeviceTitle(int count, string firstRole) =>
+        count == 1 ? $"{firstRole} has saves only on this device" : $"{count} apps have saves only on this device";
+
+    public const string FirstDeviceShare = "Share these saves";
+    public const string FirstDeviceStartEmpty = "Start empty";
+    public const string FirstDeviceLeave = "Leave them";
+
+    /// <summary>One question for every mapping with saves only on this device (apply all, section 9.4, as built 2026-11-21).</summary>
+    public static string FirstDeviceText(IReadOnlyList<string> roles) =>
+        $"{string.Join("\n", roles)}\n\nNothing is shared for {(roles.Count == 1 ? "this" : "these")} yet. One answer applies to {(roles.Count == 1 ? "it" : "all of them")}:\n\n" +
+        $"{FirstDeviceShare}: the saves on this device become the shared copy for every device.\n" +
+        $"{FirstDeviceStartEmpty}: this device's saves are kept in a backup only, and {(roles.Count == 1 ? "it" : "they")} will see no saves until another device shares some.\n\n" +
+        "Each is backed up first. If any of these was already set up on another device, leave them and wait until it has synced here; " +
+        "otherwise both devices will make their own saves the shared copy.";
 
     /// <summary>Apply all's summary (section 9.4).</summary>
     public static string ApplyAllSummary(int linked, IReadOnlyList<string> needYou) =>

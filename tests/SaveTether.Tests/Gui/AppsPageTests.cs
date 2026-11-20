@@ -116,6 +116,7 @@ public class AppsPageTests
             Assert.Equal(["ppsspp.states"], plans.Select(p => p.MappingId));
             Assert.Equal(RefusalKind.ChoiceNeeded, Assert.Single(needYou).Kind);
             Assert.Equal(Id, needYou[0].MappingId);
+            Assert.True(AppsPage.NeedsFirstDeviceChoice(needYou[0]));
 
             foreach (var plan in plans)
             {
@@ -126,6 +127,48 @@ public class AppsPageTests
         Assert.StartsWith("1 linked. 1 not linked, each needs a choice or a fix first: PPSSPP savedata.", AppsPage.ApplyAllSummary(1, ["PPSSPP savedata"]), StringComparison.Ordinal);
         Assert.Equal("2 linked.", AppsPage.ApplyAllSummary(2, []));
         sandbox.AssertCanaryIntact();
+    }
+
+    [Theory]
+    [InlineData(SetupChoice.Copy)]
+    [InlineData(SetupChoice.NoCopy)]
+    public void Apply_all_applies_one_answer_to_every_mapping_with_saves_only_on_this_device(SetupChoice choice)
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        var local = new LocalStore(pc.LocalFolder);
+
+        var (session, _) = OperationSession.Begin(local, "apply all", new NoProcesses(), null);
+        using (session)
+        {
+            var (first, waiting) = session!.PlanApplyAll([Id]);
+            Assert.Empty(first);
+            Assert.True(AppsPage.NeedsFirstDeviceChoice(Assert.Single(waiting)));
+
+            var (plans, stillWaiting) = session.PlanApplyAll(waiting.Select(r => r.MappingId), choice);
+
+            Assert.Empty(stillWaiting);
+            var plan = Assert.Single(plans);
+            Assert.Equal(choice, plan.Choice);
+            Assert.Equal(Core.Execution.ExecutionStatus.Completed, session.Run(plan, null).Status);
+            Assert.Equal(choice == SetupChoice.Copy, File.Exists(Path.Combine(plan.Target, "GAME1", "save.bin")));
+        }
+
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void The_first_device_question_names_every_mapping_and_both_answers()
+    {
+        var text = AppsPage.FirstDeviceText(["Eden saves", "Cemu saves"]);
+
+        Assert.Contains("Eden saves\nCemu saves", text, StringComparison.Ordinal);
+        Assert.Contains(AppsPage.FirstDeviceShare, text, StringComparison.Ordinal);
+        Assert.Contains(AppsPage.FirstDeviceStartEmpty, text, StringComparison.Ordinal);
+        Assert.Equal("2 apps have saves only on this device", AppsPage.FirstDeviceTitle(2, "Eden saves"));
+        Assert.Equal("Eden saves has saves only on this device", AppsPage.FirstDeviceTitle(1, "Eden saves"));
     }
 
     [Fact]

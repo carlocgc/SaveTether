@@ -164,7 +164,8 @@ Two throwaway devices sharing one throwaway sync folder: the app's device with a
 
 - The page: apps grouped, rows needing attention first, each row's sentence and folder, the main button, More. "Not on this device (1)" collapsed, saying "Set up on <other device>, not here."; it stays open across Check now.
 - More on the linked row: exactly Open folder, Open shared folder, Revert. Open folder opens the file manager at the folder (capture the whole screen to see it; close the window by hand).
-- Apply all: the confirmation names the one row it will link and the one that needs you; the summary says "1 linked. 1 need you: …".
+- Apply all: the confirmation names the one row it will link and the one that needs you; the summary says "1 linked. 1 not linked, each needs a choice or a fix first: …".
+- Apply all with two new games that have saves only on this device (shared location empty) and one with saves on both sides: one question for the two ("Share these saves", "Start empty", "Leave them"), then a confirmation listing each with its answer; the both-sides row is left for its own Apply and named in the summary. "Leave them" links nothing from the two and the summary names them. Check the shared folder holds the saves after "Share", and not after "Start empty" (this device's saves are in the backup).
 - Stop using here on a ready row: its confirmation, then the row moves to "Not on this device", and the folder's files are still on disk.
 
 ### Backups and restore
