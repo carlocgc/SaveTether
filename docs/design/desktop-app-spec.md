@@ -200,6 +200,8 @@ A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmati
 
 **Page 1, choose an app.** The catalog's apps (shared definitions, then built-in, as `app list` shows them), in name order, with a search field that filters as typed. Next to each, filled in the background: "Found", "Not found" or "Added" (already has a folder on this device). Opening the page does not wait for detection.
 
+*Decided (2026-11-20):* page 1's automatic scan finds installed apps only. **Scan for saved data** is an opt-in deeper scan that also lists saves left by uninstalled apps, with a choice of role classes (plan T4b). Scans show their progress and Cancel in a strip along the bottom of every page (T5a); a second scan cannot start while one runs. The strip is separate from the operation lock and does not block operations.
+
 **Page 2, the plan.** `PlanAppAdd` with what is known so far; then, by outcome:
 
 | Outcome | Shown | Offered |
