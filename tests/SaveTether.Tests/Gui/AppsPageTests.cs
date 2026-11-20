@@ -116,6 +116,7 @@ public class AppsPageTests
             Assert.Equal(["ppsspp.states"], plans.Select(p => p.MappingId));
             Assert.Equal(RefusalKind.ChoiceNeeded, Assert.Single(needYou).Kind);
             Assert.Equal(Id, needYou[0].MappingId);
+            Assert.True(AppsPage.NeedsFirstDeviceChoice(needYou[0]));
 
             foreach (var plan in plans)
             {
@@ -126,6 +127,103 @@ public class AppsPageTests
         Assert.StartsWith("1 linked. 1 not linked, each needs a choice or a fix first: PPSSPP savedata.", AppsPage.ApplyAllSummary(1, ["PPSSPP savedata"]), StringComparison.Ordinal);
         Assert.Equal("2 linked.", AppsPage.ApplyAllSummary(2, []));
         sandbox.AssertCanaryIntact();
+    }
+
+    private static (CliDevice Pc, string States, string Extra) MixedDevice(Sandbox sandbox)
+    {
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+
+        // A second first-device mapping, and a third whose shared location already holds saves.
+        var states = Path.Combine(pc.AppFolder, "STATES");
+        CliDevice.Write(states, "state1.bin", "two");
+        pc.Ok("map", "add", "ppsspp.states", "--target", "ppsspp/STATES", "--source", states);
+        var extra = Path.Combine(pc.AppFolder, "EXTRA");
+        CliDevice.Write(extra, "extra.bin", "three");
+        pc.Ok("map", "add", "ppsspp.extra", "--target", "ppsspp/EXTRA", "--source", extra);
+        CliDevice.Write(Path.Combine(pc.SyncRoot, "savetether", "ppsspp", "EXTRA"), "arrived.bin", "from another device");
+        return (pc, states, extra);
+    }
+
+    [Theory]
+    [InlineData(SetupChoice.Copy)]
+    [InlineData(SetupChoice.NoCopy)]
+    public void Apply_all_applies_one_answer_to_every_first_device_mapping_and_leaves_the_rest(SetupChoice choice)
+    {
+        using var sandbox = new Sandbox();
+        var (pc, _, _) = MixedDevice(sandbox);
+        var all = new[] { Id, "ppsspp.states", "ppsspp.extra" };
+
+        var (session, _) = OperationSession.Begin(new LocalStore(pc.LocalFolder), "apply all", new NoProcesses(), null);
+        using (session)
+        {
+            var (first, waiting) = session!.PlanApplyAll(all);
+            Assert.Empty(first);
+            Assert.Equal(all, waiting.Select(r => r.MappingId));
+            var batch = waiting.Where(AppsPage.NeedsFirstDeviceChoice).Select(r => r.MappingId).ToList();
+            Assert.Equal([Id, "ppsspp.states"], batch);
+            Assert.Equal(Classification.Guard, waiting[2].Classification);
+
+            var (plans, stillWaiting) = session.PlanApplyAll(batch, choice);
+
+            Assert.Empty(stillWaiting);
+            Assert.Equal(batch, plans.Select(p => p.MappingId));
+            Assert.All(plans, p => Assert.Equal((choice, Classification.FirstDevice), (p.Choice, p.Classification)));
+            foreach (var plan in plans)
+            {
+                Assert.Equal(Core.Execution.ExecutionStatus.Completed, session.Run(plan, null).Status);
+            }
+
+            Assert.Equal(choice == SetupChoice.Copy, File.Exists(Path.Combine(pc.Target, "GAME1", "save.bin")));
+            Assert.Equal(choice == SetupChoice.Copy, File.Exists(Path.Combine(pc.SyncRoot, "savetether", "ppsspp", "STATES", "state1.bin")));
+
+            // The mapping with saves on both sides was never part of the answer and still waits for its own.
+            Assert.Equal(RefusalKind.ChoiceNeeded, session.PlanApply("ppsspp.extra", new ApplyRequest()).Refusal!.Kind);
+        }
+
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Theory]
+    [InlineData(SetupChoice.Copy)]
+    [InlineData(SetupChoice.NoCopy)]
+    public void A_mapping_that_stops_being_a_first_setup_while_the_question_is_open_is_not_given_the_answer(SetupChoice choice)
+    {
+        using var sandbox = new Sandbox();
+        var (pc, _, _) = MixedDevice(sandbox);
+
+        var (session, _) = OperationSession.Begin(new LocalStore(pc.LocalFolder), "apply all", new NoProcesses(), null);
+        using (session)
+        {
+            var (_, waiting) = session!.PlanApplyAll([Id, "ppsspp.states"]);
+            var batch = waiting.Where(AppsPage.NeedsFirstDeviceChoice).Select(r => r.MappingId).ToList();
+            Assert.Equal(2, batch.Count);
+
+            // Sync delivers saves to the shared location of one of them before the answer is given.
+            CliDevice.Write(Path.Combine(pc.SyncRoot, "savetether", "ppsspp", "STATES"), "arrived.bin", "from another device");
+
+            var (plans, stillWaiting) = session.PlanApplyAll(batch, choice);
+
+            Assert.Equal([Id], plans.Select(p => p.MappingId));
+            Assert.Equal(choice, plans[0].Choice);
+            var refused = Assert.Single(stillWaiting);
+            Assert.Equal("ppsspp.states", refused.MappingId);
+            Assert.Equal(RefusalKind.ChoiceNeeded, refused.Kind);
+            Assert.Equal(Classification.Guard, refused.Classification);
+        }
+    }
+
+    [Fact]
+    public void The_first_device_question_names_every_mapping_and_both_answers()
+    {
+        var text = AppsPage.FirstDeviceText(["Eden saves", "Cemu saves"]);
+
+        Assert.Contains("Eden saves\nCemu saves", text, StringComparison.Ordinal);
+        Assert.Contains(AppsPage.FirstDeviceShare, text, StringComparison.Ordinal);
+        Assert.Contains(AppsPage.FirstDeviceStartEmpty, text, StringComparison.Ordinal);
+        Assert.Equal("2 save folders have saves only on this device", AppsPage.FirstDeviceTitle(2, "Eden saves"));
+        Assert.Equal("Eden saves has saves only on this device", AppsPage.FirstDeviceTitle(1, "Eden saves"));
     }
 
     [Fact]

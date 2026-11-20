@@ -319,12 +319,42 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         using (session)
         {
-            var (plans, needYou) = await Work("Checking each mapping…", () => session.PlanApplyAll(rows.Select(r => r.Mapping.MappingId)));
+            var ids = rows.Select(r => r.Mapping.MappingId).ToList();
+            var (plans, needYou) = await Work("Checking each mapping…", () => session.PlanApplyAll(ids));
+            var chosen = new Dictionary<string, SetupChoice>(StringComparer.Ordinal);
+
+            // Mappings with saves only on this device share one question, so a first setup is not row-by-row.
+            var firstDevice = needYou.Where(AppsPage.NeedsFirstDeviceChoice).ToList();
+            if (firstDevice.Count > 0)
+            {
+                var names = firstDevice.Select(r => roles[r.MappingId]).ToList();
+                var leave = new Button { Content = AppsPage.FirstDeviceLeave };
+                var empty = new Button { Content = AppsPage.FirstDeviceStartEmpty };
+                var share = new Button { Content = AppsPage.FirstDeviceShare };
+                var pressed = await overlay.ShowAsync(
+                    AppsPage.FirstDeviceTitle(names.Count, names[0]), Overlay.Body(AppsPage.FirstDeviceText(names)), [leave, empty, share], leave, Overlay.OperationDialogTimeout);
+                if (pressed != leave)
+                {
+                    var choice = pressed == share ? SetupChoice.Copy : SetupChoice.NoCopy;
+                    var batch = firstDevice.Select(r => r.MappingId).ToList();
+                    var (more, still) = await Work("Checking each mapping…", () => session.PlanApplyAll(batch, choice));
+                    foreach (var plan in more.Where(p => p.Classification == Classification.FirstDevice))
+                    {
+                        chosen[plan.MappingId] = choice;
+                    }
+
+                    plans = [.. plans, .. more];
+                    needYou = [.. needYou.Where(r => !batch.Contains(r.MappingId, StringComparer.Ordinal)), .. still];
+                }
+            }
+
             var waiting = needYou.Select(r => roles[r.MappingId]).ToList();
             var linked = 0;
             if (plans.Count > 0)
             {
-                var list = string.Join("\n", plans.Select(p => roles[p.MappingId]));
+                var list = string.Join("\n", plans.Select(p => chosen.TryGetValue(p.MappingId, out var c)
+                    ? $"{roles[p.MappingId]} ({(c == SetupChoice.Copy ? "share this device's saves" : "start empty")})"
+                    : roles[p.MappingId]));
                 var intro = waiting.Count == 0 ? string.Empty : $"\n\nNot these, which need a choice or a fix first: {string.Join(", ", waiting)}.";
                 if (!await overlay.ConfirmAsync(
                         plans.Count == 1

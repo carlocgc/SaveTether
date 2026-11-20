@@ -1,5 +1,6 @@
 using SaveTether.Core.Execution;
 using SaveTether.Core.Health;
+using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
 using SaveTether.Core.Storage;
@@ -87,15 +88,27 @@ public sealed class OperationSession : IDisposable
     /// <summary>
     /// Apply all's first half (section 9.4): each mapping planned with no choice, in the order given. Those
     /// that plan can all be run after one confirmation; the others need the owner, each with why.
+    /// <paramref name="choice"/> is the one answer the owner gave for the mappings that were waiting on a first-device
+    /// choice (<see cref="AppsPage.NeedsFirstDeviceChoice"/>). It is used only where the mapping is still that case.
     /// </summary>
-    public (IReadOnlyList<Plan> Plans, IReadOnlyList<Refusal> NeedYou) PlanApplyAll(IEnumerable<string> mappingIds)
+    public (IReadOnlyList<Plan> Plans, IReadOnlyList<Refusal> NeedYou) PlanApplyAll(IEnumerable<string> mappingIds, SetupChoice? choice = null)
     {
         ArgumentNullException.ThrowIfNull(mappingIds);
         var plans = new List<Plan>();
         var needYou = new List<Refusal>();
         foreach (var id in mappingIds)
         {
-            var outcome = Workspace.PlanApply(id, new ApplyRequest());
+            var outcome = Workspace.PlanApply(id, new ApplyRequest(Choice: choice));
+
+            // The answer was given for "saves only on this device". Sync may have delivered saves to the shared
+            // location while the question was open, and the core accepts the same answer for that case too, so a
+            // plan or refusal that is no longer about a first setup is thrown away: the mapping is planned again with no answer
+            // (it links with nothing to choose, or says it now needs its own choice).
+            if (choice is not null
+                && (outcome.Plan is { Classification: not Classification.FirstDevice } || outcome.Refusal is { Kind: RefusalKind.ChoiceNotAllowed }))
+            {
+                outcome = Workspace.PlanApply(id, new ApplyRequest());
+            }
             if (outcome.Plan is { } plan)
             {
                 plans.Add(plan);
