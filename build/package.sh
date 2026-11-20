@@ -41,7 +41,7 @@ copy_binaries() {
 
 copy_binaries "$cli"
 copy_binaries "$gui"
-cp "$root/README.md" "$root/LICENSE" "$stage/$name/"
+cp "$root/README.md" "$root/LICENSE" "$root/definitions/imported/ludusavi.LICENSE.txt" "$stage/$name/"
 
 if [[ $rid == win-* ]]; then
   archive="$out/$name.zip"

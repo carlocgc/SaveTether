@@ -98,7 +98,11 @@ public sealed record AppAddPlan(
     string Install,
     DeviceApp Values,
     IReadOnlyList<AppRolePlan> Roles,
-    IReadOnlyList<string> Quirks);
+    IReadOnlyList<string> Quirks)
+{
+    /// <summary>False when the definition was converted from the Ludusavi manifest and not tried by hand.</summary>
+    public bool Verified => DefinitionSource != DefinitionSource.Imported;
+}
 
 /// <summary>A plan, or the reason there is none. <see cref="Candidates"/> lists the installs looked at.</summary>
 public sealed record AppAddOutcome(
@@ -140,7 +144,7 @@ public sealed partial class Workspace
         {
             return AppAddOutcome.Refuse(
                 AppAddProblem.UnknownApp,
-                $"There is no definition for '{request.AppId}'. Known apps: {string.Join(", ", catalog.AvailableIds())}.");
+                $"There is no definition for '{request.AppId}'. Known apps: {string.Join(", ", catalog.AvailableIds(includeImported: false))}. Imported definitions are not listed here.");
         }
 
         if (entry.Definition is not { } definition)

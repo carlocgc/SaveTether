@@ -40,7 +40,7 @@ public static class BackupsPage
             {
                 try
                 {
-                    name = catalog.Find(id)?.Definition?.Name ?? id;
+                    name = catalog.Find(id, includeImported: false)?.Definition?.Name ?? id;
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {

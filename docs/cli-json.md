@@ -113,8 +113,9 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | Field | Type | |
 |---|---|---|
 | `app_id`, `app_name` | string | |
-| `definition_source` | string | `built-in` or `shared`. |
-| `definition_location` | string | The shared definition's file, or `built-in <file name>`. |
+| `definition_source` | string | `built-in`, `shared` or `imported`. |
+| `verified` | boolean | False when the definition was converted from the Ludusavi manifest and has not been tried by hand (`definition_source` is `imported`). |
+| `definition_location` | string | The shared definition's file, `built-in <file name>`, or `imported <file name>`. |
 | `install` | string | The install ID used. |
 | `values` | object | What this device records for the app: `install`, and `install_dir`, `sd_card`, `wine_prefix` when given or found. |
 | `roles` | array of object | One per role to add. |
@@ -124,7 +125,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 
 `candidates[]`: `id`, `is_detected`, `found` (what showed the install is there, when found), `reason` (why not, when not found), `problem` (why not, as a resolve problem below).
 
-`app list` takes no flags. `apps` is an array of `id`, `name`, `source` (`built-in` or `shared`), and `error` when the definition has mistakes (then `name` may be absent).
+`app list` takes `--search <text>`. `apps` is an array of `id`, `name`, `source` (`built-in`, `shared` or `imported`), `verified` (false for `imported`), and `error` when the definition has mistakes (then `name` may be absent).
 
 ### `status`
 
@@ -276,7 +277,7 @@ Every value `--json` can print, by field. A test checks that each value in the c
 
 **Role class** (`app.plan.roles[].class`): `save`, `system`, `state`, `cache`, `mod`, `media`.
 
-**Definition source** (`definition_source`, `apps[].source`): `built-in`, `shared`.
+**Definition source** (`definition_source`, `apps[].source`): `built-in`, `shared`, `imported`.
 
 **Resolve problem** (`app.candidates[].problem`): `invalid`, `not-on-this-os`, `needs-value`, `missing`, `ambiguous`, `not-yet-supported`.
 

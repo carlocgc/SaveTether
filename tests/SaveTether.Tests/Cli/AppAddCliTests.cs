@@ -76,6 +76,66 @@ public class AppAddCliTests
         }
     }
 
+    // ---- Imported definitions (the real bundle; "aaaaxy" is a small linux-and-windows entry) ----
+
+    private static string[] Lines(string text) => text.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    [Fact]
+    public void App_list_search_shows_imported_apps_as_unverified_with_aligned_columns_and_a_count()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+
+        Assert.Equal(["aaaaxy  AAAAXY  (imported (unverified))", "1 app(s)."], Lines(deck.Ok("app", "list", "--search", "AAAAXY").Out));
+
+        // The name column starts in the same place on every row, however long the IDs are.
+        var rows = deck.Ok("app", "list", "--search", "a").Out.Replace("\r", string.Empty, StringComparison.Ordinal).Split('\n')
+            .Where(l => l.StartsWith("  ", StringComparison.Ordinal)).ToList();
+        Assert.True(rows.Count > 10);
+        Assert.Single(rows.Select(l => System.Text.RegularExpressions.Regex.Match(l, @"^  \S+ *  ").Length).Distinct());
+
+        Assert.Contains("(built-in)", deck.Ok("app", "list", "--search", "cemu").Out, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void App_list_search_with_no_match_lists_nothing_and_counts_zero()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+
+        Assert.Equal(["0 app(s)."], Lines(deck.Ok("app", "list", "--search", "zzzzqqqq").Out));
+    }
+
+    [Fact]
+    public void App_list_json_marks_imported_apps_unverified()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+
+        var apps = deck.Ok("app", "list", "--search", "aaaaxy", "--json").Json().GetProperty("apps");
+
+        Assert.Equal(1, apps.GetArrayLength());
+        Assert.Equal("imported", apps[0].GetProperty("source").GetString());
+        Assert.False(apps[0].GetProperty("verified").GetBoolean());
+    }
+
+    [Fact]
+    public void App_add_of_an_imported_app_says_it_is_unverified()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        CliDevice.Write(Path.Combine(deck.Home, ".local", "share", "AAAAXY"), "save.json", "{}");
+
+        Assert.Contains("Unverified: this definition was converted from the Ludusavi manifest", deck.Ok("app", "add", "aaaaxy", "--dry-run").Out, StringComparison.Ordinal);
+        var plan = deck.Ok("app", "add", "aaaaxy", "--dry-run", "--json").Json().GetProperty("app").GetProperty("plan");
+        Assert.Equal("imported", plan.GetProperty("definition_source").GetString());
+        Assert.False(plan.GetProperty("verified").GetBoolean());
+
+        // A built-in app's plan carries no such note.
+        CliDevice.Write(Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save"), "a.sav", "x");
+        Assert.DoesNotContain("Unverified", deck.Ok("app", "add", "cemu", "--dry-run").Out, StringComparison.Ordinal);
+    }
+
     // ---- Cemu, the shipped definition ----
 
     [Fact]
@@ -171,12 +231,14 @@ public class AppAddCliTests
         Directory.CreateDirectory(Path.Combine(deck.Home, "cemu", "save"));
 
         var list = deck.Ok("app", "list", "--json").Json().GetProperty("apps").EnumerateArray()
+            .Where(a => a.GetProperty("source").GetString() != "imported")
             .Select(a => (a.GetProperty("id").GetString(), a.GetProperty("name").GetString(), a.GetProperty("source").GetString()))
             .ToList();
         Assert.Equal([("cemu", "Cemu (mine)", "shared"), ("testapp", "Test App", "shared")], list);
 
         var plan = deck.Ok("app", "add", "cemu", "--json").Json().GetProperty("app").GetProperty("plan");
         Assert.Equal("shared", plan.GetProperty("definition_source").GetString());
+        Assert.True(plan.GetProperty("verified").GetBoolean());
         Assert.Equal("here", plan.GetProperty("install").GetString());
     }
 

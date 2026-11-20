@@ -14,6 +14,7 @@
   <!-- The shipped app definitions, built into the binary (design 5.2, "Where definitions come from"). -->
   <ItemGroup>
     <EmbeddedResource Include="..\..\definitions\*.jsonc" LogicalName="definitions/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\definitions\imported\ludusavi.jsonl.gz" LogicalName="definitions/imported/ludusavi.jsonl.gz" />
   </ItemGroup>
 
 </Project>

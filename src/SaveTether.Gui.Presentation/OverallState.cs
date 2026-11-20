@@ -168,7 +168,7 @@ public static class StatusCheck
         var appId = mappingId.Split('.')[0];
         try
         {
-            return workspace.Definitions.Find(appId)?.Definition is { } definition ? (definition.Name, true) : (appId, false);
+            return workspace.Definitions.Find(appId, includeImported: false)?.Definition is { } definition ? (definition.Name, true) : (appId, false);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

@@ -35,7 +35,7 @@ public class BackupsPageTests
 
         var group = Assert.Single(groups);
         Assert.Equal(Id, group.MappingId);
-        Assert.Equal(Role, group.Name);
+        Assert.Equal("ppsspp savedata", group.Name);
         Assert.Equal(2, group.Rows.Count);
         Assert.Single(group.Rows, r => r.OfSharedCopy);
         Assert.Single(group.Rows, r => !r.OfSharedCopy);
