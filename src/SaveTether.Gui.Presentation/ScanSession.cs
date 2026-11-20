@@ -93,6 +93,13 @@ public sealed class ScanSession(BackgroundTasks tasks)
     {
         ArgumentNullException.ThrowIfNull(flow);
         ArgumentNullException.ThrowIfNull(options);
+        return Start(token => flow.FoundApps(options, token), name);
+    }
+
+    /// <summary>As <see cref="Start(AddAppFlow, ScanOptions, string)"/>, with the finds from any source; the tests drive it.</summary>
+    internal bool Start(Func<CancellationToken, IEnumerable<FoundApp>> source, string name)
+    {
+        ArgumentNullException.ThrowIfNull(source);
         if (tasks.TryStart(name) is not { } task)
         {
             return false;
@@ -116,16 +123,16 @@ public sealed class ScanSession(BackgroundTasks tasks)
         }
 
         Changed?.Invoke();
-        _ = Task.Run(() => Run(flow, options, task));
+        _ = Task.Run(() => Run(source, task));
         return true;
     }
 
-    private void Run(AddAppFlow flow, ScanOptions options, BackgroundTask task)
+    private void Run(Func<CancellationToken, IEnumerable<FoundApp>> source, BackgroundTask task)
     {
         try
         {
             var count = 0;
-            foreach (var app in flow.FoundApps(options, task.Token))
+            foreach (var app in source(task.Token))
             {
                 lock (_gate)
                 {

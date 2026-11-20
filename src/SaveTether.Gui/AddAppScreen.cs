@@ -126,9 +126,14 @@ internal sealed class AddAppScreen : UserControl, IScreen
             return parts;
         }
 
+        // The scan the button offers to cancel: the one running when it was last drawn. A click acts on what the
+        // button says, not on what is true a moment later (a scan may have ended since, and then Cancel does nothing).
+        BackgroundTask? cancelTarget = null;
+
         void Refresh()
         {
             var running = _scans.Tasks.IsRunning;
+            cancelTarget = running ? _scans.Tasks.Current : null;
             scan.Content = running ? "Cancel scan" : "Scan for games";
             AutomationProperties.SetName(scan, running ? "Cancel the scan" : "Scan for games, including apps that are no longer installed");
             if (!string.IsNullOrWhiteSpace(search.Text))
@@ -247,10 +252,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
         search.TextChanged += (_, _) => _ = SearchAsync();
         scan.Click += (_, _) =>
         {
-            if (_scans.Tasks.IsRunning)
+            if (cancelTarget is { } shown)
             {
-                // The scan ends as it would have finished, keeping what it found; Refresh runs when it does.
-                _scans.Tasks.CancelCurrent();
+                // The button said Cancel: cancel that scan, even if it has just ended, and never start another.
+                shown.Cancel();
+                Refresh();
                 return;
             }
 
@@ -349,6 +355,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
         if (!_scans.HasRun)
         {
             _scans.Start(_flow, Core.Detection.ScanOptions.Default);
+            Refresh();
         }
     }
 

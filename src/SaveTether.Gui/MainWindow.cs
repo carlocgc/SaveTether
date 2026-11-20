@@ -67,47 +67,39 @@ internal sealed class MainWindow : Window
         AutomationProperties.SetName(_stripText, "Background status");
     }
 
-    private long _stripShownAt = System.Diagnostics.Stopwatch.GetTimestamp();
+    private readonly StatusPacer _stripPacer = new(Idle);
 
-    // At most one refresh is queued: a burst of reports shows the latest counts once. The scan runs at its own
-    // speed; the line lags behind it so each can be read (Pacing.StatusMinimum). The flag stays set while a
-    // refresh waits, and clears just before the line is drawn, so a change during the draw queues another.
+    // The scan runs at its own speed; the footer lags behind it so each line can be read (Pacing.StatusMinimum).
+    // Every change is offered to the pacer the moment it happens, so a scan that starts and ends between two draws
+    // is still shown running before the footer says Idle. At most one draw is queued; the flag clears just before
+    // the draw, so a change during it queues another.
+    private void OnTasksChanged()
+    {
+        _stripPacer.Offer(Tasks.Current?.Text ?? Idle);
+        RequestStripRefresh();
+    }
+
     private void RequestStripRefresh()
     {
         if (Interlocked.Exchange(ref _stripRefreshPending, 1) == 0)
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                var wait = Pacing.StatusWait(System.Diagnostics.Stopwatch.GetElapsedTime(_stripShownAt));
-                if (wait > TimeSpan.Zero)
-                {
-                    Avalonia.Threading.DispatcherTimer.RunOnce(DrawStrip, wait);
-                }
-                else
-                {
-                    DrawStrip();
-                }
-            });
+            Avalonia.Threading.Dispatcher.UIThread.Post(DrawStrip);
         }
     }
 
     private void DrawStrip()
     {
         Volatile.Write(ref _stripRefreshPending, 0);
-        ShowStrip();
-    }
-
-    private void ShowStrip()
-    {
-        var task = Tasks.Current;
-        var text = task?.Text ?? Idle;
-        if (_stripText.Text != text)
+        if (_stripPacer.TryNext(out var wait) is { } line)
         {
-            _stripShownAt = System.Diagnostics.Stopwatch.GetTimestamp();
-            _stripText.Text = text;
+            _stripText.Text = line;
         }
 
-        _stripButton.IsVisible = task is { State: BackgroundTaskState.Failed };
+        _stripButton.IsVisible = Tasks.Current is { State: BackgroundTaskState.Failed };
+        if (wait > TimeSpan.Zero && Interlocked.Exchange(ref _stripRefreshPending, 1) == 0)
+        {
+            Avalonia.Threading.DispatcherTimer.RunOnce(DrawStrip, wait);
+        }
     }
 
     public MainWindow(string localFolder, Action checkNow, Action quit, Func<Func<ActionFlow, Task>, Task> operate)
@@ -166,7 +158,7 @@ internal sealed class MainWindow : Window
         });
         Content = _overlay;
         BuildStrip();
-        Tasks.Changed += RequestStripRefresh;
+        Tasks.Changed += OnTasksChanged;
         _actions = new ActionFlow(localFolder, _overlay, App.Options.Log);
 
         KeyDown += (_, e) =>
