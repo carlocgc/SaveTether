@@ -76,10 +76,28 @@ public sealed record OverallStatus(
         OverallCondition.DeviceNameInUse => "Device name used by another install",
         OverallCondition.NeedsAttention => AttentionHeadline(),
         OverallCondition.CheckFailed => "Health check failed",
-        _ => "All linked",
+        _ => GreenHeadline(),
     };
 
     public IReadOnlyList<MappingState> Attention => Mappings.Where(m => m.Word.NeedsAttention).ToList();
+
+    /// <summary>
+    /// Green, so nothing needs the owner, but "All linked" only when it is so: the folders this device has and has not
+    /// linked yet ("Ready to link") are counted, as "Apply all" counts them. "Not on this device" is not counted: a
+    /// mapping set up on another device and not wanted here is normal (5.14). Found by the owner on 2026-11-20, with
+    /// every link reverted and the header still saying "All linked".
+    /// </summary>
+    private string GreenHeadline()
+    {
+        var ready = Mappings.Count(m => m.Health.State == HealthState.NotApplied && m.Health.Reason != HealthReason.NoSaveFolder);
+        if (ready == 0)
+        {
+            return "All linked";
+        }
+
+        var linked = Mappings.Count(m => m.Health.State == HealthState.Ok);
+        return linked == 0 ? $"{ready} ready to link" : $"{linked} linked, {ready} ready to link";
+    }
 
     private string AttentionHeadline()
     {

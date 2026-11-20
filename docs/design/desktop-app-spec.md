@@ -38,10 +38,11 @@ The overall state is computed from one `Status()` report plus the journal, the l
 | 4 | Sync root unavailable (`SyncRootProblem` set) | amber | Sync folder not available | banner B3 |
 | 5 | Device file mismatch | amber | Device name used by another install | banner B4 |
 | 6 | Any mapping not OK and not Not applied | amber | *n* apps need attention | rows sorted to the top |
-| 7 | Otherwise | green | All linked | "All linked" |
+| 7 | Otherwise | green | All linked; or *n* ready to link, or *n* linked, *m* ready to link | the same |
 
 - **Two conditions added while building** (2026-11-18), both amber: *Cannot check this device*, after row 2, when the core refuses to report for another reason (this device's file missing from the sync folder, say; the window shows the core's message); and *Health check failed*, when checks fail unexpectedly three times in a row (section 10). Until the third, the icon keeps its last state.
 - **Not applied stays green** (5.14): a mapping set up on another device and not wanted here is normal.
+  *As built (2026-11-20):* green does not always say "All linked". Folders this device has and has not linked ("Ready to link") are counted, as Apply all counts them: "6 ready to link" with none linked, "4 linked, 2 ready to link" with some. "Not on this device" is not counted. The first build said "All linked" with every link reverted (found by the owner).
 - **The lock does not change the state.** While another process holds the operation lock (a CLI `apply`, the Decky plugin), the folder it is working on may briefly look Replaced (renamed aside, 5.3). So while the lock is held by another process, a check's result is shown in the window but does not change the icon or raise a notification; the next check after the lock is released does.
 - **Tray menu**: the first line above (disabled, as a label), then "Open SaveTether", "Check now", a separator, "Quit". Clicking the icon opens the window; the trial found the icon's position cannot be known reliably on Linux, so there is no panel beside the icon (plan section 5).
 - **Icons**: two images, green and amber, each with a distinct shape as well as colour (a tick and an exclamation mark), so the state does not depend on telling colours apart.
