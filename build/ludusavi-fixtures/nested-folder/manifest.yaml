@@ -10,3 +10,15 @@ Nested Game:
       tags: [save]
     "<winAppData>/Other/Folder":
       tags: [save]
+    "<winAppData>/Nested Stores":
+      tags: [save]
+      when:
+        - os: windows
+          store: gog
+    "<winAppData>/Nested Stores/Steam":
+      tags: [save]
+      when:
+        - os: windows
+          store: steam
+  steam:
+    id: 777

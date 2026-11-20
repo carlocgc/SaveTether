@@ -159,8 +159,8 @@ sealed class SteamDto
 
 // ---- What a path becomes. ----
 
-/// <summary>One folder to link. Family: windows, linux, flatpak or install. Token: the base token ("appdata"); FlatpakId is set for a Flatpak. Steam: false when the manifest limits the folder to other stores.</summary>
-sealed record Folder(string Family, string Token, string FlatpakId, string Rel, int Depth, bool Config, bool Account, bool Steam = true)
+/// <summary>One folder to link. Family: windows, linux, flatpak or install. Token: the base token ("appdata"); FlatpakId is set for a Flatpak. Steam: false when no entry of the manifest gives the folder for Windows on Steam. ProtonOnly: a Steam folder inside a non-Steam Windows folder; the Windows parent covers it, so only the Proton install links it.</summary>
+sealed record Folder(string Family, string Token, string FlatpakId, string Rel, int Depth, bool Config, bool Account, bool Steam = true, bool ProtonOnly = false)
 {
     public string Key => $"{Family}|{Token}|{FlatpakId}|{Rel}".ToLowerInvariant();
 }
@@ -305,7 +305,7 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             foreach (var (path, entry) in saves)
             {
                 result.Bump("paths tagged save");
-                var (found, drop) = Classify(path, entry!.Tags!.Contains("config"), OsOf(entry.When), StoresOf(entry.When));
+                var (found, drop) = Classify(path, entry!.Tags!.Contains("config"), OsOf(entry.When), SteamWindows(entry.When));
                 if (drop is not null)
                 {
                     result.Bump("paths left out: " + drop);
@@ -410,16 +410,9 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
         return when.Select(w => w.Os!).ToHashSet(StringComparer.Ordinal);
     }
 
-    /// <summary>The stores a path is limited to, or null for any. An entry without "store" means any.</summary>
-    private static HashSet<string>? StoresOf(List<WhenDto>? when)
-    {
-        if (when is null || when.Count == 0 || when.Any(w => w.Store is null))
-        {
-            return null;
-        }
-
-        return when.Select(w => w.Store!).ToHashSet(StringComparer.Ordinal);
-    }
+    /// <summary>Whether one "when" entry allows both Windows and Steam (omitted fields allow anything), which is what a Proton install needs. No entries means yes.</summary>
+    private static bool SteamWindows(List<WhenDto>? when) =>
+        when is null || when.Count == 0 || when.Any(w => (w.Os is null or "windows") && (w.Store is null or "steam"));
 
     private static string Normalize(string raw)
     {
@@ -433,7 +426,7 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
     }
 
     /// <summary>Applies the rules to one path. Returns the folders it gives, or the reason it gives none.</summary>
-    public static (List<Folder> Folders, string? Drop) Classify(string raw, bool config, HashSet<string> os, HashSet<string>? stores = null)
+    public static (List<Folder> Folders, string? Drop) Classify(string raw, bool config, HashSet<string> os, bool steam = true)
     {
         var none = new List<Folder>();
         var windows = os.Contains("windows");
@@ -499,7 +492,6 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             return (none, "generic folder (My Games, Saved Games, Documents)");
         }
 
-        var steam = stores is null || stores.Contains("steam");
         Folder Make(string family, string token, string flatpak, string rel) => new(family, token, flatpak, rel, depth, config, account, steam);
 
         if (head == "<base>")
@@ -605,7 +597,10 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             })
             .ToList();
 
-    /// <summary>A folder inside another kept folder of the same game (and base) is dropped: the outer link covers it.</summary>
+    /// <summary>
+    /// A folder inside another kept folder of the same game (and base) is dropped: the outer link covers it. Each install is collapsed within
+    /// its own folders: Windows sees every folder, Proton only the Steam ones, so a Steam folder inside a non-Steam one stays for Proton alone.
+    /// </summary>
     private static List<Folder> DropNested(List<Folder> folders, ConversionResult result)
     {
         var kept = new List<Folder>();
@@ -613,26 +608,33 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
                      .ThenBy(f => f.FlatpakId, StringComparer.Ordinal).ThenBy(f => f.Rel, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(f => f.Rel, StringComparer.Ordinal))
         {
-            var at = kept.FindIndex(k => k.Family == folder.Family && k.Token == folder.Token && k.FlatpakId == folder.FlatpakId
-                && folder.Rel.StartsWith(k.Rel + "/", StringComparison.OrdinalIgnoreCase));
-            if (at >= 0)
-            {
-                result.Bump("paths left out: inside another kept folder of the game");
+            bool Outer(Folder k) => k.Family == folder.Family && k.Token == folder.Token && k.FlatpakId == folder.FlatpakId
+                && folder.Rel.StartsWith(k.Rel + "/", StringComparison.OrdinalIgnoreCase);
 
-                // The outer link now covers the inner folder: it takes on the inner folder's marks and an entry depth that reaches its entries (when it has one of its own).
-                var outer = kept[at];
-                var between = folder.Rel[(outer.Rel.Length + 1)..].Split('/').Length;
-                kept[at] = outer with
-                {
-                    Depth = folder.Depth > 1 ? Math.Max(outer.Depth, Math.Min(MappingFile.MaxEntryDepth, between + folder.Depth)) : outer.Depth,
-                    Config = outer.Config || folder.Config,
-                    Account = outer.Account || folder.Account,
-                    Steam = outer.Steam || folder.Steam,
-                };
+            var at = kept.FindIndex(k => !k.ProtonOnly && Outer(k));
+            if (at < 0)
+            {
+                kept.Add(folder);
+                continue;
+            }
+
+            // The outer link now covers the inner folder: it takes on the inner folder's marks and an entry depth that reaches its entries (when it has one of its own).
+            var outer = kept[at];
+            var between = folder.Rel[(outer.Rel.Length + 1)..].Split('/').Length;
+            kept[at] = outer with
+            {
+                Depth = folder.Depth > 1 ? Math.Max(outer.Depth, Math.Min(MappingFile.MaxEntryDepth, between + folder.Depth)) : outer.Depth,
+                Config = outer.Config || folder.Config,
+                Account = outer.Account || folder.Account,
+            };
+
+            if (folder.Family == "windows" && folder.Steam && !kept.Any(k => k.Steam && Outer(k)))
+            {
+                kept.Add(folder with { ProtonOnly = true });
             }
             else
             {
-                kept.Add(folder);
+                result.Bump("paths left out: inside another kept folder of the game");
             }
         }
 
@@ -660,7 +662,7 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             foreach (var token in tokens)
             {
                 var suffix = Suffix(token);
-                var first = win.First(f => f.Token == token).Rel;
+                var first = win.First(f => f.Token == token && !f.ProtonOnly).Rel;
                 installs.Add(new InstallOut("windows" + suffix, ["windows"], $"{{{token}}}/{first}", $"{{{token}}}", null, null));
 
                 // The Proton install is detected by a folder that is Steam's; a folder the manifest gives only for other stores does not show one.
@@ -681,7 +683,8 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
                 roles,
                 "save",
                 win,
-                f => steam is null || !f.Steam ? ["windows" + Suffix(f.Token)] : ["windows" + Suffix(f.Token), "steam-proton" + Suffix(f.Token)]);
+                f => f.ProtonOnly ? ["steam-proton" + Suffix(f.Token)]
+                    : steam is null || !f.Steam ? ["windows" + Suffix(f.Token)] : ["windows" + Suffix(f.Token), "steam-proton" + Suffix(f.Token)]);
         }
 
         var linuxFolders = Of("linux");
