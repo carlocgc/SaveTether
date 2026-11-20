@@ -227,7 +227,7 @@ Flags:
 | Field | Type | |
 |---|---|---|
 | `removed` | array of strings | Each file, link, folder or autostart entry removed. |
-| `left` | array of strings | Each one left, with the reason: a file in the install folder that is not SaveTether's, or a link SaveTether did not make. |
+| `left` | array of strings | Each one left, with the reason: a file in the install folder that is not SaveTether's, a link SaveTether did not make, or an installed SaveTether still running after it was asked to quit (named by process id). |
 
 ## Conflict
 

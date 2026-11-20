@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="src/SaveTether.Gui/Assets/savetether.png" alt="SaveTether icon: a save disk with two linked rings" width="96">
+
 # SaveTether
 
 **Keep game save folders in one place, and let your sync tool share them between machines.**
@@ -22,15 +24,27 @@ The point is to share that folder between machines. Put it under a sync tool you
 
 ```mermaid
 flowchart LR
-  subgraph PC
-    direction TB
-    A["Emulator's save folder<br/>(a link)"] --> S1[("Sync/savetether/<br/>the real saves")]
+  subgraph PC["Windows PC"]
+    PA["Cemu's save folder"] --- |"link →"| PSA[("cemu\save")]
+    PB["PPSSPP's SAVEDATA"] --- |"link →"| PSB[("ppsspp\savedata")]
+    PG["A PC game's saves"] --- |"link →"| PSG[("game\saves")]
+    subgraph PCS["Sync\savetether\ (the real saves)"]
+      PSA
+      PSB
+      PSG
+    end
   end
-  subgraph Deck
-    direction TB
-    B["Emulator's save folder<br/>(a link)"] --> S2[("Sync/savetether/<br/>the real saves")]
+  subgraph Deck["Steam Deck"]
+    DSA[("cemu/save")] --- |"← link"| DAA["Cemu's save folder<br/>(Flatpak)"]
+    DSB[("ppsspp/savedata")] --- |"← link"| DAB["PPSSPP's SAVEDATA<br/>(Flatpak)"]
+    DSG[("game/saves")] --- |"← link"| DAG["The game's saves<br/>(Proton prefix)"]
+    subgraph DS["~/Sync/savetether/ (the real saves)"]
+      DSA
+      DSB
+      DSG
+    end
   end
-  S1 <-. "Syncthing, or any<br/>file sync tool" .-> S2
+  PCS <-. "Syncthing, or any<br/>file sync tool" .-> DS
 ```
 
 ## What it does

@@ -5,6 +5,9 @@
 ;
 ;   ISCC.exe /DAppVersion=<version> /DSourceDir=<unpacked package> /DOutputDir=<dir> /DOutputName=<name> build\windows\savetether.iss
 
+#if Ver < EncodeVer(6, 5, 2)
+  #error Inno Setup 6.5.2 or newer is needed: the wizard's pictures are PNG files
+#endif
 #ifndef AppVersion
   #error AppVersion must be given: /DAppVersion=0.3.0
 #endif
@@ -42,6 +45,11 @@ WizardStyle=modern
 LicenseFile={#SourceDir}\LICENSE
 ; The app's icon (build/render-icon.cs), for the installer itself.
 SetupIconFile=..\..\src\SaveTether.Gui\Assets\savetether.ico
+; The wizard's side picture (first and last pages), from build/render-icon.cs, on a pale blue like Inno Setup's own;
+; and its corner picture (the other pages), the app's icon itself. PNG, which needs Inno Setup 6.5.2 or newer.
+WizardImageFile=wizard.png
+WizardImageBackColor=#E8F1FA
+WizardSmallImageFile=..\..\src\SaveTether.Gui\Assets\savetether.png
 UninstallDisplayName=SaveTether
 UninstallDisplayIcon={app}\savetether-gui.exe
 ; A running SaveTether is closed before its files are replaced or removed. It quits when Windows asks

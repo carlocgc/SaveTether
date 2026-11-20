@@ -4,16 +4,19 @@
 // SaveTether's app icon, "linked floppy" (chosen by the owner on 2026-11-19): a save disk with two linked rings.
 // The shapes below are the only source. This writes them as an SVG, PNGs at each size, and a Windows .ico:
 //
-//   dotnet run build/render-icon.cs -- src/SaveTether.Gui/Assets
+//   dotnet run build/render-icon.cs -- src/SaveTether.Gui/Assets build/windows
 //
 // Sizes of 24 pixels and under use a simpler drawing (no shutter window, heavier rings), so the link still reads in
-// a title bar or tray. The outputs are committed; run this again after changing a shape.
+// a title bar or tray. The second folder gets the Windows installer's side picture. The outputs are committed; run
+// this again after changing a shape.
 
 using System.Text;
 using SkiaSharp;
 
 var outDir = args.Length > 0 ? args[0] : ".";
+var wizardDir = args.Length > 1 ? args[1] : outDir;
 Directory.CreateDirectory(outDir);
+Directory.CreateDirectory(wizardDir);
 
 const string Blue = "#185FA5";
 const string LightBlue = "#378ADD";
@@ -53,6 +56,12 @@ File.WriteAllBytes(Path.Combine(outDir, "savetether-tray.png"), Render(Small, 32
 File.WriteAllText(Path.Combine(outDir, "savetether.svg"), Svg(Large), new UTF8Encoding(false));
 Console.WriteLine($"wrote savetether.ico ({string.Join(", ", sizes)}), savetether.png, savetether-tray.png and savetether.svg to {Path.GetFullPath(outDir)}");
 
+// The installer's side picture, on its first and last pages (build/windows/savetether.iss): the icon on a transparent
+// background the size of the panel at 200%, which Inno Setup scales down and shows on its WizardImageBackColor. The
+// corner picture of the other pages is savetether.png itself.
+File.WriteAllBytes(Path.Combine(wizardDir, "wizard.png"), Placed(Large, 328, 628, 196, 264));
+Console.WriteLine($"wrote wizard.png to {Path.GetFullPath(wizardDir)}");
+
 static byte[] Render((string Path, string Colour, float Stroke)[] shapes, int size)
 {
     using var surface = SKSurface.Create(new SKImageInfo(size, size, SKColorType.Rgba8888, SKAlphaType.Premul));
@@ -71,6 +80,22 @@ static byte[] Render((string Path, string Colour, float Stroke)[] shapes, int si
             StrokeCap = SKStrokeCap.Round,
         };
         canvas.DrawPath(path, paint);
+    }
+
+    using var image = surface.Snapshot();
+    using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+    return encoded.ToArray();
+}
+
+// The icon, iconSize wide, centred across and at centreY down a transparent w by h PNG.
+static byte[] Placed((string Path, string Colour, float Stroke)[] shapes, int w, int h, int iconSize, float centreY)
+{
+    using var surface = SKSurface.Create(new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul));
+    var canvas = surface.Canvas;
+    canvas.Clear(SKColors.Transparent);
+    using (var icon = SKImage.FromEncodedData(Render(shapes, iconSize)))
+    {
+        canvas.DrawImage(icon, (w - icon.Width) / 2f, centreY - (icon.Height / 2f));
     }
 
     using var image = surface.Snapshot();
