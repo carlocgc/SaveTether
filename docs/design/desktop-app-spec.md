@@ -79,131 +79,16 @@ Minimum 800 × 560, designed for 1280 × 800 (the Deck's screen) at 100 % scalin
 
 While B1, B2 or B3 is shown, every action on the Apps and Backups pages is disabled, except "Open folder". The core refuses these operations anyway; disabling them avoids a click that can only fail.
 
-### 4.2 Background task strip
+### 4.2 Background status
 
-A strip along the bottom of the window, above the "Local folder" line, on every page. It shows the one background task that runs (for now a scan): a progress bar, a line such as "Scanning: 412 of 8,943, 3 found" (just the found count when the total is not known), and Cancel. When nothing runs it is hidden and takes no room.
+*Changed 2026-11-20 (owner):* the first design was a strip above the footer with a progress bar. It appeared and went within a second, moving the page each time, and looked like a bug. The status is now one line in the footer's right corner, always there, opposite "Local folder". It says **Idle** when nothing runs in the background. While a task runs it says what, for example "Scanning: 412 of 8,943, 3 found" (just the found count when the total is not known), with a small **Cancel** beside it. There is no progress bar and nothing else on the page moves. Anything else that runs in the background and should be told (the health check, later) reports through the same line.
 
 - One task at a time. Any action that starts a scan is disabled while one runs, and says "A scan is already running"; it is enabled again when the scan finishes, is cancelled, or fails.
 - A scan only reads: it does not take the operation lock, does not disable operation buttons, and an operation does not stop it.
-- The strip is separate from the banners (4.1) and the operation dialog's progress (9.3). Leaving Add app does not stop the scan; its result is there on return.
-- A failed scan shows "Scanning failed: <message>" with Dismiss, once; starting the next scan also clears it.
+- The status is separate from the banners (4.1) and the operation dialog's progress (9.3). Leaving Add app does not stop the scan; its result is there on return.
+- A failed scan shows "Scanning failed: <message>" with **Dismiss**, once; starting the next scan also clears it.
 
-*As built (2026-11-20):* `BackgroundTasks` (presentation) is the registry, `MainWindow.Tasks` holds it and draws the strip. Page 1's scan buttons start tasks through `ScanSession` (T5), which registers with `TryStart` and reports with `Report`.
-
-## 5. Apps page
-
-Mappings are grouped by app: the part of the mapping ID before the dot, named from the app's definition when there is one ("Ryujinx"), otherwise the ID itself. Inside an app, one row per role (mapping), named from the definition's role name ("Saves") or the part after the dot.
-
-Each row shows: the state word and icon, one sentence, and the folder on this device. Rows needing attention, and the apps holding them, sort to the top; the rest are in name order.
-
-Page actions: **Add app** (section 8), **Apply all** (section 9.4, shown when at least one row is Ready to link).
-
-### 5.1 States
-
-The core's `HealthState` has seven values. Not applied, Replaced and Broken each cover situations that need different words and actions, so the core says which with a `HealthReason` (section 13, item 2), shown below in the Situation column.
-
-| Core state | Situation (reason) | Word | Colour | Sentence | Main action | Other actions |
-|---|---|---|---|---|---|---|
-| OK | | Linked | green | "Saves here are the shared copy." | none | Open folder, Open shared folder, Backups, Revert |
-| Not applied | no folder set on this device (`no-save-folder`) | Not on this device | grey | "Set up on <devices>, not here." | Add (opens Add app at this app) | none |
-| Not applied | folder set, not linked (`not-linked-yet`) | Ready to link | grey | "Not linked yet." | **Apply** | Open folder, Stop using here |
-| Not applied | the folder in the device file is not an absolute path (`save-folder-not-absolute`) | Folder setting is wrong | amber | "This device's file has '<value>' as the folder." | Add again | Details |
-| Replaced | the folder holds files (`folder-holds-files`) | Not linked | amber | "The link was replaced by a real folder. Saves made here are not shared." | **Apply** (stops at the choice, section 9.2) | Open folder, Backups |
-| Replaced | the folder is empty (`folder-empty`) | Link missing | amber | "The link is gone and the folder is empty." | **Apply** | Open folder |
-| Replaced | nothing at the folder (`folder-missing`) | Folder gone | amber | "Nothing is at <path>. If the app has moved, find it again." | **Find the app again** (Add app, section 8) | Apply |
-| Replaced | a file or something else is where the folder was (`not-a-folder`) | Not a folder | amber | "Something other than a folder is at <path>. Move it away by hand, then apply." | Open folder's parent | Details |
-| Broken | the shared folder is missing (`shared-folder-missing`) | Shared folder missing | amber | "The link is in place, but the shared folder is missing. It may not have synced yet." | Check again | Open folder, Open shared folder's parent |
-| Broken | the sync root cannot be used (`sync-root-unavailable`) | Shared folder missing | amber | Covered by banner B3; the row repeats only "The sync folder is not available." | Check again | Open folder |
-| Retargeted | | Linked elsewhere | amber | "The folder now links to <path> instead of the shared folder. Remove that link by hand, then apply." | Open folder | Details |
-| Double seed | | Two shared copies | amber | "More than one device made its saves the shared copy: <devices>." | **Use this device's copy** (section 9.2, Double seed) | Backups |
-| Foreign link | | Not SaveTether's link | amber | "The folder is a link SaveTether did not make, to <path>. Remove it by hand, then apply." | Open folder | Details |
-
-"Not applied, no folder set" counts as grey but is listed after everything else, under a collapsed "Not on this device (*n*)" heading, so a device that uses three of ten shared apps is not cluttered.
-
-*As built (2026-11-18):* `AppsPage` (presentation project) holds this table, the grouping and the order; the window shows each row's main action as a button and the others under **More**.
-
-Changes from the table above:
-- **Linked rows** have no main button, as the table says. Revert is under More. The previous build had made Revert the main action, which the table does not.
-- **Opening folders.** Open folder uses `explorer` on Windows and `xdg-open` on Linux.
-- **No device has a folder.** When no device has a folder set for the mapping, the row says "No device has a folder set for it." instead of "Set up on <devices>".
-- **The collapsed section** stays open across checks, and its rows name their app, since there is no app heading above them.
-- **The page's buttons stay in view** (2026-11-19, asked for by the owner). Add app, Apply all, Backups and Settings sit in a bar above the scrolling area. A page shown in place of the Apps page (Add app with its hand form, Backups, Settings) puts its way back, "Back" or "Back to apps", in that same bar, so it is in the same place on every page and stays in view however long the page is. A page's own action, such as Add or Look again, stays below what it acts on. Setup keeps Back beside Next, as in any step-by-step form.
-
-*As built (2026-11-18), with Add app:* **Find the app again** (Folder gone) and **Add** (Not on this device) open Add app's page 2 for the row's app. Both are offered only when the catalog has a usable definition for the app (`MappingState.HasDefinition`); a mapping made by hand with `map add` has none, so its row keeps no main action there, as Add app could only refuse it.
-
-*As built (2026-11-19), with "Add a folder by hand":* a mapping with no definition now has a main action too, which opens the hand form for that mapping (section 8): **Add** on a Not on this device row, and **Choose the folder again** on a Folder gone row.
-
-*As built (2026-11-18), with the Backups page:* **Backups** is under More on Linked, Not linked and Two shared copies, as the table lists it.
-
-Not built yet:
-- **Add again** on "Folder setting is wrong".
-- **Opening the other actions by keyboard:** they are a Tab stop (the More button), not the Menu key or Shift+F10 (section 12).
-
-**Stop using here** is `map remove`: refused by the core while applied, so it is only offered when Ready to link. It asks for confirmation: "Forget this device's folder for <role>? Nothing is deleted; the shared copy and other devices are not affected."
-
-The "Folder setting is wrong" row turns the overall state amber, unlike the core's Not applied (decision 4). Keeping it green, as the CLI does, would leave a misconfiguration unnoticed.
-
-## 6. First-run setup
-
-Shown instead of the pages when there is no `bootstrap.json`, and reachable later from banner B4. Three steps, each a page with Back and Next; the result is one `Workspace.Init` call at the end, so nothing is written until the last step.
-
-### 6.1 Sync folder
-
-A path field and a "Choose folder" button. The folder picker is the OS dialog. The field accepts a typed path too, for a folder the picker does not show, such as a network share that is not mounted in the file manager.
-
-On Next the app checks the folder and shows one of:
-
-| Found | Shown | Offered |
-|---|---|---|
-| `savetether/.savetether/` exists | "This sync folder is already set up for SaveTether, on: <device names>." | Next |
-| the folder exists but has no SaveTether folder | "This sync folder is not set up for SaveTether yet." and the two cases below | **This is my first device** (create-root), or Back |
-| the folder does not exist | "<path> does not exist. If it is on a drive or a network share, connect it." | Back |
-| on Windows, the folder is on a network drive *(added 2026-11-19)* | "<path> is on a network drive. On Windows, SaveTether links save folders with junctions, which can only point to a local drive, so no save folder could be linked there. Use a folder on a local drive, and keep it in step with the share or the other devices with a sync tool." | Back |
-
-*As built (2026-11-19), the network-drive row:* checked first, from the path and the drive's type alone (`PathRules.IsOnNetworkDrive`), since probing a share that is not reachable can stall for seconds. The core's `Init` refuses the same, so the CLI's `init` does too; before this, a network sync folder was accepted at setup and refused only at the first apply. On Linux a symbolic link into a mounted share works, so nothing is refused there. `docs/sharing.md` describes the ways to share the folder.
-
-"This is my first device" asks for confirmation: "Only do this on the first device. If SaveTether is set up on another device, wait until the sync tool has delivered the SaveTether folder here instead; setting it up twice creates two separate setups." This is the GUI form of 5.3 invariant 5's protection against an empty mount point.
-
-### 6.2 This device's name
-
-- Existing device files are listed first, each with "Take over" (used after a wipe, 5.4). Below them, a field for a new name, filled with a suggestion from the machine's host name, lowercased, with characters outside `a-z 0-9 - _` dropped.
-- The name is checked as typed against `Identifiers.IsValidDeviceName`, with the rule under the field.
-- **Take over** needs confirmation (5.6): "Only take over '<name>' if this is that device, set up again. Two machines with one name would apply each other's folders." Buttons: Cancel (focused), Take over.
-
-### 6.3 Backups, and finish
-
-- The backup location: the default, or the one in the device file being taken over, with "Change". A location from the device file that does not exist is shown with the core's note (5.12, `init`): its drive may not be connected.
-- **Set up** runs `Init`. A `StoreException` is shown in place with the step it belongs to, and nothing moves on.
-- After setup the window shows the Apps page. When the device was taken over and has folders set (a restore after a wipe), it also shows: "This device has <n> apps set up. Apply them all now?" with **Apply all** (section 9.4) and Not now.
-- First run only, before step 6.1: the install step of section 11, when the app is not running from the per-user location.
-
-*As built (2026-11-18):* `SetupFlow` in the presentation project, shown by `SetupView`. Three choices were made while building it:
-- **The lock.** Set up takes the operation lock. The app's own files mean the local folder exists before setup, so a CLI could run at the same moment.
-- **The backup location.** It is passed to `Init` only when the owner changed it. Unchanged, the core decides, as the CLI does without `--backup-root`. So a taken-over device's location that is not there is not created, since its drive may only be disconnected; the page shows the core's note beforehand.
-- **Typed paths.** A typed path may start with `~` on Linux.
-
-Not built yet: the install step, the Apply all offer after a take-over (it needs operations, section 9.4), and reaching setup again from banner B4.
-
-## 7. Operation flow, common to every action
-
-Apply, Revert, Restore, Recover, Add app, Stop using here, the Flatpak grant and its revoke, Take over and changing the backup location are operations. Each:
-
-1. Takes the operation lock (9.1). If another process holds it: "Another SaveTether operation is running (<command>). Try again when it has finished." Nothing else happens.
-2. Plans (where the core plans): `PlanApply`, `PlanRevert`, `PlanRestore`, `PlanAppAdd`.
-3. On a refusal, shows it (section 9) and releases the lock.
-4. On a plan, shows the confirmation for that action, with the plan's steps in plain words under "Show steps". The lock is held while the dialog is open, so the plan cannot go stale behind it; a dialog left open for 10 minutes is cancelled and the lock released (decision 5).
-5. Runs the plan with progress (9.3), then shows the result (9.3), releases the lock, and runs a health check.
-
-*As built (2026-11-18), for Apply, Revert and Recover.* `OperationSession` (presentation project) holds the lock from the first plan to the result; `ActionFlow` (the app) shows the dialogs. While an operation runs, the app runs no health check, since its own lock is held and a folder may be renamed aside for a moment, and Quit is refused with section 2's sentence.
-
-Choices made while building:
-- **Arriving saves.** The choice dialog cannot know beforehand that the shared copy may still be arriving: the core says so only once add-missing or replace-shared is chosen (`RefusalKind.NotArrived` with `AssumeSyncedWouldHelp`). So that choice is followed by a dialog with section 9.2's sentence and "The shared saves really were deleted". Disabling the two choices in advance is not done.
-- **Which button has the focus.** In refusal dialogs Cancel has the focus, not Check again: it is the choice that changes nothing.
-- **Recovery's result** is worded as recovery succeeding: "Recovered: the unfinished apply was undone." The plain run's "failed and was undone" read as a new failure (found on the Deck).
-
-Built since: the other row actions except Backups, and Apply all (section 5's notes); Add app (section 8's notes), which takes the lock only for Add.
-
-Built since: Backups and Restore (section 9.7's notes).
+*As built (2026-11-20):* `BackgroundTasks` (presentation) is the registry, `MainWindow.Tasks` holds it and `MainWindow` draws the footer line (`Idle` is `MainWindow.Idle`). The health check does not report through it yet.
 
 ## 8. Add app
 
@@ -211,11 +96,11 @@ A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmati
 
 **Page 1, choose an app.** The catalog's apps (shared definitions, then built-in, as `app list` shows them), in name order, with a search field that filters as typed. Next to each, filled in the background: "Found", "Not found" or "Added" (already has a folder on this device). Opening the page does not wait for detection.
 
-*Decided (2026-11-20):* page 1's automatic scan finds installed apps only. **Scan for saved data** is an opt-in deeper scan that also lists saves left by uninstalled apps, with a choice of role classes (plan T4b). Scans show their progress and Cancel in a strip along the bottom of every page (T5a); a second scan cannot start while one runs. The strip is separate from the operation lock and does not block operations.
+*Decided (2026-11-20):* page 1's automatic scan finds installed apps only. *Changed 2026-11-20 (owner):* an imported definition detects a game by its own save folder, which stays after the game is gone, so the scan listed uninstalled games (70 apps on the owner's PC, 18 after the fix below). A definition from the Ludusavi manifest with a Steam ID is now found only when Steam has the game installed (an `appmanifest` in a Steam library: on Linux the libraries under the home folder, on Windows the registry's `SteamPath` and Program Files (x86)); where the device has no Steam at all the save folder alone still counts, and a deep scan lists such a game as "Not installed". A game bought elsewhere that also has a Steam ID is therefore left to the deep scan or the search. **Scan for saved data** is an opt-in deeper scan that also lists saves left by uninstalled apps, with a choice of role classes (plan T4b). Scans show their progress and Cancel in a strip along the bottom of every page (T5a); a second scan cannot start while one runs. The strip is separate from the operation lock and does not block operations.
 
 *As built (T4b, core and presentation; the button came with T5):* `InstallScan.Run` and `AddAppFlow.FoundApps` take `ScanOptions` (`RoleClasses`, default `save`; `RequireInstall`, default true; `ScanOptions.Deep(...)` turns the gate off). `ScanHit` and `FoundApp` carry `Installed`; page 1 marks `Installed == false` rows "Not installed". One row per app: a detected install wins over a newer write in an undetected one.
 
-*As built (T5, 2026-11-20):* page 1 is the found list. Opening it starts the automatic scan once per window session (`ScanSession`, which the window owns, so leaving Add app keeps the rows and the scan); rows appear as they are found, newest save first, each "Last played <date>" (or "No save files yet"), then "Already added" (`AddAppFlow.AddedApps`: apps with a folder set on this device). Search lists at most 50 matches over every definition (imported ones too; `AddAppFlow.Search`), says how many there are in all, and builds rows only for those shown; each shown row is checked in the background for Found / Not found / Added. Imported rows say "Unverified"; a deep-scan row with no install says "Not installed". **Scan for saved data** runs the deep scan, with System files and Save states as the optional extra classes (Save is always on); it is disabled beside "A scan is already running" while one runs. The strip's count is the found count: the core reports no total. The scan loop moved to `Workspace.ScanFound`, shared with the CLI's `app list --found`. Not built: the full per-class choice (cache, mods, media are never offered).
+*As built (T5, 2026-11-20):* page 1 is the found list. Opening it starts the automatic scan once per window session (`ScanSession`, which the window owns, so leaving Add app keeps the rows and the scan); rows appear as they are found, newest save first, each "Last played <date>" (or "No save files yet"), then "Already added" (`AddAppFlow.AddedApps`: apps with a folder set on this device). Search lists at most 50 matches over every definition (imported ones too; `AddAppFlow.Search`), says how many there are in all, and builds rows only for those shown; each shown row is checked in the background for Found / Not found / Added. Imported rows say "Unverified"; a deep-scan row with no install says "Not installed". **Scan for saved data** runs the deep scan, with System files and Save states as the optional extra classes (Save is always on); it is disabled beside "A scan is already running" while one runs. The status line's count is the found count: the core reports no total. The list is rebuilt at most about four times a second while a scan runs. The scan loop moved to `Workspace.ScanFound`, shared with the CLI's `app list --found`. Not built: the full per-class choice (cache, mods, media are never offered).
 
 **Page 2, the plan.** `PlanAppAdd` with what is known so far; then, by outcome:
 

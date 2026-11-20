@@ -128,9 +128,9 @@ Each flow lists what to set up, what to do, and what to check. Run the flows of 
 - The CI scenario against the native binary: `bash tests/e2e/scenario1.sh <path to savetether>`.
 - For behaviour a test cannot reach (a real Flatpak, an SD card, a running emulator), the matching lines of plan section 8.
 
-### Background task strip (from the first scan button on)
+### Background status in the footer (from the first scan button on)
 
-Start a scan on page 1 with the real bundle. Check: the strip shows on every page at the Deck's window size without covering the footer or buttons; counts move; a second scan button is disabled with "A scan is already running"; leave Add app and return mid-scan, the scan kept running; an Apply meanwhile is not blocked; Cancel clears the strip and re-enables the button.
+Start a scan on page 1 with the real bundle. Check: the footer's right corner says Idle, then "Scanning: N found" with Cancel, on every page at the Deck's window size, and nothing on the page moves when it changes; counts move; a second scan button is disabled with "A scan is already running"; leave Add app and return mid-scan, the scan kept running; an Apply meanwhile is not blocked; Cancel returns it to Idle and re-enables the button.
 
 ### App shell: tray, health checks, one copy at a time
 

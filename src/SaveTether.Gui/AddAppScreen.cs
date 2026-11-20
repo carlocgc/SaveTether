@@ -219,14 +219,17 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 return;
             }
 
-            Dispatcher.UIThread.Post(() =>
-            {
-                Interlocked.Exchange(ref pending, 0);
-                if (!_closed && ReferenceEquals(_page.Content, page))
+            // A short wait first: a scan reports each find, and rebuilding the list for every one made it flicker.
+            _ = Task.Delay(250).ContinueWith(
+                _ => Dispatcher.UIThread.Post(() =>
                 {
-                    Refresh();
-                }
-            });
+                    Interlocked.Exchange(ref pending, 0);
+                    if (!_closed && ReferenceEquals(_page.Content, page))
+                    {
+                        Refresh();
+                    }
+                }),
+                TaskScheduler.Default);
         }
 
         // Decision 6: the way to add an app that is not in the list, without the CLI.

@@ -25,7 +25,6 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _headline = new() { FontSize = 17, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _checkedAt = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _banners = new() { Spacing = 8 };
-    private readonly Border _strip = new() { IsVisible = false, Padding = new Thickness(10, 6), Margin = new Thickness(0, 0, 0, 8), CornerRadius = new CornerRadius(4), Background = new SolidColorBrush(Color.FromArgb(24, 128, 128, 128)) };
     private readonly StackPanel _rows = new() { Spacing = 2 };
 
     /// <summary>
@@ -51,20 +50,18 @@ internal sealed class MainWindow : Window
     /// <summary>What the scans found, kept while the window is open.</summary>
     private readonly ScanSession _scans;
 
-    private readonly TextBlock _stripText = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-    private readonly ProgressBar _stripBar = new() { Minimum = 0, Width = 120, Margin = new Thickness(0, 0, 12, 0) };
-    private readonly Button _stripButton = new() { Margin = new Thickness(12, 0, 0, 0) };
+    // The status in the footer's right corner: what runs in the background, or "Idle". It is one row that is always
+    // there, so a scan starting or ending moves nothing on the page (the owner took the old strip for a bug).
+    private readonly TextBlock _stripText = new() { Text = Idle, Opacity = 0.75, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _stripButton = new() { IsVisible = false, Margin = new Thickness(12, 0, 0, 0), Padding = new Thickness(8, 2), FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
     private int _stripRefreshPending;
 
-    // The strip's controls are built once and updated in place, so a progress report never detaches a focused Cancel.
+    /// <summary>What the footer says when nothing runs in the background.</summary>
+    public const string Idle = "Idle";
+
+    // The controls are built once and updated in place, so a progress report never detaches a focused Cancel.
     private void BuildStrip()
     {
-        var row = new DockPanel();
-        DockPanel.SetDock(_stripButton, Avalonia.Controls.Dock.Right);
-        DockPanel.SetDock(_stripBar, Avalonia.Controls.Dock.Left);
-        row.Children.Add(_stripButton);
-        row.Children.Add(_stripBar);
-        row.Children.Add(_stripText);
         _stripButton.Click += (_, _) =>
         {
             if (Tasks.Current is { State: BackgroundTaskState.Failed })
@@ -76,8 +73,7 @@ internal sealed class MainWindow : Window
                 Tasks.CancelCurrent();
             }
         };
-        AutomationProperties.SetName(_strip, "Background task");
-        _strip.Child = row;
+        AutomationProperties.SetName(_stripText, "Background status");
     }
 
     // At most one refresh is queued: a burst of reports shows the latest counts once. The flag clears first,
@@ -98,18 +94,15 @@ internal sealed class MainWindow : Window
     {
         if (Tasks.Current is not { } task)
         {
-            _strip.IsVisible = false;
+            _stripText.Text = Idle;
+            _stripButton.IsVisible = false;
             return;
         }
 
         var failed = task.State == BackgroundTaskState.Failed;
         _stripText.Text = task.Text;
         _stripButton.Content = failed ? "Dismiss" : "Cancel";
-        _stripBar.IsVisible = !failed;
-        _stripBar.IsIndeterminate = task.Total is null;
-        _stripBar.Maximum = Math.Max(task.Total ?? 1, 1);
-        _stripBar.Value = task.Done;
-        _strip.IsVisible = true;
+        _stripButton.IsVisible = true;
     }
 
     public MainWindow(string localFolder, Action checkNow, Action quit, Func<Func<ActionFlow, Task>, Task> operate)
@@ -134,7 +127,13 @@ internal sealed class MainWindow : Window
 
         var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { _dot, _headline, check, _checkedAt } };
         var header = new StackPanel { Spacing = 4, Children = { _device, _syncRoot, state } };
-        var footer = new TextBlock { Text = $"Local folder: {localFolder}", Opacity = 0.6, FontSize = 13 };
+        var folder = new TextBlock { Text = $"Local folder: {localFolder}", Opacity = 0.6, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        var footer = new DockPanel { MinHeight = 30 };
+        DockPanel.SetDock(_stripButton, Avalonia.Controls.Dock.Right);
+        DockPanel.SetDock(_stripText, Avalonia.Controls.Dock.Right);
+        footer.Children.Add(_stripButton);
+        footer.Children.Add(_stripText);
+        footer.Children.Add(folder);
 
         _body = new ScrollViewer { Content = _rows, Margin = new Thickness(0, 12, 0, 12) };
         _overlay = new Overlay(new DockPanel
@@ -147,7 +146,6 @@ internal sealed class MainWindow : Window
                 Dock(_banners, Avalonia.Controls.Dock.Top),
                 Dock(_bar, Avalonia.Controls.Dock.Top),
                 Dock(footer, Avalonia.Controls.Dock.Bottom),
-                Dock(_strip, Avalonia.Controls.Dock.Bottom),
                 _body,
             },
         });
