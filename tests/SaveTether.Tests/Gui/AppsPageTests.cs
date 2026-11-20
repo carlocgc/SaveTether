@@ -129,6 +129,21 @@ public class AppsPageTests
     }
 
     [Fact]
+    public void An_app_from_the_imported_set_is_shown_by_its_name_not_its_id()
+    {
+        var catalog = new Core.Definitions.DefinitionCatalog(null);
+        var id = catalog.AvailableIds().First(i => catalog.Find(i)!.Source == Core.Definitions.DefinitionSource.Imported);
+        var name = catalog.Find(id)!.Definition!.Name;
+
+        var (shown, defined) = AppNames.Resolve(catalog, id);
+
+        Assert.Equal(name, shown);
+        Assert.False(defined);
+        Assert.True(AppNames.Resolve(catalog, "cemu").Defined);
+        Assert.Equal(("no-such-game", false), AppNames.Resolve(catalog, "no-such-game"));
+    }
+
+    [Fact]
     public void A_status_line_stays_long_enough_to_read()
     {
         Assert.Equal(Pacing.StatusMinimum, Pacing.StatusWait(TimeSpan.Zero));

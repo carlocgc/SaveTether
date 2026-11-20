@@ -38,15 +38,7 @@ public static class BackupsPage
         {
             if (!names.TryGetValue(id, out var name))
             {
-                try
-                {
-                    name = catalog.Find(id, includeImported: false)?.Definition?.Name ?? id;
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-                {
-                    name = id;
-                }
-
+                name = AppNames.Resolve(catalog, id).Name;
                 names[id] = name;
             }
 
