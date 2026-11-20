@@ -25,6 +25,7 @@ internal sealed class MainWindow : Window
     private readonly TextBlock _headline = new() { FontSize = 17, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _checkedAt = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _banners = new() { Spacing = 8 };
+    private readonly Border _strip = new() { IsVisible = false, Padding = new Thickness(10, 6), Margin = new Thickness(0, 0, 0, 8), CornerRadius = new CornerRadius(4), Background = new SolidColorBrush(Color.FromArgb(24, 128, 128, 128)) };
     private readonly StackPanel _rows = new() { Spacing = 2 };
 
     /// <summary>
@@ -44,6 +45,70 @@ internal sealed class MainWindow : Window
     private bool _notHereOpen;
 
     /// <param name="operate">Runs one operation: the app marks itself busy around it and checks after it.</param>
+    /// <summary>The background tasks the strip along the bottom shows; a scan registers here.</summary>
+    public BackgroundTasks Tasks { get; } = new();
+
+    private readonly TextBlock _stripText = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly ProgressBar _stripBar = new() { Minimum = 0, Width = 120, Margin = new Thickness(0, 0, 12, 0) };
+    private readonly Button _stripButton = new() { Margin = new Thickness(12, 0, 0, 0) };
+    private int _stripRefreshPending;
+
+    // The strip's controls are built once and updated in place, so a progress report never detaches a focused Cancel.
+    private void BuildStrip()
+    {
+        var row = new DockPanel();
+        DockPanel.SetDock(_stripButton, Avalonia.Controls.Dock.Right);
+        DockPanel.SetDock(_stripBar, Avalonia.Controls.Dock.Left);
+        row.Children.Add(_stripButton);
+        row.Children.Add(_stripBar);
+        row.Children.Add(_stripText);
+        _stripButton.Click += (_, _) =>
+        {
+            if (Tasks.Current is { State: BackgroundTaskState.Failed })
+            {
+                Tasks.Dismiss();
+            }
+            else
+            {
+                Tasks.CancelCurrent();
+            }
+        };
+        AutomationProperties.SetName(_strip, "Background task");
+        _strip.Child = row;
+    }
+
+    // At most one refresh is queued: a burst of reports shows the latest counts once. The flag clears first,
+    // so a change during the refresh queues another.
+    private void RequestStripRefresh()
+    {
+        if (Interlocked.Exchange(ref _stripRefreshPending, 1) == 0)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                Volatile.Write(ref _stripRefreshPending, 0);
+                ShowStrip();
+            });
+        }
+    }
+
+    private void ShowStrip()
+    {
+        if (Tasks.Current is not { } task)
+        {
+            _strip.IsVisible = false;
+            return;
+        }
+
+        var failed = task.State == BackgroundTaskState.Failed;
+        _stripText.Text = task.Text;
+        _stripButton.Content = failed ? "Dismiss" : "Cancel";
+        _stripBar.IsVisible = !failed;
+        _stripBar.IsIndeterminate = task.Total is null;
+        _stripBar.Maximum = Math.Max(task.Total ?? 1, 1);
+        _stripBar.Value = task.Done;
+        _strip.IsVisible = true;
+    }
+
     public MainWindow(string localFolder, Action checkNow, Action quit, Func<Func<ActionFlow, Task>, Task> operate)
     {
         _localFolder = localFolder;
@@ -77,10 +142,13 @@ internal sealed class MainWindow : Window
                 Dock(_banners, Avalonia.Controls.Dock.Top),
                 Dock(_bar, Avalonia.Controls.Dock.Top),
                 Dock(footer, Avalonia.Controls.Dock.Bottom),
+                Dock(_strip, Avalonia.Controls.Dock.Bottom),
                 _body,
             },
         });
         Content = _overlay;
+        BuildStrip();
+        Tasks.Changed += RequestStripRefresh;
         _actions = new ActionFlow(localFolder, _overlay, App.Options.Log);
 
         KeyDown += (_, e) =>
