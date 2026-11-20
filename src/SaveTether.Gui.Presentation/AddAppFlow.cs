@@ -136,8 +136,12 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     /// Pass <see cref="ScanOptions.Deep"/> for the opt-in deep scan; a row then has <see cref="FoundApp.Installed"/> false when no install is detected.
     /// The caller orders what it has by <see cref="FoundApp.NewestWrite"/>, newest first, nulls last.
     /// </summary>
-    public IEnumerable<FoundApp> FoundApps(ScanOptions? options = null, CancellationToken cancel = default)
+    public IEnumerable<FoundApp> FoundApps(CancellationToken cancel = default) => FoundApps(ScanOptions.Default, cancel);
+
+    /// <summary>As <see cref="FoundApps(CancellationToken)"/>, with the scan's options.</summary>
+    public IEnumerable<FoundApp> FoundApps(ScanOptions options, CancellationToken cancel = default)
     {
+        ArgumentNullException.ThrowIfNull(options);
         var workspace = Open();
         var catalog = workspace.Definitions;
         var device = workspace.Shared.TryReadDevice(workspace.DeviceName);

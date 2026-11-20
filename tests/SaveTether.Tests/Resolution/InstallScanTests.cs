@@ -25,7 +25,7 @@ public class InstallScanTests
         [.. InstallScan.Run(definitions, env)];
 
     private static List<ScanHit> Deep(ResolverEnvironment env, ScanOptions options, params AppDefinition[] definitions) =>
-        [.. InstallScan.Run(definitions, env, options: options)];
+        [.. InstallScan.Run(definitions, env, null, options)];
 
     [Fact]
     public void A_deep_scan_lists_a_save_folder_with_no_detected_install_as_not_installed()
@@ -41,6 +41,43 @@ public class InstallScanTests
 
         Assert.False(hit.Installed);
         Assert.Equal(Path.Combine(home, ".local", "share", "gone", "saves"), hit.SaveFolder);
+    }
+
+    [Fact]
+    public void A_detected_install_is_preferred_to_a_newer_undetected_one_in_either_order()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        var old = sandbox.FileAt("x", "home", ".local", "share", "game", "saves", "a.sav");
+        var undetectedSaves = sandbox.FileAt("x", "home", ".local", "share", "other", "saves", "b.sav");
+        File.SetLastWriteTimeUtc(old, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        File.SetLastWriteTimeUtc(undetectedSaves, new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        InstallDefinition Detected() => new("detected", [TargetOs.Linux], new DetectRule(Dir: "{xdg_data}/game"), new BaseLocation(Path: "{xdg_data}/game"));
+        InstallDefinition Undetected() => new("undetected", [TargetOs.Linux], new DetectRule(Dir: "{xdg_data}/other/bin"), new BaseLocation(Path: "{xdg_data}/other"));
+        AppDefinition App(params InstallDefinition[] installs) =>
+            new(1, "app", "app", AppKind.Game, installs,
+                [new RoleDefinition("save", RoleClass.Save, true, new Dictionary<string, string> { ["detected"] = "saves", ["undetected"] = "saves" }, "save", 1, [], null)],
+                [], DefinitionTier.Imported, null, null, [], []);
+
+        foreach (var installs in new[] { new[] { Detected(), Undetected() }, new[] { Undetected(), Detected() } })
+        {
+            var hit = Assert.Single(Deep(Linux(home), ScanOptions.Deep(), App(installs)));
+            Assert.Equal("detected", hit.InstallId);
+            Assert.True(hit.Installed);
+        }
+    }
+
+    [Fact]
+    public void The_scan_without_options_keeps_its_earlier_call_shapes()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.FileAt("x", "home", ".local", "share", "game", "saves", "a.sav");
+        using var cancel = new CancellationTokenSource();
+
+        Assert.Single(InstallScan.Run([Native()], Linux(home), null, cancel.Token));
+        var resolver = new PathResolver(Linux(home));
+        Assert.Single(InstallScan.Scan(Native(), resolver, Linux(home), DeviceValues.None, cancel.Token));
     }
 
     [Fact]

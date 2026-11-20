@@ -54,11 +54,19 @@ public static class InstallScan
         IEnumerable<AppDefinition> definitions,
         ResolverEnvironment environment,
         Func<string, DeviceValues>? valuesFor = null,
-        ScanOptions? options = null,
+        CancellationToken cancel = default) =>
+        Run(definitions, environment, valuesFor, ScanOptions.Default, cancel);
+
+    /// <summary>As <see cref="Run(IEnumerable{AppDefinition}, ResolverEnvironment, Func{string, DeviceValues}?, CancellationToken)"/>, with the scan's options (for example <see cref="ScanOptions.Deep"/>).</summary>
+    public static IEnumerable<ScanHit> Run(
+        IEnumerable<AppDefinition> definitions,
+        ResolverEnvironment environment,
+        Func<string, DeviceValues>? valuesFor,
+        ScanOptions options,
         CancellationToken cancel = default)
     {
         ArgumentNullException.ThrowIfNull(definitions);
-        options ??= ScanOptions.Default;
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(environment);
 
         var resolver = new PathResolver(environment, cacheSteamLibraries: true);
@@ -125,10 +133,19 @@ public static class InstallScan
         PathResolver resolver,
         ResolverEnvironment environment,
         DeviceValues values,
-        ScanOptions? options = null,
+        CancellationToken cancel = default) =>
+        Scan(definition, resolver, environment, values, ScanOptions.Default, cancel);
+
+    /// <summary>As the overload without options, with the scan's options.</summary>
+    public static IEnumerable<ScanHit> Scan(
+        AppDefinition definition,
+        PathResolver resolver,
+        ResolverEnvironment environment,
+        DeviceValues values,
+        ScanOptions options,
         CancellationToken cancel = default)
     {
-        options ??= ScanOptions.Default;
+        ArgumentNullException.ThrowIfNull(options);
         foreach (var install in definition.Installs.Where(i => i.Os.Contains(environment.Os)))
         {
             cancel.ThrowIfCancellationRequested();

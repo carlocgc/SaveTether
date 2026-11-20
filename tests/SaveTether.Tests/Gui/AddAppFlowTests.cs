@@ -322,16 +322,22 @@ public class AddAppFlowTests
     {
         using var sandbox = new Sandbox();
         var (deck, flow) = NewDevice(sandbox);
-        var saves = Directory.CreateDirectory(Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save")).FullName;
-        File.WriteAllText(Path.Combine(saves, "a.sav"), "x");
+        // The detect folder (ghost/bin) is absent; only the save folder exists.
+        AppAddCliTests.ShareDefinition(deck, "ghost", """
+            {
+              "schema": 1, "id": "ghost", "name": "Ghost", "kind": "game",
+              "installs": [{ "id": "native", "os": "linux", "detect": { "dir": "{home}/ghost/bin" }, "base": "{home}/ghost/data" }],
+              "roles": [{ "id": "saves", "class": "save", "default": true, "path": "saves", "target": "saves" }],
+            }
+            """);
+        var saves = Path.Combine(deck.Home, "ghost", "data", "saves");
+        CliDevice.Write(Path.Combine(deck.Home, "ghost", "data"), "saves/a.sav", "x");
 
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        var found = flow.FoundApps(ScanOptions.Deep()).ToList();
-        watch.Stop();
+        Assert.DoesNotContain(flow.FoundApps(), f => f.App.Id == "ghost");
+        var row = Assert.Single(flow.FoundApps(ScanOptions.Deep()), f => f.App.Id == "ghost");
 
-        Assert.All(found, f => Assert.True(Directory.Exists(f.SaveFolder)));
-        Assert.Equal(found.Count, found.Select(f => f.App.Id).Distinct().Count());
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(60), $"deep scan took {watch.Elapsed}");
+        Assert.False(row.Installed);
+        Assert.Equal(saves, row.SaveFolder);
         sandbox.AssertCanaryIntact();
     }
 }
