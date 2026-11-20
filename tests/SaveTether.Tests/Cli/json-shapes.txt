@@ -35,6 +35,7 @@ $.app.plan.roles[]: object
 $.app.plan.values.install: string
 $.app.plan.values.install_dir: string
 $.app.plan.values: object
+$.app.plan.verified: boolean
 $.app.plan: object
 $.app: object
 $.command: string
@@ -97,6 +98,7 @@ $.app.plan.roles[]: object
 $.app.plan.values.install: string
 $.app.plan.values.install_dir: string
 $.app.plan.values: object
+$.app.plan.verified: boolean
 $.app.plan: object
 $.app: object
 $.command: string
@@ -126,6 +128,7 @@ $.apps: array
 $.apps[].id: string
 $.apps[].name: string
 $.apps[].source: string
+$.apps[].verified: boolean
 $.apps[]: object
 $.command: string
 $.exit_code: number

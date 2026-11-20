@@ -99,7 +99,7 @@ public class StatusCheckTests
         Assert.Equal(OverallCondition.NeedsAttention, replaced.Condition);
         Assert.Equal("1 app needs attention", replaced.Headline);
         var row = Assert.Single(replaced.Attention);
-        Assert.Equal(("ppsspp", "savedata", "Not linked"), (row.AppName, row.Role, row.Word.Word));
+        Assert.Equal(("PPSSPP", "savedata", "Not linked"), (row.AppName, row.Role, row.Word.Word));
     }
 
     [Fact]

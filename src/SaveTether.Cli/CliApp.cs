@@ -112,8 +112,10 @@ internal static class CliApp
               --install picks the install when more than one is found. --role picks roles other
               than the default ones. The path options give what cannot be found by looking; they
               are remembered for this device, so running app add again later finds moved folders.
-          savetether app list
-              List the apps that have a definition: built in, or in the shared definitions folder.
+          savetether app list [--search <text>]
+              List the apps that have a definition: built in, imported (unverified), or in the
+              shared definitions folder. --search keeps those whose name or ID contains the text,
+              or whose Steam app ID it is.
 
           savetether status [<id>]
               Show each mapping's state on this device.
@@ -377,7 +379,9 @@ internal static class CliApp
         {
             var workspace = Open();
             var catalog = workspace.Definitions;
-            var apps = catalog.AvailableIds().Select(id =>
+            var search = command.Value("--search");
+            var ids = search is null ? catalog.AvailableIds() : catalog.Search(search);
+            var apps = ids.Select(id =>
             {
                 var entry = catalog.Find(id)!;
                 return new AppListEntry(id, entry.Definition?.Name, entry.Source, entry.IsValid ? null : string.Join("; ", entry.Errors));
@@ -387,7 +391,7 @@ internal static class CliApp
                 Command = command.Name, ExitCode = ExitSuccess, Apps = apps,
                 Message = workspace.Shared.IsInitialized
                     ? null
-                    : $"Only the built-in definitions are listed: the shared ones could not be read. {workspace.Shared.NotAvailableMessage}",
+                    : $"Only the built-in and imported definitions are listed: the shared ones could not be read. {workspace.Shared.NotAvailableMessage}",
             };
         }
 

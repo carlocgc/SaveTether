@@ -171,12 +171,14 @@ public class AppAddCliTests
         Directory.CreateDirectory(Path.Combine(deck.Home, "cemu", "save"));
 
         var list = deck.Ok("app", "list", "--json").Json().GetProperty("apps").EnumerateArray()
+            .Where(a => a.GetProperty("source").GetString() != "imported")
             .Select(a => (a.GetProperty("id").GetString(), a.GetProperty("name").GetString(), a.GetProperty("source").GetString()))
             .ToList();
         Assert.Equal([("cemu", "Cemu (mine)", "shared"), ("testapp", "Test App", "shared")], list);
 
         var plan = deck.Ok("app", "add", "cemu", "--json").Json().GetProperty("app").GetProperty("plan");
         Assert.Equal("shared", plan.GetProperty("definition_source").GetString());
+        Assert.True(plan.GetProperty("verified").GetBoolean());
         Assert.Equal("here", plan.GetProperty("install").GetString());
     }
 

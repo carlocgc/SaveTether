@@ -65,7 +65,11 @@ internal sealed record AppOutput(
     ConflictFacts? Conflict = null);
 
 /// <summary>"app list": one app that can be added.</summary>
-internal sealed record AppListEntry(string Id, string? Name, DefinitionSource Source, string? Error);
+internal sealed record AppListEntry(string Id, string? Name, DefinitionSource Source, string? Error)
+{
+    /// <summary>False for an imported definition.</summary>
+    public bool Verified => Source != DefinitionSource.Imported;
+}
 
 internal sealed record MappingOutput(
     string Id, string Target, string Source, IReadOnlyList<string> ProcessNames, int EntryDepth,
@@ -163,9 +167,11 @@ internal static class OutputWriter
         {
             foreach (var entry in apps)
             {
-                var from = entry.Source == DefinitionSource.Shared ? "shared" : "built-in";
+                var from = entry.Source switch { DefinitionSource.Shared => "shared", DefinitionSource.Imported => "imported (unverified)", _ => "built-in" };
                 stdout.WriteLine(entry.Error is null ? $"  {entry.Id,-20} {entry.Name}  ({from})" : $"  {entry.Id,-20} not usable: {entry.Error}  ({from})");
             }
+
+            stdout.WriteLine($"{apps.Count.ToString("N0", CultureInfo.InvariantCulture)} app(s).");
         }
 
         if (output.Status is { } status)
@@ -269,6 +275,11 @@ internal static class OutputWriter
 
         var from = plan.DefinitionSource == DefinitionSource.Shared ? $" (definition: {plan.DefinitionLocation})" : string.Empty;
         stdout.WriteLine($"{plan.AppName}, install '{plan.Install}'{from}:");
+        if (!plan.Verified)
+        {
+            stdout.WriteLine("  Unverified: this definition was converted from the Ludusavi manifest and has not been tried by hand. Check the save folders below before you apply.");
+        }
+
         foreach (var role in plan.Roles)
         {
             var size = !role.Exists ? "not there yet"

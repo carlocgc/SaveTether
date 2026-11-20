@@ -134,10 +134,12 @@ savetether app add mygame --install-dir "D:\Games\MyGame" --role screenshots
 ## app list
 
 ```
-savetether app list
+savetether app list [--search <text>]
 ```
 
-Lists the apps that have a definition, and whether each is built in or shared. A shared definition with mistakes is listed with them.
+Lists the apps that have a definition, and whether each is built in, shared or imported. Imported definitions are converted from the Ludusavi manifest and show as `imported (unverified)`: nobody has tried them by hand, so `app add` says so in its plan and you should check the save folders it shows. A shared definition with mistakes is listed with them.
+
+`--search` keeps the apps whose name or ID contains the text, ignoring case, or whose Steam app ID is the text. The list is long without it.
 
 ## status
 

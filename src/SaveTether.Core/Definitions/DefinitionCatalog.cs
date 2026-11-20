@@ -12,12 +12,42 @@ public enum DefinitionSource
     /// <summary>The owner's own, in the shared folder: &lt;sync root&gt;/savetether/.savetether/definitions.</summary>
     [JsonStringEnumMemberName("shared")]
     Shared,
+
+    /// <summary>Converted from the Ludusavi manifest and built into SaveTether. Not checked by hand: unverified.</summary>
+    [JsonStringEnumMemberName("imported")]
+    Imported,
 }
 
 /// <summary>A definition found by ID, or why none could be used.</summary>
 public sealed record CatalogEntry(AppDefinition? Definition, DefinitionSource Source, string Location, IReadOnlyList<DefinitionError> Errors)
 {
     public bool IsValid => Definition is not null;
+
+    /// <summary>False for a definition converted from the Ludusavi manifest; nobody has tried it on a device.</summary>
+    public bool IsVerified => Source != DefinitionSource.Imported;
+}
+
+/// <summary>The definitions in the imported bundle, by ID, and the lines that could not be read.</summary>
+internal sealed record ImportedSet(IReadOnlyDictionary<string, AppDefinition> Definitions, IReadOnlyList<DefinitionError> Errors)
+{
+    public static ImportedSet Empty { get; } = new(new Dictionary<string, AppDefinition>(), []);
+
+    /// <summary>Reads a bundle. A definition whose ID a built-in one uses is dropped: the verified one wins.</summary>
+    public static ImportedSet FromBundle(Stream stream, IReadOnlyCollection<string> verifiedIds)
+    {
+        var (definitions, errors) = DefinitionLoader.ParseBundle(stream);
+        var byId = new Dictionary<string, AppDefinition>(StringComparer.Ordinal);
+        var verified = new HashSet<string>(verifiedIds, StringComparer.Ordinal);
+        foreach (var definition in definitions)
+        {
+            if (!verified.Contains(definition.Id))
+            {
+                byId[definition.Id] = definition;
+            }
+        }
+
+        return new ImportedSet(byId, errors);
+    }
 }
 
 /// <summary>
@@ -32,12 +62,43 @@ public sealed class DefinitionCatalog
 
     private const string ResourcePrefix = "definitions/";
 
+    private const string ImportedResource = "definitions/imported/ludusavi.jsonl.gz";
+
+    private static readonly Lazy<ImportedSet> BuiltInImported = new(LoadImported);
+
     private readonly string? _sharedFolder;
+    private readonly Lazy<ImportedSet> _importedSet;
 
     /// <param name="sharedFolder">The shared definitions folder, or null when there is none (no sync root yet).</param>
     public DefinitionCatalog(string? sharedFolder)
+        : this(sharedFolder, BuiltInImported)
+    {
+    }
+
+    internal DefinitionCatalog(string? sharedFolder, ImportedSet imported)
+        : this(sharedFolder, new Lazy<ImportedSet>(imported))
+    {
+    }
+
+    // Lazy: the bundle takes a moment to read, and most lookups (a status check) never need it.
+    private DefinitionCatalog(string? sharedFolder, Lazy<ImportedSet> imported)
     {
         _sharedFolder = sharedFolder;
+        _importedSet = imported;
+    }
+
+    private ImportedSet _imported => _importedSet.Value;
+
+    /// <summary>Lines of the imported bundle that could not be read, each naming its line. Empty when all loaded.</summary>
+    public static IReadOnlyList<DefinitionError> ImportedErrors => BuiltInImported.Value.Errors;
+
+    /// <summary>How many imported definitions this SaveTether has.</summary>
+    public static int ImportedCount => BuiltInImported.Value.Definitions.Count;
+
+    private static ImportedSet LoadImported()
+    {
+        using var stream = typeof(DefinitionCatalog).Assembly.GetManifestResourceStream(ImportedResource);
+        return stream is null ? ImportedSet.Empty : ImportedSet.FromBundle(stream, BuiltInIds);
     }
 
     /// <summary>IDs of the definitions built into this SaveTether, sorted.</summary>
@@ -48,10 +109,15 @@ public sealed class DefinitionCatalog
         .Order(StringComparer.Ordinal)
         .ToList();
 
-    /// <summary>Every ID that can be added: built-in and shared, sorted, each once.</summary>
-    public IReadOnlyList<string> AvailableIds()
+    /// <summary>Every ID that can be added: shared, built-in and (by default) imported, sorted, each once.</summary>
+    public IReadOnlyList<string> AvailableIds(bool includeImported = true)
     {
         var ids = new SortedSet<string>(BuiltInIds, StringComparer.Ordinal);
+        if (includeImported)
+        {
+            ids.UnionWith(_imported.Definitions.Keys);
+        }
+
         if (_sharedFolder is not null && Directory.Exists(_sharedFolder))
         {
             foreach (var file in Directory.EnumerateFiles(_sharedFolder, "*" + AppDefinition.FileExtension))
@@ -63,7 +129,45 @@ public sealed class DefinitionCatalog
         return [.. ids];
     }
 
-    /// <summary>The definition with this ID: the shared one if there is a file for it, else the built-in one; null when neither exists.</summary>
+    /// <summary>
+    /// The IDs whose name or ID contains the text (ignoring case), or whose Steam app ID is the text,
+    /// sorted. A shared definition is matched by its ID, and by its name once read.
+    /// </summary>
+    public IReadOnlyList<string> Search(string? text)
+    {
+        var typed = text?.Trim() ?? string.Empty;
+        if (typed.Length == 0)
+        {
+            return AvailableIds();
+        }
+
+        var hits = new List<string>();
+        foreach (var id in AvailableIds())
+        {
+            if (id.Contains(typed, StringComparison.OrdinalIgnoreCase))
+            {
+                hits.Add(id);
+                continue;
+            }
+
+            var definition = SharedFileExists(id) || BuiltInIds.Contains(id, StringComparer.Ordinal)
+                ? Find(id)?.Definition
+                : _imported.Definitions.GetValueOrDefault(id);
+            if (definition is not null
+                && (definition.Name.Contains(typed, StringComparison.OrdinalIgnoreCase)
+                    || (definition.StoreIds?.Steam is { } steam && steam.ToString(System.Globalization.CultureInfo.InvariantCulture) == typed)))
+            {
+                hits.Add(id);
+            }
+        }
+
+        return hits;
+    }
+
+    private bool SharedFileExists(string id) =>
+        _sharedFolder is not null && File.Exists(Path.Combine(_sharedFolder, id + AppDefinition.FileExtension));
+
+    /// <summary>The definition with this ID: the shared one if there is a file for it, else the built-in one, else the imported one; null when none exists.</summary>
     public CatalogEntry? Find(string appId)
     {
         ArgumentNullException.ThrowIfNull(appId);
@@ -82,7 +186,9 @@ public sealed class DefinitionCatalog
         using var stream = OpenBuiltIn(appId);
         if (stream is null)
         {
-            return null;
+            return _imported.Definitions.TryGetValue(appId, out var imported)
+                ? new CatalogEntry(imported, DefinitionSource.Imported, "imported " + appId + AppDefinition.FileExtension, [])
+                : null;
         }
 
         using var reader = new StreamReader(stream);

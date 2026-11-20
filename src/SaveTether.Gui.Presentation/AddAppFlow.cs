@@ -110,7 +110,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     public IReadOnlyList<CatalogApp> Catalog()
     {
         var catalog = Open().Definitions;
-        return catalog.AvailableIds()
+        return catalog.AvailableIds(includeImported: false)
             .Select(id => (Id: id, Entry: catalog.Find(id)!))
             .Select(e => new CatalogApp(e.Id, e.Entry.Definition?.Name ?? e.Id, e.Entry.Source, e.Entry.IsValid))
             .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
