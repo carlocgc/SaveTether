@@ -15,11 +15,22 @@ internal sealed class SteamLibraries
 
     /// <param name="home">The user's home folder.</param>
     /// <param name="dataHome">The XDG data folder, normally ~/.local/share.</param>
-    public SteamLibraries(string home, string dataHome)
+    /// <param name="cache">Read the library files once and keep the answer, for a scan that asks about thousands of apps.</param>
+    public SteamLibraries(string home, string dataHome, bool cache = false)
     {
         _home = home;
         _dataHome = dataHome;
+        if (cache)
+        {
+            _cached = new Lazy<(IReadOnlyList<Library>, List<string>)>(() =>
+            {
+                var problems = new List<string>();
+                return (ReadLibraries(problems), problems);
+            });
+        }
     }
+
+    private readonly Lazy<(IReadOnlyList<Library> Libraries, List<string> Problems)>? _cached;
 
     /// <summary>One Steam library folder and the app IDs it says it holds (empty when it does not say).</summary>
     public sealed record Library(string Path, IReadOnlySet<ulong> Apps);
@@ -49,6 +60,17 @@ internal sealed class SteamLibraries
     /// folder is still used as a library.
     /// </summary>
     public IReadOnlyList<Library> FindLibraries(List<string> problems)
+    {
+        if (_cached is not null)
+        {
+            problems.AddRange(_cached.Value.Problems);
+            return _cached.Value.Libraries;
+        }
+
+        return ReadLibraries(problems);
+    }
+
+    private IReadOnlyList<Library> ReadLibraries(List<string> problems)
     {
         var byPath = new Dictionary<string, (string Path, HashSet<ulong> Apps)>(StringComparer.Ordinal);
         void Add(string path, IEnumerable<ulong> apps)

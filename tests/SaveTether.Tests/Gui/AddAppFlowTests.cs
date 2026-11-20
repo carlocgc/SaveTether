@@ -292,4 +292,27 @@ public class AddAppFlowTests
         var status = new OverallStatus(OverallCondition.NeedsAttention, null, [Mapping(HealthState.NotApplied, HealthReason.NoSaveFolder, true)]);
         Assert.Empty(AppsPage.From(status).ForApplyAll);
     }
+
+    [Fact]
+    public void The_found_list_has_apps_on_this_device_newest_save_first_and_search_is_capped()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        // Cemu's native install keeps its saves under the XDG data folder.
+        var saves = Directory.CreateDirectory(Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save")).FullName;
+        File.WriteAllText(Path.Combine(saves, "a.sav"), "x");
+
+        var found = AddAppFlow.Newest(flow.FoundApps());
+
+        Assert.All(found, f => Assert.NotNull(f.SaveFolder));
+        Assert.Equal(found.OrderByDescending(f => f.NewestWrite ?? DateTime.MinValue).Select(f => f.App.Id), found.Select(f => f.App.Id));
+        Assert.DoesNotContain(found, f => f.App.Id == "testapp" && !Directory.Exists(f.SaveFolder));
+
+        var all = flow.Search("a");
+        Assert.True(all.Shown.Count <= AddAppFlow.MaxSearchRows);
+        Assert.True(all.Total >= all.Shown.Count);
+        Assert.Equal(all.Total > AddAppFlow.MaxSearchRows, all.HasMore);
+        Assert.Contains(flow.Search("test app").Shown, a => a.Id == "testapp");
+        sandbox.AssertCanaryIntact();
+    }
 }
