@@ -132,8 +132,9 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
         void Refresh()
         {
-            var running = _scans.Tasks.IsRunning;
-            cancelTarget = running ? _scans.Tasks.Current : null;
+            // One read of the current task, so "running" and the task to cancel cannot disagree if the scan ends between two reads.
+            cancelTarget = _scans.Tasks.Current is { State: BackgroundTaskState.Running } current ? current : null;
+            var running = cancelTarget is not null;
 
             // The footer lags behind a scan so it can be read; the button waits for it, so the two agree and
             // clicking over and over cannot queue a drip of lines there.
