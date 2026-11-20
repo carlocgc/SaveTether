@@ -1,0 +1,14 @@
+Store Game:
+  files:
+    "<winDocuments>/My Games/Store Game GOG/Saves":
+      tags: [save]
+      when:
+        - os: windows
+          store: gog
+    "<winDocuments>/My Games/Store Game/Saves":
+      tags: [save]
+      when:
+        - os: windows
+          store: steam
+  steam:
+    id: 4242

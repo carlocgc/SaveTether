@@ -1,0 +1,12 @@
+Publisher Game:
+  files:
+    "<winLocalAppDataLow>/Publisher":
+      tags: [save]
+Other Title:
+  files:
+    "<winLocalAppDataLow>/Publisher/Other Title/saves":
+      tags: [save]
+Third Title:
+  files:
+    "<home>/AppData/LocalLow/publisher/Third Title":
+      tags: [save]

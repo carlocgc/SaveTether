@@ -148,6 +148,8 @@ sealed class FileDto
 sealed class WhenDto
 {
     public string? Os { get; set; }
+
+    public string? Store { get; set; }
 }
 
 sealed class SteamDto
@@ -157,8 +159,8 @@ sealed class SteamDto
 
 // ---- What a path becomes. ----
 
-/// <summary>One folder to link. Family: windows, linux, flatpak or install. Token: the base token ("appdata"); FlatpakId is set for a Flatpak.</summary>
-sealed record Folder(string Family, string Token, string FlatpakId, string Rel, int Depth, bool Config, bool Account)
+/// <summary>One folder to link. Family: windows, linux, flatpak or install. Token: the base token ("appdata"); FlatpakId is set for a Flatpak. Steam: false when the manifest limits the folder to other stores.</summary>
+sealed record Folder(string Family, string Token, string FlatpakId, string Rel, int Depth, bool Config, bool Account, bool Steam = true)
 {
     public string Key => $"{Family}|{Token}|{FlatpakId}|{Rel}".ToLowerInvariant();
 }
@@ -274,12 +276,17 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
         // Pass 1: every game's save folders, and which games claim each one.
         foreach (var (name, game) in games)
         {
-            if (game is null || game.Alias is not null || game.Files is null)
+            if (game is null || game.Alias is not null)
             {
                 continue;
             }
 
             result.Bump("games in the manifest (not aliases)");
+            if (game.Files is null)
+            {
+                continue;
+            }
+
             var saves = game.Files.Where(f => f.Value?.Tags?.Contains("save") == true).ToList();
             if (saves.Count == 0)
             {
@@ -298,7 +305,7 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             foreach (var (path, entry) in saves)
             {
                 result.Bump("paths tagged save");
-                var (found, drop) = Classify(path, entry!.Tags!.Contains("config"), OsOf(entry.When));
+                var (found, drop) = Classify(path, entry!.Tags!.Contains("config"), OsOf(entry.When), StoresOf(entry.When));
                 if (drop is not null)
                 {
                     result.Bump("paths left out: " + drop);
@@ -310,17 +317,19 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             perGame[name] = folders;
         }
 
+        // A folder is claimed by another game when both give the same folder, or when it is an ancestor of the other game's folder.
         var claims = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var ancestors = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var (name, folders) in perGame)
         {
             foreach (var folder in folders.Where(f => f.Family != "install"))
             {
-                if (!claims.TryGetValue(folder.Key, out var set))
+                AddTo(claims, folder.Key, name);
+                var rel = folder.Rel.ToLowerInvariant();
+                for (var cut = rel.LastIndexOf('/'); cut > 0; cut = rel.LastIndexOf('/', cut - 1))
                 {
-                    claims[folder.Key] = set = new HashSet<string>(StringComparer.Ordinal);
+                    AddTo(ancestors, BaseKey(folder) + "|" + rel[..cut], name);
                 }
-
-                set.Add(name);
             }
         }
 
@@ -334,6 +343,10 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
                 if (folder.Family != "install" && claims[folder.Key].Count > 1)
                 {
                     result.Bump("paths left out: folder claimed by more than one game");
+                }
+                else if (folder.Family != "install" && ancestors.TryGetValue(BaseKey(folder) + "|" + folder.Rel.ToLowerInvariant(), out var inside) && inside.Any(g => g != name))
+                {
+                    result.Bump("paths left out: folder holds another game's folder");
                 }
                 else
                 {
@@ -371,6 +384,18 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
         return result;
     }
 
+    private static void AddTo(Dictionary<string, HashSet<string>> map, string key, string game)
+    {
+        if (!map.TryGetValue(key, out var set))
+        {
+            map[key] = set = new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        set.Add(game);
+    }
+
+    private static string BaseKey(Folder folder) => $"{folder.Family}|{folder.Token}|{folder.FlatpakId}".ToLowerInvariant();
+
     // ---- One path ----
 
     /// <summary>The operating systems a path applies to, from its "when" entries. No entry, or an entry without "os", means any.</summary>
@@ -385,6 +410,17 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
         return when.Select(w => w.Os!).ToHashSet(StringComparer.Ordinal);
     }
 
+    /// <summary>The stores a path is limited to, or null for any. An entry without "store" means any.</summary>
+    private static HashSet<string>? StoresOf(List<WhenDto>? when)
+    {
+        if (when is null || when.Count == 0 || when.Any(w => w.Store is null))
+        {
+            return null;
+        }
+
+        return when.Select(w => w.Store!).ToHashSet(StringComparer.Ordinal);
+    }
+
     private static string Normalize(string raw)
     {
         var path = raw.Trim().Replace('\\', '/');
@@ -397,7 +433,7 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
     }
 
     /// <summary>Applies the rules to one path. Returns the folders it gives, or the reason it gives none.</summary>
-    public static (List<Folder> Folders, string? Drop) Classify(string raw, bool config, HashSet<string> os)
+    public static (List<Folder> Folders, string? Drop) Classify(string raw, bool config, HashSet<string> os, HashSet<string>? stores = null)
     {
         var none = new List<Folder>();
         var windows = os.Contains("windows");
@@ -463,7 +499,8 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             return (none, "generic folder (My Games, Saved Games, Documents)");
         }
 
-        Folder Make(string family, string token, string flatpak, string rel) => new(family, token, flatpak, rel, depth, config, account);
+        var steam = stores is null || stores.Contains("steam");
+        Folder Make(string family, string token, string flatpak, string rel) => new(family, token, flatpak, rel, depth, config, account, steam);
 
         if (head == "<base>")
         {
@@ -491,12 +528,25 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
 
             var folders = new List<Folder>();
             // A folder starting with a dot is a Linux home folder; it is not looked for in a Windows profile.
-            if (windows && !parts[0].StartsWith('.'))
+            // The Windows profile's own folders are written under <home> too; they are the tokens' folders.
+            var profile = HomeProfileToken(parts);
+            if (profile is { Rel.Length: 0 })
             {
-                folders.Add(Make("windows", "home", "", relative));
+                return (none, "token with nothing after it");
             }
 
-            if (linux)
+            if (profile is { Token: "documents" } docs && IsGenericFolder("<winDocuments>", docs.Rel))
+            {
+                return (none, "generic folder (My Games, Saved Games, Documents)");
+            }
+
+            if (windows && !parts[0].StartsWith('.'))
+            {
+                folders.Add(profile is { } p ? Make("windows", p.Token, "", p.Rel) : Make("windows", "home", "", relative));
+            }
+
+            // AppData is not a Linux folder; Documents may be.
+            if (linux && profile is not { Token: not "documents" })
             {
                 folders.Add(Make("linux", "home", "", relative));
             }
@@ -509,6 +559,29 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
         return wanted
             ? (new List<Folder> { Make(family, token, "", relative) }, null)
             : (none, "not for a system SaveTether runs on");
+    }
+
+    private static readonly Dictionary<string, string> ProfileTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Roaming"] = "appdata",
+        ["Local"] = "localappdata",
+        ["LocalLow"] = "locallow",
+    };
+
+    /// <summary>The token and rest of a path under AppData/Roaming, AppData/Local, AppData/LocalLow or Documents; null for any other.</summary>
+    private static (string Token, string Rel)? HomeProfileToken(List<string> parts)
+    {
+        if (parts.Count >= 2 && parts[0].Equals("AppData", StringComparison.OrdinalIgnoreCase) && ProfileTokens.TryGetValue(parts[1], out var token))
+        {
+            return (token, string.Join('/', parts.Skip(2)));
+        }
+
+        if (parts.Count >= 2 && parts[0].Equals("Documents", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("documents", string.Join('/', parts.Skip(1)));
+        }
+
+        return null;
     }
 
     private static bool IsGenericFolder(string head, string relative)
@@ -528,7 +601,7 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             .Select(g =>
             {
                 var first = g.OrderBy(f => f.Rel, StringComparer.Ordinal).First();
-                return first with { Depth = g.Max(f => f.Depth), Config = g.Any(f => f.Config), Account = g.Any(f => f.Account) };
+                return first with { Depth = g.Max(f => f.Depth), Config = g.Any(f => f.Config), Account = g.Any(f => f.Account), Steam = g.Any(f => f.Steam) };
             })
             .ToList();
 
@@ -540,11 +613,22 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
                      .ThenBy(f => f.FlatpakId, StringComparer.Ordinal).ThenBy(f => f.Rel, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(f => f.Rel, StringComparer.Ordinal))
         {
-            var inside = kept.Any(k => k.Family == folder.Family && k.Token == folder.Token && k.FlatpakId == folder.FlatpakId
+            var at = kept.FindIndex(k => k.Family == folder.Family && k.Token == folder.Token && k.FlatpakId == folder.FlatpakId
                 && folder.Rel.StartsWith(k.Rel + "/", StringComparison.OrdinalIgnoreCase));
-            if (inside)
+            if (at >= 0)
             {
                 result.Bump("paths left out: inside another kept folder of the game");
+
+                // The outer link now covers the inner folder: it takes on the inner folder's marks and an entry depth that reaches its entries (when it has one of its own).
+                var outer = kept[at];
+                var between = folder.Rel[(outer.Rel.Length + 1)..].Split('/').Length;
+                kept[at] = outer with
+                {
+                    Depth = folder.Depth > 1 ? Math.Max(outer.Depth, Math.Min(MappingFile.MaxEntryDepth, between + folder.Depth)) : outer.Depth,
+                    Config = outer.Config || folder.Config,
+                    Account = outer.Account || folder.Account,
+                    Steam = outer.Steam || folder.Steam,
+                };
             }
             else
             {
@@ -572,29 +656,32 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
         if (win.Count > 0)
         {
             var tokens = win.Select(f => f.Token).Distinct().Order(StringComparer.Ordinal).ToList();
+            string Suffix(string token) => tokens.Count > 1 ? "-" + token.Replace('_', '-') : "";
             foreach (var token in tokens)
             {
-                var suffix = tokens.Count > 1 ? "-" + token.Replace('_', '-') : "";
+                var suffix = Suffix(token);
                 var first = win.First(f => f.Token == token).Rel;
                 installs.Add(new InstallOut("windows" + suffix, ["windows"], $"{{{token}}}/{first}", $"{{{token}}}", null, null));
-                if (steam is not null)
+
+                // The Proton install is detected by a folder that is Steam's; a folder the manifest gives only for other stores does not show one.
+                var steamFirst = win.FirstOrDefault(f => f.Token == token && f.Steam);
+                if (steam is not null && steamFirst is not null)
                 {
                     installs.Add(new InstallOut(
                         "steam-proton" + suffix,
                         ["linux"],
-                        $"{{steam_compatdata:{steam}}}/pfx/drive_c/users/steamuser/{ProtonSub[token]}{first}",
+                        $"{{steam_compatdata:{steam}}}/pfx/drive_c/users/steamuser/{ProtonSub[token]}{steamFirst.Rel}",
                         null,
                         $"{{{token}}}",
                         steam));
                 }
             }
 
-            string Suffix(string token) => tokens.Count > 1 ? "-" + token.Replace('_', '-') : "";
             AddRoles(
                 roles,
                 "save",
                 win,
-                f => steam is null ? ["windows" + Suffix(f.Token)] : ["windows" + Suffix(f.Token), "steam-proton" + Suffix(f.Token)]);
+                f => steam is null || !f.Steam ? ["windows" + Suffix(f.Token)] : ["windows" + Suffix(f.Token), "steam-proton" + Suffix(f.Token)]);
         }
 
         var linuxFolders = Of("linux");
@@ -717,6 +804,7 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
         var used = new HashSet<string>(StringComparer.Ordinal);
         var groups = games.GroupBy(g => g.Slug.Length > 0 ? g.Slug : (g.Steam is null ? "" : $"steam-{g.Steam}"))
             .OrderBy(g => g.Key, StringComparer.Ordinal).ToList();
+        var plainSlugs = groups.Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
         foreach (var group in groups)
         {
             var members = group.OrderBy(g => g.Name, StringComparer.Ordinal).ToList();
@@ -752,9 +840,18 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
                     plainTaken = true;
                 }
 
-                while (!used.Add(candidate))
+                // A generated ID may not be another group's plain slug either, or that group's game would be pushed to a number.
+                while (used.Contains(candidate) || (candidate != group.Key && plainSlugs.Contains(candidate)))
                 {
                     candidate = $"{candidate}-{++number}";
+                }
+
+                used.Add(candidate);
+                if (verifiedIds.Contains(candidate))
+                {
+                    result.Bump("games left out: a verified definition has the ID");
+                    member.Id = "";
+                    continue;
                 }
 
                 member.Id = candidate;
@@ -892,7 +989,10 @@ sealed class Converter(HashSet<string> verifiedIds, IReadOnlyDictionary<string, 
             gzip.Write(new UTF8Encoding(false).GetBytes(result.Jsonl()));
         }
 
-        return output.ToArray();
+        // Byte 9 of the header names the OS that wrote it (zlib: 0x0a on Windows, 0x03 on Linux). 0xff, "unknown", keeps the bytes the same everywhere.
+        var bytes = output.ToArray();
+        bytes[9] = 0xff;
+        return bytes;
     }
 
     /// <summary>Reads the bundle back through DefinitionLoader. Returns one message per refused definition; empty when all pass.</summary>
