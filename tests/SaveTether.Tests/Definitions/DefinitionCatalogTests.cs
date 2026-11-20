@@ -47,6 +47,16 @@ public sealed class DefinitionCatalogTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void The_status_lookup_skips_imported_definitions_so_a_manual_mapping_keeps_its_folder_action()
+    {
+        var catalog = Catalog(null, Line("alpha", "Alpha Quest"));
+
+        Assert.Null(catalog.Find("alpha", includeImported: false));
+        Assert.NotNull(catalog.Find("alpha"));
+        Assert.NotNull(catalog.Find("cemu", includeImported: false));
+    }
+
+    [Fact]
     public void A_verified_built_in_definition_wins_over_an_imported_one_with_the_same_id()
     {
         var catalog = Catalog(null, Line("cemu", "Cemu (imported)"), Line("alpha", "Alpha"));
@@ -89,13 +99,12 @@ public sealed class DefinitionCatalogTests(ITestOutputHelper output)
     {
         var catalog = Catalog(null,
             Line("alpha", "Alpha Quest"),
-            Line("beta-123", "Beta", "\"store_ids\":{\"steam\":123},"),
+            Line("beta", "Beta", "\"store_ids\":{\"steam\":123},"),
             Line("gamma", "Gamma"));
 
         Assert.Equal(["alpha"], catalog.Search("quest"));
         Assert.Equal(["gamma"], catalog.Search("GAMMA"));
-        Assert.Equal(["beta-123"], catalog.Search("123").Where(id => id != "alpha"));
-        Assert.Equal(["beta-123"], catalog.Search("123"));
+        Assert.Equal(["beta"], catalog.Search("123"));
         Assert.Contains("cemu", catalog.Search("cemu"));
         Assert.Empty(catalog.Search("zzzzzz"));
         Assert.Equal(catalog.AvailableIds(), catalog.Search("  "));

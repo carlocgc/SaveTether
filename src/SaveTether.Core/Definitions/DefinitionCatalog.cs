@@ -80,7 +80,9 @@ public sealed class DefinitionCatalog
     {
     }
 
-    // Lazy: the bundle takes a moment to read, and most lookups (a status check) never need it.
+    // Lazy: the bundle takes a moment to read. Callers that can reach it: Find with includeImported
+    // (adding an app, app list/search), Search, AvailableIds by default, and the Imported* statics.
+    // The status check and the backups list use Find(id, includeImported: false) and never load it.
     private DefinitionCatalog(string? sharedFolder, Lazy<ImportedSet> imported)
     {
         _sharedFolder = sharedFolder;
@@ -118,6 +120,14 @@ public sealed class DefinitionCatalog
             ids.UnionWith(_imported.Definitions.Keys);
         }
 
+        ids.UnionWith(SharedIds());
+        return [.. ids];
+    }
+
+    /// <summary>The IDs of the files in the shared folder, from one directory listing.</summary>
+    private HashSet<string> SharedIds()
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
         if (_sharedFolder is not null && Directory.Exists(_sharedFolder))
         {
             foreach (var file in Directory.EnumerateFiles(_sharedFolder, "*" + AppDefinition.FileExtension))
@@ -126,7 +136,7 @@ public sealed class DefinitionCatalog
             }
         }
 
-        return [.. ids];
+        return ids;
     }
 
     /// <summary>
@@ -142,6 +152,7 @@ public sealed class DefinitionCatalog
         }
 
         var hits = new List<string>();
+        var shared = SharedIds();
         foreach (var id in AvailableIds())
         {
             if (id.Contains(typed, StringComparison.OrdinalIgnoreCase))
@@ -150,8 +161,8 @@ public sealed class DefinitionCatalog
                 continue;
             }
 
-            var definition = SharedFileExists(id) || BuiltInIds.Contains(id, StringComparer.Ordinal)
-                ? Find(id)?.Definition
+            var definition = shared.Contains(id) || BuiltInIds.Contains(id, StringComparer.Ordinal)
+                ? FindCore(id, includeImported: true, shared)?.Definition
                 : _imported.Definitions.GetValueOrDefault(id);
             if (definition is not null
                 && (definition.Name.Contains(typed, StringComparison.OrdinalIgnoreCase)
@@ -164,11 +175,22 @@ public sealed class DefinitionCatalog
         return hits;
     }
 
-    private bool SharedFileExists(string id) =>
-        _sharedFolder is not null && File.Exists(Path.Combine(_sharedFolder, id + AppDefinition.FileExtension));
+    /// <summary>
+    /// The definition with this ID: the shared one if there is a file for it, else the built-in one, else
+    /// (unless <paramref name="includeImported"/> is false) the imported one; null when none exists.
+    /// The imported bundle is read on the first call that reaches it, so a status check passes false.
+    /// </summary>
+    public CatalogEntry? Find(string appId, bool includeImported = true) => FindCore(appId, includeImported, null);
 
-    /// <summary>The definition with this ID: the shared one if there is a file for it, else the built-in one, else the imported one; null when none exists.</summary>
-    public CatalogEntry? Find(string appId)
+    /// <summary>The entries for these IDs (each must exist), probing the shared folder once instead of per ID.</summary>
+    public IReadOnlyList<(string Id, CatalogEntry Entry)> FindAll(IEnumerable<string> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var shared = SharedIds();
+        return ids.Select(id => (id, FindCore(id, includeImported: true, shared)!)).ToList();
+    }
+
+    private CatalogEntry? FindCore(string appId, bool includeImported, HashSet<string>? knownShared)
     {
         ArgumentNullException.ThrowIfNull(appId);
         var fileName = appId + AppDefinition.FileExtension;
@@ -176,7 +198,7 @@ public sealed class DefinitionCatalog
         if (_sharedFolder is not null)
         {
             var shared = Path.Combine(_sharedFolder, fileName);
-            if (File.Exists(shared))
+            if (knownShared is null ? File.Exists(shared) : knownShared.Contains(appId))
             {
                 var loaded = DefinitionLoader.LoadFile(shared);
                 return new CatalogEntry(loaded.Definition, DefinitionSource.Shared, shared, loaded.Errors);
@@ -186,7 +208,7 @@ public sealed class DefinitionCatalog
         using var stream = OpenBuiltIn(appId);
         if (stream is null)
         {
-            return _imported.Definitions.TryGetValue(appId, out var imported)
+            return includeImported && _imported.Definitions.TryGetValue(appId, out var imported)
                 ? new CatalogEntry(imported, DefinitionSource.Imported, "imported " + appId + AppDefinition.FileExtension, [])
                 : null;
         }

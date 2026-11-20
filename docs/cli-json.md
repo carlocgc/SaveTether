@@ -115,7 +115,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `app_id`, `app_name` | string | |
 | `definition_source` | string | `built-in`, `shared` or `imported`. |
 | `verified` | boolean | False when the definition was converted from the Ludusavi manifest and has not been tried by hand (`definition_source` is `imported`). |
-| `definition_location` | string | The shared definition's file, or `built-in <file name>`. |
+| `definition_location` | string | The shared definition's file, `built-in <file name>`, or `imported <file name>`. |
 | `install` | string | The install ID used. |
 | `values` | object | What this device records for the app: `install`, and `install_dir`, `sd_card`, `wine_prefix` when given or found. |
 | `roles` | array of object | One per role to add. |

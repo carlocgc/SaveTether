@@ -353,7 +353,8 @@ internal static class CliApp
 
             if (outcome.Plan is not { } plan)
             {
-                return AppFailed(appId, outcome, Hints.Compose(outcome.Message!));
+                var error = Hints.Compose(outcome.Message!);
+                return AppFailed(appId, outcome, outcome.Problem == AppAddProblem.UnknownApp ? error + " Find one with 'savetether app list --search <name>'." : error);
             }
 
             var dryRun = command.Has(ArgParser.DryRun);
@@ -381,11 +382,9 @@ internal static class CliApp
             var catalog = workspace.Definitions;
             var search = command.Value("--search");
             var ids = search is null ? catalog.AvailableIds() : catalog.Search(search);
-            var apps = ids.Select(id =>
-            {
-                var entry = catalog.Find(id)!;
-                return new AppListEntry(id, entry.Definition?.Name, entry.Source, entry.IsValid ? null : string.Join("; ", entry.Errors));
-            }).ToList();
+            var apps = catalog.FindAll(ids)
+                .Select(e => new AppListEntry(e.Id, e.Entry.Definition?.Name, e.Entry.Source, e.Entry.IsValid ? null : string.Join("; ", e.Entry.Errors)))
+                .ToList();
             return new CliOutput
             {
                 Command = command.Name, ExitCode = ExitSuccess, Apps = apps,

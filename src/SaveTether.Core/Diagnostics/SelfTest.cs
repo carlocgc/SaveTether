@@ -199,6 +199,8 @@ public static class SelfTest
 
             // The shipped definitions are embedded resources; prove they made it into this build.
             Require(new DefinitionCatalog(null).Find("cemu") is { IsValid: true }, "the built-in Cemu definition is missing or invalid");
+            Require(DefinitionCatalog.ImportedCount > 0, "the imported definitions bundle is missing or empty");
+            Require(DefinitionCatalog.ImportedErrors.Count == 0, "the imported definitions bundle has unreadable lines");
         });
 
         yield return ("directory link", () =>

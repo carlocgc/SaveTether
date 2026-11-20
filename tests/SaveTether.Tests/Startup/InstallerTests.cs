@@ -73,7 +73,7 @@ public class InstallerTests
         var open = line.IndexOf('(', StringComparison.Ordinal);
         var listed = line[(open + 1)..line.IndexOf(')', open)]
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Except(["LICENSE", "README.md", "savetether.png"]);
+            .Except(["LICENSE", "README.md", "ludusavi.LICENSE.txt", "savetether.png"]);
         Assert.Equal(listed.Order(StringComparer.Ordinal), Installer.PackageFiles.Order(StringComparer.Ordinal));
     }
 
