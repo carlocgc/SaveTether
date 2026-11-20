@@ -11,7 +11,8 @@ namespace SaveTether.Core.Definitions;
 /// </summary>
 public static class DefinitionLoader
 {
-    internal static readonly string[] RootFields = ["schema", "id", "name", "kind", "installs", "roles", "quirks"];
+    internal static readonly string[] RootFields = ["schema", "id", "name", "kind", "installs", "roles", "quirks", "tier", "origin", "store_ids", "cloud_saves", "tested_on"];
+    internal static readonly string[] StoreIdFields = ["steam"];
     internal static readonly string[] InstallFields = ["id", "os", "detect", "base"];
     internal static readonly string[] DetectFields = ["dir", "file", "flatpak", "steam"];
     internal static readonly string[] BaseFields = ["winpath", "prefix"];
@@ -81,6 +82,62 @@ public static class DefinitionLoader
         return (definitions, errors);
     }
 
+    /// <summary>The name that errors from <see cref="ParseBundle"/> give as their file.</summary>
+    public const string BundleName = "bundle";
+
+    internal static readonly Dictionary<string, DefinitionTier> Tiers = new(StringComparer.Ordinal)
+    {
+        ["verified"] = DefinitionTier.Verified, ["imported"] = DefinitionTier.Imported,
+    };
+
+    /// <summary>
+    /// Reads a bundle: gzip-compressed JSON Lines, one definition per line. A bad line is reported
+    /// with its line number in the bundle and the other lines still load. Blank lines are skipped.
+    /// </summary>
+    public static (IReadOnlyList<AppDefinition> Definitions, IReadOnlyList<DefinitionError> Errors) ParseBundle(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        var definitions = new List<AppDefinition>();
+        var errors = new List<DefinitionError>();
+        var lineNumber = 0;
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress, leaveOpen: true);
+            using var reader = new StreamReader(gzip, System.Text.Encoding.UTF8);
+            while (reader.ReadLine() is { } line)
+            {
+                lineNumber++;
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                var result = Parse(line, BundleName);
+                errors.AddRange(result.Errors.Select(e => new DefinitionError(BundleName, lineNumber, e.Message)));
+                if (result.Definition is not { } definition)
+                {
+                    continue;
+                }
+
+                if (ids.Add(definition.Id))
+                {
+                    definitions.Add(definition);
+                }
+                else
+                {
+                    errors.Add(new DefinitionError(BundleName, lineNumber, $"another line already has the id \"{definition.Id}\""));
+                }
+            }
+        }
+        catch (InvalidDataException e)
+        {
+            errors.Add(new DefinitionError(BundleName, lineNumber + 1, $"the bundle is not readable gzip: {e.Message}"));
+        }
+
+        return (definitions, errors);
+    }
+
     /// <summary>Reads a definition from text. <paramref name="fileName"/> is only used to label errors.</summary>
     public static DefinitionLoadResult Parse(string text, string fileName)
     {
@@ -143,12 +200,62 @@ public static class DefinitionLoader
             RequireDistinctTargets(roles);
 
             var quirks = Strings(Field(root, "quirks"), "\"quirks\"");
+            var tier = Field(root, "tier") is { } tierNode ? OneOf(tierNode, "\"tier\"", Tiers) : DefinitionTier.Verified;
+            var origin = Field(root, "origin") is { } originNode ? Text(originNode, "\"origin\"") : null;
+            var storeIds = ReadStoreIds(Field(root, "store_ids"));
+            var cloudSaves = ReadCloudSaves(Field(root, "cloud_saves"));
+            var testedOn = Field(root, "tested_on") is { } testedNode ? Strings(testedNode, "\"tested_on\"") : null;
 
             return Errors.Count > 0
                 ? null
                 : new AppDefinition(
                     (int)schema!.Value, id!, name!, kind!.Value,
-                    installs.Select(i => i!.Value.Install).ToList(), roles.Select(r => r!.Value.Role).ToList(), quirks);
+                    installs.Select(i => i!.Value.Install).ToList(), roles.Select(r => r!.Value.Role).ToList(), quirks,
+                    tier ?? DefinitionTier.Verified, origin, storeIds, cloudSaves, testedOn);
+        }
+
+        private StoreIds? ReadStoreIds(JsonTreeNode? node)
+        {
+            if (node is null || !IsObject(node, "\"store_ids\"", StoreIdFields))
+            {
+                return null;
+            }
+
+            var steam = Field(node, "steam") is { } steamNode ? PositiveInteger(steamNode, "\"steam\"") : null;
+            return new StoreIds(steam);
+        }
+
+        private List<string>? ReadCloudSaves(JsonTreeNode? node)
+        {
+            if (node is null)
+            {
+                return null;
+            }
+
+            var items = List(node, "\"cloud_saves\"", mustHaveItems: true);
+            var stores = new List<string>();
+            foreach (var item in items)
+            {
+                if (Text(item, "an entry of \"cloud_saves\"") is not { } store)
+                {
+                    continue;
+                }
+
+                if (!AppDefinition.CloudStores.Contains(store))
+                {
+                    Fail(item.Line, $"an entry of \"cloud_saves\" must be one of {string.Join(", ", AppDefinition.CloudStores.Select(s => $"\"{s}\""))}, but is \"{store}\"");
+                }
+                else if (stores.Contains(store))
+                {
+                    Fail(item.Line, $"\"cloud_saves\" names \"{store}\" twice");
+                }
+                else
+                {
+                    stores.Add(store);
+                }
+            }
+
+            return stores;
         }
 
         private (InstallDefinition Install, string Id, int Line)? ReadInstall(JsonTreeNode node)
@@ -238,7 +345,7 @@ public static class DefinitionLoader
 
             if (node.Kind != NodeKind.Object)
             {
-                Fail(node.Line, $"\"base\" must be a path, or an object with \"winpath\" and \"prefix\", but is {node.Describe()}");
+                Fail(node.Line, $"\"base\" must be a path, or an object with \"winpath\" and, optionally, \"prefix\", but is {node.Describe()}");
                 return null;
             }
 
@@ -248,8 +355,14 @@ public static class DefinitionLoader
             }
 
             var winPath = Text(Required(node, "winpath"), "\"winpath\"");
-            var prefixNode = Required(node, "prefix");
-            if (prefixNode is null || !IsObject(prefixNode, "\"prefix\"", PrefixFields))
+            var prefixNode = Field(node, "prefix");
+            if (prefixNode is null)
+            {
+                // No prefix kind: the prefix set for the device is used (design 5.2).
+                return winPath is null ? null : new BaseLocation(WinPath: winPath);
+            }
+
+            if (!IsObject(prefixNode, "\"prefix\"", PrefixFields))
             {
                 return null;
             }

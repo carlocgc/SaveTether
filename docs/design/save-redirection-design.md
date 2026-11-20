@@ -292,6 +292,7 @@ A `winpath` location is the one cross-OS trick: on Windows it resolves natively,
 - `"prefix": { "steam_shortcut": "<name>" }` for a non-Steam game added to Steam. Steam generates the ID, so it is looked up from Steam's shortcuts file by name on each device.
 - `"prefix": { "lutris": "<slug>" }` for a Lutris game. The prefix path is read from that game's Lutris config **[K]**.
 - `"prefix": { "path": "..." }` set in that device's config file, as the fallback.
+- No `prefix` at all, for a Windows game outside Steam that no kind names (the Ludusavi manifest has many). The Wine prefix set for the device is used (`--wine-prefix`, or the field in Add app), and the install needs a value, and the hint names `--wine-prefix`, until one is set.
 
 Games with platform cloud saves are in scope, decided by the owner on 2026-11-19: the same game bought from another store, or on disc, has no cloud saves. A definition notes which stores' copies have cloud saves (the Ludusavi manifest records this per game **[V]**); nothing is refused. Earlier, from 2026-11-12, such games were out of scope.
 
@@ -323,7 +324,12 @@ Shape, abbreviated. Links are the only mechanism (5.13), so a role does not name
       "notes": "string"           // optional
     }
   ],
-  "quirks": ["string"]            // optional
+  "quirks": ["string"],           // optional
+  "tier": "verified",             // optional: "verified" (the default, written and tried by hand) or "imported" (converted, not tried)
+  "origin": "ludusavi",           // optional: where an imported definition came from
+  "store_ids": { "steam": 12345 },   // optional: for search; only Steam for now
+  "cloud_saves": ["steam", "gog"],   // optional: stores whose copies keep saves in the cloud (steam, gog, epic, xbox, ubisoft, ea)
+  "tested_on": ["Steam Deck, Flatpak"]   // optional: where this was tried
 }
 ```
 
@@ -333,8 +339,9 @@ Rules the loader enforces, beyond the shape:
 - An `id` (app, install or role) is lowercase letters, digits, `-` and `_`, with no dot, because `<app id>.<role id>` becomes the mapping ID.
 - A role's `target` is one folder name. With the app ID in front it becomes the mapping's target, which is exactly `<app>/<save folder>` (5.12), so it follows the same rules: no `/`, no leading dot, nothing Windows refuses. Two roles of one app may not share a target, ignoring letter case.
 - A role's `path` is relative to the install's base: forward slashes, no `.` or `..` parts, not absolute. As an object it gives a path per install ID; an install that is not named does not have that role.
-- `detect` has exactly one field, and so does `prefix`.
+- `detect` has exactly one field, and so does `prefix` when given. A winpath may leave `prefix` out.
 - An unknown field is an error, as in every other SaveTether file, and so is a field given twice.
+- A bundle is gzip-compressed JSON Lines, one definition per line (`DefinitionLoader.ParseBundle`). A bad line is reported with its line number in the bundle; the other lines still load, and an ID given on two lines is an error. The tier, origin, store ID, cloud-save and tested-on fields were added in phase 3.5; the format stays at `schema: 1`.
 
 **Naming.** Agreed with the owner on 2026-11-17, after the first Lutris definition was called `rondo2`, after a script folder. A definition has three kinds of name, and only one of them is the executable's:
 
