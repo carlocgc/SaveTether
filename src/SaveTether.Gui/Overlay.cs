@@ -123,6 +123,43 @@ internal sealed class Overlay : Panel
         return answer.Task;
     }
 
+    /// <summary>
+    /// Runs <paramref name="work"/> off the UI thread behind a busy dialog. The page is locked from the first
+    /// moment, so nothing can be opened while it runs; the dialog itself shows only if the work outlasts
+    /// <see cref="Presentation.Pacing.BusyGrace"/> (a quick step flashes nothing), and then stays at least
+    /// <see cref="Presentation.Pacing.BusyMinimum"/> so it can be read.
+    /// </summary>
+    public async Task<T> WorkAsync<T>(string title, string text, Func<T> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        var body = new StackPanel
+        {
+            Spacing = 12,
+            MinWidth = 320,
+            Children = { new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap }, new ProgressBar { IsIndeterminate = true } },
+        };
+        var layer = Layer(title, body, null);
+        layer.IsVisible = false;
+        _page.IsEnabled = false;
+        Children.Add(layer);
+        try
+        {
+            var task = Task.Run(work);
+            if (await Task.WhenAny(task, Task.Delay(Presentation.Pacing.BusyGrace)) != task)
+            {
+                layer.IsVisible = true;
+                await Task.WhenAll(task, Task.Delay(Presentation.Pacing.BusyMinimum));
+            }
+
+            return await task;
+        }
+        finally
+        {
+            Children.Remove(layer);
+            _page.IsEnabled = Children.Count == 1;
+        }
+    }
+
     /// <summary>A dialog with no buttons that stays until the returned handle is disposed: an operation's progress.</summary>
     public IDisposable ShowBlocking(string title, Control body)
     {

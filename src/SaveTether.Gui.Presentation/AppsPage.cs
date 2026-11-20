@@ -156,5 +156,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
 
     /// <summary>Apply all's summary (section 9.4).</summary>
     public static string ApplyAllSummary(int linked, IReadOnlyList<string> needYou) =>
-        needYou.Count == 0 ? $"{linked} linked." : $"{linked} linked. {needYou.Count} need you: {string.Join(", ", needYou)}.";
+        needYou.Count == 0
+            ? $"{linked} linked."
+            : $"{linked} linked. {needYou.Count} not linked, each needs a choice or a fix first: {string.Join(", ", needYou)}.\n\nPress Apply on each to see what it needs.";
 }

@@ -165,15 +165,7 @@ public static class StatusCheck
     /// <summary>The app's name from its definition, and whether there is a usable one; the ID and false otherwise.</summary>
     private static (string Name, bool Defined) AppOf(Workspace workspace, string mappingId)
     {
-        var appId = mappingId.Split('.')[0];
-        try
-        {
-            return workspace.Definitions.Find(appId, includeImported: false)?.Definition is { } definition ? (definition.Name, true) : (appId, false);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return (appId, false);
-        }
+        return AppNames.Resolve(workspace.Definitions, mappingId.Split('.')[0]);
     }
 
     /// <summary>Each other device's mappings with a folder set. A device file that cannot be read is left out.</summary>

@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media;
 
 namespace SaveTether.Gui;
 
@@ -17,6 +18,21 @@ internal interface IScreen
 
 internal static class Navigation
 {
+    /// <summary>
+    /// An app's name above its rows (Apps and Backups): a tinted band with a line under it, so one app's rows
+    /// read apart from the next. The tint is a grey at low opacity, so it suits the light and the dark theme.
+    /// </summary>
+    public static Control GroupHeader(string text) => new Border
+    {
+        Margin = new Thickness(0, 12, 0, 4),
+        Padding = new Thickness(10, 5),
+        CornerRadius = new CornerRadius(4),
+        Background = new SolidColorBrush(Color.FromArgb(40, 128, 128, 128)),
+        BorderBrush = new SolidColorBrush(Color.FromArgb(140, 128, 128, 128)),
+        BorderThickness = new Thickness(0, 0, 0, 2),
+        Child = new TextBlock { Text = text, FontSize = 17, FontWeight = FontWeight.SemiBold },
+    };
+
     /// <summary>The way back from a page, as a row for a screen's <see cref="IScreen.Bar"/>.</summary>
     public static Control BackRow(string label, Action back)
     {

@@ -14,6 +14,19 @@ public static class Pacing
 
     /// <summary>How long a dialog is shown before its buttons and Escape answer.</summary>
     public static readonly TimeSpan DialogMinimum = TimeSpan.FromMilliseconds(600);
+
+    /// <summary>How long work runs before its busy dialog shows; quicker work shows none (the page is locked meanwhile).</summary>
+    public static readonly TimeSpan BusyGrace = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>The least time a busy dialog stays once shown.</summary>
+    public static readonly TimeSpan BusyMinimum = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>The least time the footer's background status shows one line before the next replaces it.</summary>
+    public static readonly TimeSpan StatusMinimum = TimeSpan.FromMilliseconds(1200);
+
+    /// <summary>How much longer a line shown <paramref name="shownFor"/> must stay before it may change; zero when it may change now.</summary>
+    public static TimeSpan StatusWait(TimeSpan shownFor) =>
+        shownFor >= StatusMinimum ? TimeSpan.Zero : StatusMinimum - shownFor;
 }
 
 /// <summary>

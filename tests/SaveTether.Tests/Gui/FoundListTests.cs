@@ -107,6 +107,104 @@ public class FoundListTests
         Assert.Single(session.Found, f => f.App.Id == "cemu");
     }
 
+    private static FoundApp Found(string id) =>
+        new(new CatalogApp(id, id, DefinitionSource.BuiltIn, true), id, "/saves/" + id, null);
+
+    /// <summary>A scan source that yields the given apps, then waits to be released (or cancelled) before it ends.</summary>
+    private sealed class HeldScan(params string[] ids)
+    {
+        public ManualResetEventSlim Yielded { get; } = new();
+
+        public ManualResetEventSlim Release { get; } = new();
+
+        public IEnumerable<FoundApp> Run(CancellationToken cancel)
+        {
+            foreach (var id in ids)
+            {
+                yield return Found(id);
+            }
+
+            Yielded.Set();
+            Release.Wait(cancel);
+        }
+    }
+
+    private static string[] Ids(ScanSession session) => [.. session.Found.Select(f => f.App.Id).Order(StringComparer.Ordinal)];
+
+    [Fact]
+    public void A_cancelled_rescan_leaves_the_earlier_rows_exactly_as_they_were()
+    {
+        var tasks = new BackgroundTasks();
+        var session = new ScanSession(tasks);
+        var first = new HeldScan("old-a", "old-b");
+        Assert.True(session.Start(first.Run, "first"));
+        first.Yielded.Wait(TimeSpan.FromSeconds(30));
+        first.Release.Set();
+        WaitUntilIdle(session);
+        Assert.Equal(["old-a", "old-b"], Ids(session));
+        Assert.False(session.WasCancelled);
+
+        // The rescan has found different apps and is held while they are staged, so the cancel arrives mid-scan.
+        var second = new HeldScan("new-c");
+        Assert.True(session.Start(second.Run, "second"));
+        Assert.True(second.Yielded.Wait(TimeSpan.FromSeconds(30)));
+        Assert.True(session.Replacing);
+        Assert.Equal(1, session.Pending);
+        Assert.Equal(["old-a", "old-b"], Ids(session));
+
+        tasks.CancelCurrent();
+        WaitUntilIdle(session);
+
+        Assert.False(session.Replacing);
+        Assert.Equal(0, session.Pending);
+        Assert.True(session.WasCancelled);
+        Assert.Equal(["old-a", "old-b"], Ids(session));
+    }
+
+    [Fact]
+    public void A_finished_rescan_publishes_its_rows_in_place_of_the_earlier_ones()
+    {
+        var session = new ScanSession(new BackgroundTasks());
+        var first = new HeldScan("old-a", "old-b");
+        session.Start(first.Run, "first");
+        first.Release.Set();
+        WaitUntilIdle(session);
+
+        var second = new HeldScan("new-c", "old-b");
+        session.Start(second.Run, "second");
+        Assert.True(second.Yielded.Wait(TimeSpan.FromSeconds(30)));
+        Assert.Equal(["old-a", "old-b"], Ids(session));
+
+        second.Release.Set();
+        WaitUntilIdle(session);
+
+        Assert.Equal(["new-c", "old-b"], Ids(session));
+        Assert.False(session.WasCancelled);
+        Assert.Equal(0, session.Pending);
+    }
+
+    [Fact]
+    public void A_failed_rescan_drops_its_rows_too()
+    {
+        var session = new ScanSession(new BackgroundTasks());
+        var first = new HeldScan("old-a");
+        session.Start(first.Run, "first");
+        first.Release.Set();
+        WaitUntilIdle(session);
+
+        session.Start(_ => FailingScan(), "second");
+        WaitUntilIdle(session);
+
+        Assert.Equal(["old-a"], Ids(session));
+        Assert.Equal(BackgroundTaskState.Failed, session.Tasks.Current?.State);
+
+        static IEnumerable<FoundApp> FailingScan()
+        {
+            yield return Found("new-c");
+            throw new IOException("unreadable");
+        }
+    }
+
     [Fact]
     public void Page_1_labels_an_imported_steam_game_found_only_when_steam_has_it_installed_as_the_scan_does()
     {

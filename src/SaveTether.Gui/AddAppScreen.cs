@@ -126,10 +126,23 @@ internal sealed class AddAppScreen : UserControl, IScreen
             return parts;
         }
 
+        // The scan the button offers to cancel: the one running when it was last drawn. A click acts on what the
+        // button says, not on what is true a moment later (a scan may have ended since, and then Cancel does nothing).
+        BackgroundTask? cancelTarget = null;
+        var showsCancel = false;
+        var countNote = string.Empty;
+
         void Refresh()
         {
-            var running = _scans.Tasks.IsRunning;
-            scan.IsEnabled = !running;
+            // One read of the current task, so "running" and the task to cancel cannot disagree if the scan ends between two reads.
+            cancelTarget = _scans.Tasks.Current is { State: BackgroundTaskState.Running } current ? current : null;
+            var running = cancelTarget is not null;
+
+            // The footer lags behind a scan so it can be read. The button stays Cancel for as long as the scan runs
+            // or the footer is still catching up, so the two agree; a click ends whichever is still going.
+            showsCancel = running || !_scans.Tasks.Status.CaughtUp;
+            scan.Content = showsCancel ? "Cancel scan" : "Scan for games";
+            AutomationProperties.SetName(scan, showsCancel ? "Cancel the scan" : "Scan for games, including apps that are no longer installed");
             if (!string.IsNullOrWhiteSpace(search.Text))
             {
                 return;
@@ -137,9 +150,16 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
             var addedIds = added.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
             var found = _scans.Found.Where(f => !addedIds.Contains(f.App.Id)).ToList();
-            scanNote.Text = found.Count == 0
-                ? (running ? "Looking for apps on this device…" : "No apps were found on this device. Search for one by name, or scan for games.")
-                : $"{found.Count:N0} found on this device";
+            // The count changes once, when the scan and the footer have both finished, so the three agree; while
+            // either is still going it keeps what it said before (nothing, on the first scan).
+            if (!showsCancel)
+            {
+                countNote = found.Count == 0
+                    ? "No apps were found on this device. Search for one by name, or scan for games."
+                    : $"{found.Count:N0} found on this device";
+            }
+
+            scanNote.Text = countNote;
             var desired = new List<Control>();
             foreach (var f in found)
             {
@@ -244,6 +264,23 @@ internal sealed class AddAppScreen : UserControl, IScreen
         search.TextChanged += (_, _) => _ = SearchAsync();
         scan.Click += (_, _) =>
         {
+            if (showsCancel)
+            {
+                // The button said Cancel, so this never starts a scan. It cancels the scan it was drawn for (a no-op if
+                // that has just ended); with no scan running it ends the footer's wait instead.
+                if (cancelTarget is { } shown)
+                {
+                    shown.Cancel();
+                }
+                else
+                {
+                    _scans.Tasks.SkipPacing();
+                }
+
+                Refresh();
+                return;
+            }
+
             var classes = new HashSet<Core.Definitions.RoleClass> { Core.Definitions.RoleClass.Save };
             if (system.IsChecked == true)
             {
@@ -287,7 +324,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
         byHand.Click += (_, _) => _ = ShowManualAsync(() => _manual.StartNew(), fromCatalog: true);
         ToolTip.SetTip(scan, "Also lists saves left by apps that are no longer installed");
         // Everything but the list is pinned above the scrolling area, so it stays in reach however long the list is:
-        // the title and what the page is for, the way back, the actions, then the search and how many were found.
+        // the title and what the page is for, then one row (the way back, Add folder, the scan), then the search and how many were found.
         // The scan and its two choices share a frame to show that the choices belong to the scan.
         var scanGroup = new Border
         {
@@ -307,7 +344,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             Orientation = Orientation.Horizontal,
             Spacing = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { byHand, scanGroup },
+            Children = { Navigation.BackRow("Back to apps", Leave), byHand, scanGroup },
         };
         scanNote.Margin = new Thickness(0, 0, 0, 2);
         Bar.Content = new StackPanel
@@ -317,7 +354,6 @@ internal sealed class AddAppScreen : UserControl, IScreen
             {
                 new TextBlock { Text = "Add app", FontSize = 22, FontWeight = FontWeight.SemiBold },
                 new TextBlock { Text = ScanIntro, TextWrapping = TextWrapping.Wrap },
-                Navigation.BackRow("Back to apps", Leave),
                 actions,
                 search,
                 scanNote,
@@ -330,16 +366,27 @@ internal sealed class AddAppScreen : UserControl, IScreen
         _content.HorizontalAlignment = HorizontalAlignment.Stretch;
         _scans.Changed += OnChanged;
         _scans.Tasks.Changed += OnChanged;
+        void OnAdvanced()
+        {
+            if (!_closed && ReferenceEquals(_page.Content, page))
+            {
+                Refresh();
+            }
+        }
+
+        _scans.Tasks.Status.Advanced += OnAdvanced;
         _unsubscribe = () =>
         {
             _scans.Changed -= OnChanged;
             _scans.Tasks.Changed -= OnChanged;
+            _scans.Tasks.Status.Advanced -= OnAdvanced;
         };
         Refresh();
         search.Focus();
         if (!_scans.HasRun)
         {
             _scans.Start(_flow, Core.Detection.ScanOptions.Default);
+            Refresh();
         }
     }
 

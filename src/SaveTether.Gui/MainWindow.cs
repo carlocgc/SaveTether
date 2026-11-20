@@ -57,52 +57,40 @@ internal sealed class MainWindow : Window
     private int _stripRefreshPending;
 
     /// <summary>What the footer says when nothing runs in the background.</summary>
-    public const string Idle = "Idle";
+    public const string Idle = BackgroundTasks.Idle;
 
-    // The controls are built once and updated in place, so a progress report never detaches a focused Cancel.
+    // The strip only reports, and Dismiss clears a failure; a scan is cancelled where it is started (Add app).
     private void BuildStrip()
     {
-        _stripButton.Click += (_, _) =>
-        {
-            if (Tasks.Current is { State: BackgroundTaskState.Failed })
-            {
-                Tasks.Dismiss();
-            }
-            else
-            {
-                Tasks.CancelCurrent();
-            }
-        };
+        _stripButton.Content = "Dismiss";
+        _stripButton.Click += (_, _) => Tasks.Dismiss();
         AutomationProperties.SetName(_stripText, "Background status");
     }
 
-    // At most one refresh is queued: a burst of reports shows the latest counts once. The flag clears first,
-    // so a change during the refresh queues another.
+    // The scan runs at its own speed; the footer lags behind it so each line can be read (Pacing.StatusMinimum).
+    // Every change is offered to Tasks.Status the moment it happens, so a scan that starts and ends between two draws
+    // is still shown running before the footer says Idle. At most one draw is queued; the flag clears just before
+    // the draw, so a change during it queues another.
+
     private void RequestStripRefresh()
     {
         if (Interlocked.Exchange(ref _stripRefreshPending, 1) == 0)
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                Volatile.Write(ref _stripRefreshPending, 0);
-                ShowStrip();
-            });
+            Avalonia.Threading.Dispatcher.UIThread.Post(DrawStrip);
         }
     }
 
-    private void ShowStrip()
+    private void DrawStrip()
     {
-        if (Tasks.Current is not { } task)
-        {
-            _stripText.Text = Idle;
-            _stripButton.IsVisible = false;
-            return;
-        }
+        Volatile.Write(ref _stripRefreshPending, 0);
+        _ = Tasks.Status.TryNext(out var wait);
+        _stripText.Text = Tasks.Status.Shown;
 
-        var failed = task.State == BackgroundTaskState.Failed;
-        _stripText.Text = task.Text;
-        _stripButton.Content = failed ? "Dismiss" : "Cancel";
-        _stripButton.IsVisible = true;
+        _stripButton.IsVisible = Tasks.Current is { State: BackgroundTaskState.Failed };
+        if (wait > TimeSpan.Zero && Interlocked.Exchange(ref _stripRefreshPending, 1) == 0)
+        {
+            Avalonia.Threading.DispatcherTimer.RunOnce(DrawStrip, wait);
+        }
     }
 
     public MainWindow(string localFolder, Action checkNow, Action quit, Func<Func<ActionFlow, Task>, Task> operate)
@@ -276,7 +264,7 @@ internal sealed class MainWindow : Window
 
         foreach (var group in page.Groups)
         {
-            _rows.Children.Add(new TextBlock { Text = group.AppName, FontSize = 17, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 10, 0, 2) });
+            _rows.Children.Add(Navigation.GroupHeader(group.AppName));
             foreach (var row in group.Rows)
             {
                 _rows.Children.Add(Row(row, actionsAllowed));

@@ -20,8 +20,15 @@ internal sealed class SettingsScreen : UserControl, IScreen
     public SettingsScreen(string localFolder, SessionStart session, Overlay overlay, Action close)
     {
         var page = new StackPanel { Spacing = 10, MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Left };
-        Bar.Content = Navigation.BackRow("Back to apps", close);
-        page.Children.Add(new TextBlock { Text = "Settings", FontSize = 22, FontWeight = FontWeight.SemiBold });
+        Bar.Content = new StackPanel
+        {
+            Spacing = 8,
+            Children =
+            {
+                new TextBlock { Text = "Settings", FontSize = 22, FontWeight = FontWeight.SemiBold },
+                Navigation.BackRow("Back to apps", close),
+            },
+        };
 
         page.Children.Add(Heading("Start with the session"));
         if (session.Available)
