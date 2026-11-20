@@ -200,6 +200,8 @@ A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmati
 
 **Page 1, choose an app.** The catalog's apps (shared definitions, then built-in, as `app list` shows them), in name order, with a search field that filters as typed. Next to each, filled in the background: "Found", "Not found" or "Added" (already has a folder on this device). Opening the page does not wait for detection.
 
+*Open (2026-11-20):* whether page 1's scan should be started by the owner, with a choice of role classes and of installed apps only or also saves left by uninstalled ones, and how it shows that it is working. See the phase 3.5 plan, T4b and the open question beside T5.
+
 **Page 2, the plan.** `PlanAppAdd` with what is known so far; then, by outcome:
 
 | Outcome | Shown | Offered |
