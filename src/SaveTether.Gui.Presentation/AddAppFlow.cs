@@ -28,7 +28,7 @@ public enum CatalogStatus
 public sealed record CatalogApp(string Id, string Name, DefinitionSource Source, bool IsValid);
 
 /// <summary>An app the scan found on this device, with where and when it was last used.</summary>
-public sealed record FoundApp(CatalogApp App, string InstallId, string SaveFolder, DateTime? NewestWrite);
+public sealed record FoundApp(CatalogApp App, string InstallId, string SaveFolder, DateTime? NewestWrite, bool Installed = true);
 
 /// <summary>Page 1's search result: at most <see cref="AddAppFlow.MaxSearchRows"/> apps, and how many matched in all.</summary>
 public sealed record SearchResult(IReadOnlyList<CatalogApp> Shown, int Total)
@@ -133,9 +133,10 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     /// <summary>
     /// Page 1's list of apps found on this device, as they are found (so the window can show progress),
     /// each app once, with its newest-written install first. Read-only; slow, so call it off the UI thread.
+    /// Pass <see cref="ScanOptions.Deep"/> for the opt-in deep scan; a row then has <see cref="FoundApp.Installed"/> false when no install is detected.
     /// The caller orders what it has by <see cref="FoundApp.NewestWrite"/>, newest first, nulls last.
     /// </summary>
-    public IEnumerable<FoundApp> FoundApps(CancellationToken cancel = default)
+    public IEnumerable<FoundApp> FoundApps(ScanOptions? options = null, CancellationToken cancel = default)
     {
         var workspace = Open();
         var catalog = workspace.Definitions;
@@ -147,17 +148,17 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             device?.Apps?.GetValueOrDefault(id) is { } stored ? new DeviceValues(stored.InstallDir, stored.SdCard, stored.WinePrefix) : DeviceValues.None;
 
         var best = new Dictionary<string, ScanHit>(StringComparer.Ordinal);
-        foreach (var hit in InstallScan.Run(definitions.Values.Select(e => e.Definition!), environment, ValuesFor, cancel))
+        foreach (var hit in InstallScan.Run(definitions.Values.Select(e => e.Definition!), environment, ValuesFor, options, cancel))
         {
             // One row per app: a later hit for another install of the same app replaces it only when newer.
-            if (best.TryGetValue(hit.AppId, out var seen) && (hit.NewestWrite ?? DateTime.MinValue) <= (seen.NewestWrite ?? DateTime.MinValue))
+            if (best.TryGetValue(hit.AppId, out var seen) && !hit.IsBetterThan(seen))
             {
                 continue;
             }
 
             best[hit.AppId] = hit;
             var entry = definitions[hit.AppId];
-            yield return new FoundApp(new CatalogApp(hit.AppId, entry.Definition!.Name, entry.Source, true), hit.InstallId, hit.SaveFolder, hit.NewestWrite);
+            yield return new FoundApp(new CatalogApp(hit.AppId, entry.Definition!.Name, entry.Source, true), hit.InstallId, hit.SaveFolder, hit.NewestWrite, hit.Installed);
         }
     }
 

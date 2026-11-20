@@ -24,6 +24,49 @@ public class InstallScanTests
     private static List<ScanHit> Scan(ResolverEnvironment env, params AppDefinition[] definitions) =>
         [.. InstallScan.Run(definitions, env)];
 
+    private static List<ScanHit> Deep(ResolverEnvironment env, ScanOptions options, params AppDefinition[] definitions) =>
+        [.. InstallScan.Run(definitions, env, options: options)];
+
+    [Fact]
+    public void A_deep_scan_lists_a_save_folder_with_no_detected_install_as_not_installed()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        // Only the save folder is here: the detect rule (the app's own folder) is a file-less folder that does not exist.
+        var game = Define("gone", "linux", TargetOs.Linux, new DetectRule(Dir: "{xdg_data}/gone/bin"), new BaseLocation(Path: "{xdg_data}/gone"));
+        sandbox.FileAt("x", "home", ".local", "share", "gone", "saves", "a.sav");
+
+        Assert.Empty(Scan(Linux(home), game));
+        var hit = Assert.Single(Deep(Linux(home), ScanOptions.Deep(), game));
+
+        Assert.False(hit.Installed);
+        Assert.Equal(Path.Combine(home, ".local", "share", "gone", "saves"), hit.SaveFolder);
+    }
+
+    [Fact]
+    public void A_deep_scan_gives_one_installed_row_for_an_app_with_a_detected_install()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.FileAt("x", "home", ".local", "share", "game", "saves", "a.sav");
+
+        var hit = Assert.Single(Deep(Linux(home), ScanOptions.Deep(), Native()));
+
+        Assert.True(hit.Installed);
+    }
+
+    [Fact]
+    public void A_config_role_is_found_only_when_asked_for()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.FileAt("x", "home", ".local", "share", "game", "saves", "a.cfg");
+        var game = Native(roleClass: RoleClass.System);
+
+        Assert.Empty(Deep(Linux(home), ScanOptions.Deep(), game));
+        Assert.Single(Deep(Linux(home), ScanOptions.Deep(new HashSet<RoleClass> { RoleClass.Save, RoleClass.System }), game));
+    }
+
     [Fact]
     public void A_linux_install_is_found_by_its_own_folder_and_a_save_folder()
     {

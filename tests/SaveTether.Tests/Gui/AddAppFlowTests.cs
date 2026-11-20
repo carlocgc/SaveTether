@@ -1,3 +1,4 @@
+using SaveTether.Core.Detection;
 using SaveTether.Core.Definitions;
 using SaveTether.Core.Health;
 using SaveTether.Core.Model;
@@ -313,6 +314,24 @@ public class AddAppFlowTests
         Assert.True(all.Total >= all.Shown.Count);
         Assert.Equal(all.Total > AddAppFlow.MaxSearchRows, all.HasMore);
         Assert.Contains(flow.Search("test app").Shown, a => a.Id == "testapp");
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_deep_scan_finds_saves_of_an_app_that_is_not_installed_and_is_read_only()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var saves = Directory.CreateDirectory(Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save")).FullName;
+        File.WriteAllText(Path.Combine(saves, "a.sav"), "x");
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var found = flow.FoundApps(ScanOptions.Deep()).ToList();
+        watch.Stop();
+
+        Assert.All(found, f => Assert.True(Directory.Exists(f.SaveFolder)));
+        Assert.Equal(found.Count, found.Select(f => f.App.Id).Distinct().Count());
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(60), $"deep scan took {watch.Elapsed}");
         sandbox.AssertCanaryIntact();
     }
 }
