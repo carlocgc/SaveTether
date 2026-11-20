@@ -1,0 +1,1 @@
+{"schema":1,"id":"split-when-game-4343","name":"Split When Game","kind":"game","installs":[{"id":"windows","os":"windows","detect":{"dir":"{documents}/Split When/Saves"},"base":"{documents}"}],"roles":[{"id":"save","class":"save","default":true,"path":{"windows":"Split When/Saves"},"target":"save"}],"tier":"imported","origin":"ludusavi","store_ids":{"steam":4343}}

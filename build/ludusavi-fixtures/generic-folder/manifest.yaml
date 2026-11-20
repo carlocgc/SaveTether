@@ -1,0 +1,10 @@
+Generic Game:
+  files:
+    "<winDocuments>/My Games":
+      tags: [save]
+    "<winDocuments>/My Games/GenericGame":
+      tags: [save]
+    "<home>/Saved Games":
+      tags: [save]
+    "<home>/Documents":
+      tags: [save]

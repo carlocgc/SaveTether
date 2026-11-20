@@ -1,0 +1,10 @@
+Collision:
+  files:
+    "<winAppData>/Collision":
+      tags: [save]
+  steam:
+    id: 123
+Collision!:
+  files:
+    "<winAppData>/CollisionBang":
+      tags: [save]

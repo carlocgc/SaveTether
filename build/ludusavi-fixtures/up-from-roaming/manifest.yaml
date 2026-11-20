@@ -1,0 +1,8 @@
+Up Game:
+  files:
+    "<winAppData>/../LocalLow/Studio/UpGame/Profiles":
+      tags: [save]
+    "<winAppData>/../Local/Studio/UpGame":
+      tags: [save]
+    "<winLocalAppData>/../LocalLow/Studio/UpGame/Other":
+      tags: [save]

@@ -1,0 +1,6 @@
+Config Game:
+  files:
+    "<winAppData>/ConfigGame":
+      tags: [save, config]
+    "<winLocalAppData>/ConfigGame/Config":
+      tags: [config]

@@ -3,3 +3,6 @@
 
 # Shell scripts must keep LF so they run on Linux and the Steam Deck.
 *.sh text eol=lf
+# The definition fixtures are compared byte for byte.
+build/ludusavi-fixtures/** text eol=lf
+definitions/imported/*.gz binary

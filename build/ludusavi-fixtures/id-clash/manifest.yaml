@@ -1,0 +1,20 @@
+Same Name:
+  steam:
+    id: 5001
+  files:
+    "<winAppData>/SameName1":
+      tags: [save]
+SAME NAME:
+  steam:
+    id: 5002
+  files:
+    "<winAppData>/SameName2":
+      tags: [save]
+Same-Name:
+  files:
+    "<winAppData>/SameName3":
+      tags: [save]
+same name!:
+  files:
+    "<winAppData>/SameName4":
+      tags: [save]

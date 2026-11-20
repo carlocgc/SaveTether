@@ -1,0 +1,18 @@
+Mac Game:
+  files:
+    "<home>/Library/Application Support/MacGame":
+      tags: [save]
+    "<home>/.local/share/MacGame":
+      tags: [save]
+      when:
+        - os: linux
+    "<home>/Library/Preferences/MacGame":
+      tags: [save]
+      when:
+        - os: mac
+Only Mac:
+  files:
+    "<home>/Library/Application Support/OnlyMac":
+      tags: [save]
+      when:
+        - os: mac

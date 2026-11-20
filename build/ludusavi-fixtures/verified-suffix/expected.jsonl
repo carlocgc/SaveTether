@@ -1,0 +1,1 @@
+{"schema":1,"id":"collision","name":"Collision!","kind":"game","installs":[{"id":"windows","os":"windows","detect":{"dir":"{appdata}/CollisionBang"},"base":"{appdata}"}],"roles":[{"id":"save","class":"save","default":true,"path":{"windows":"CollisionBang"},"target":"save"}],"tier":"imported","origin":"ludusavi"}

@@ -1,0 +1,12 @@
+Glob Game:
+  files:
+    "<winAppData>/GlobGame/*.sav":
+      tags: [save]
+    "<winAppData>/GlobGame/Slot*":
+      tags: [save]
+    "<winAppData>/GlobGame/Saves":
+      tags: [save]
+Only Glob:
+  files:
+    "<winAppData>/OnlyGlob/*":
+      tags: [save]

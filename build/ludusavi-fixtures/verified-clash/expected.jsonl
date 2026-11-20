@@ -1,0 +1,1 @@
+{"schema":1,"id":"kept-game","name":"Kept Game","kind":"game","installs":[{"id":"windows","os":"windows","detect":{"dir":"{appdata}/KeptGame"},"base":"{appdata}"}],"roles":[{"id":"save","class":"save","default":true,"path":{"windows":"KeptGame"},"target":"save"}],"tier":"imported","origin":"ludusavi"}

@@ -1,0 +1,1 @@
+{"schema":1,"id":"glob-game","name":"Glob Game","kind":"game","installs":[{"id":"windows","os":"windows","detect":{"dir":"{appdata}/GlobGame/Saves"},"base":"{appdata}"}],"roles":[{"id":"save","class":"save","default":true,"path":{"windows":"GlobGame/Saves"},"target":"save"}],"tier":"imported","origin":"ludusavi"}

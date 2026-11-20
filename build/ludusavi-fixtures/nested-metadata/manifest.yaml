@@ -1,0 +1,6 @@
+Nested Meta:
+  files:
+    "<winAppData>/NestedMeta":
+      tags: [save]
+    "<winAppData>/NestedMeta/accounts/<storeUserId>/profiles":
+      tags: [save, config]
