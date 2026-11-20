@@ -493,60 +493,7 @@ Exit test: on Windows and on Linux, a new user sets up a device, adds an app and
 
 Added 2026-11-19 by the owner. Goal: Add app and `app add` know most PC games that keep saves in a folder, without anyone checking each game by hand, and the emulators the manifest lacks have verified definitions of our own. Starts once phase 3's open items are done: "Add a folder by hand", the offer to move the programs to the per-user location, and phase 3's exit test.
 
-**Why the manifest.** The [Ludusavi manifest](https://github.com/mtkennerly/ludusavi-manifest) is a YAML file of save locations, compiled from PCGamingWiki every 6 hours by a scheduled GitHub Actions workflow, MIT-licensed, and written so that other backup tools can use it (design 5.2, "Reusing the Ludusavi manifest"). Its paths are right for backing files up; SaveTether replaces a folder with a link, so the conversion decides which entries are safe to link, and the safety net (a backup before each operation, the comparison, Recover) bounds what a wrong path can do.
-
-**Trial, 2026-11-19.** A throwaway converter (not in the repository) turned that day's manifest into SaveTether definitions and checked each with `DefinitionLoader`:
-
-| | Count |
-|---|---|
-| Games in the manifest (not aliases) | 52,428 |
-| Games with any path tagged `save` | 13,334 |
-| Games with at least one folder that can be linked | 7,605 |
-| Definitions the loader accepts | 7,603 (2 refused for odd paths) |
-| With a Steam install under Proton (found on Linux by its app ID) | about 5,700 |
-| With a native Linux or Flatpak install | about 1,100 |
-| Windows only: no way to find them on Linux yet (see the format additions) | 957 |
-| All 7,603, as one file | 7 MB, about 0.5 MB compressed |
-
-Of 18,679 save paths: 2,646 were globs, 2,048 single files, 1,083 macOS only and 2,019 folders that several games claim (a publisher folder or `My Games`), all left out. 2,339 sat below a per-account folder (`<storeUserId>`) and were kept by linking the folder above it.
-
-Checked against games installed outside Steam on the owner's PC: the manifest's save folders existed for all six matched games that had saves. It also showed:
-- Many games keep saves in a folder per store account, sometimes where the wiki does not say so (Final Fantasy XVI keeps `Steam/<account ID>` inside the folder the wiki gives). Linking the folder above the account folder takes in whatever account a device uses.
-- The data has gaps: one game's save folder is tagged only as config, one game has no save paths, and one game's listed folders did not exist.
-- The imported Cemu entry lacks the native Linux install that `definitions/cemu.jsonc` has, and calls Cemu a game: a verified definition must win over an imported one.
-- Detection by a shared parent such as `{home}/Saved Games` finds every game on every PC; detection must check the game's own folder.
-
-**Decisions, by the owner on 2026-11-19.**
-
-| Decision | Choice |
-|---|---|
-| Games with platform cloud saves | In scope. The same game bought elsewhere has no cloud saves. A definition notes which stores' copies have cloud saves; nothing is refused (design 5.2) |
-| How imported definitions reach the app | Converted in CI and built into the binary as one compressed file. A run-time download of a hash-pinned release can come later (design 5.9) |
-| Which definition wins | Shared definitions, then verified built-in ones, then imported ones. An imported definition whose ID a verified one uses is dropped. Imported ones are labelled unverified wherever they are shown |
-| Converter | A small C# tool in the repository, run in CI only, using YamlDotNet. Approved by the owner for the converter only; neither shipped program depends on it (design 5.2 records why YAML was dropped for definitions) |
-| Licence | Ludusavi's MIT notice ships with the imported file, and PCGamingWiki is credited in the notices and in About. A note to Ludusavi's maintainer is a courtesy and does not block a release (design 5.2) |
-| Found list | Ordered by the newest file inside each found save folder, most recent first, so a folder left behind by an old install sinks |
-
-**Conversion rules,** from the trial:
-- Only paths tagged `save`. A folder also tagged `config` is kept, with a quirk saying it may hold settings that should differ per device.
-- Left out: globs, single files (until the single-file mappings stretch goal), macOS-only paths, placeholders SaveTether has no token for (`<root>`, `<winPublic>`, `<winProgramData>`, `<winDir>`), a folder claimed by more than one game, a token with nothing after it, and `My Games`, `Saved Games` or `Documents` on their own.
-- A folder inside another kept folder of the same game is dropped; the outer link covers it.
-- A path below `<storeUserId>` links the folder above it, with an entry depth that reaches past the account folder.
-- Placeholders map to tokens: `<winAppData>` to `{appdata}`, `<winLocalAppData>` to `{localappdata}`, `<winLocalAppDataLow>` to `{locallow}`, `<winDocuments>` to `{documents}`, `<xdgData>` and `<xdgConfig>` to `{xdg_data}` and `{xdg_config}`, `<home>/.var/app/<id>` to `{flatpak:<id>}`, and `<base>` to `{install_dir}`.
-- Installs: `windows` for Windows folders; `steam-proton` for the same folders as a winpath in the game's Proton prefix, when the manifest has a Steam app ID; `linux` and one `flatpak-<id>` per Flatpak; `install-dir` for saves inside the game's folder.
-- Each install is detected by the game's own folder, never by a parent that every machine has.
-
-| Item | Deliver | Tests |
-|---|---|---|
-| Format additions | A winpath whose Wine prefix is given per device, with no prefix kind in the definition, for Windows games outside Steam on Linux (the 957 above). Optional fields for a definition's source and tier, and for store IDs (Steam app ID), which design 5.2 already wants for search. Added fields only, so the format stays at `schema: 1` | Loader and schema tests for each field; the resolver uses the device's prefix and refuses, naming `--wine-prefix`, when none is set |
-| Converter | `build/`-level tool: manifest in, one compressed file of definitions out, by the rules above; every definition passes `DefinitionLoader` or the run fails | Fixture manifest snippets, one per rule, compared with expected definitions; a refused definition fails the run |
-| Imported catalog | The file built into the core; the precedence above; "unverified" in Add app, `app list` and `app add`, and in `--json` | Catalog tests: precedence, an ID clash, a shared file replacing an imported one; the JSON contract records the new field; `docs/cli.md` and `docs/cli-json.md` |
-| Detection and the found list | Moved here from phase 4. A read-only scan of every definition's installs for Add app and `app add`, with the newest file inside each found folder, looked for only a few levels down | Fixture trees per install kind; nothing is changed by a scan (the tree hashed before and after); ordering by newest file; the scan of every definition timed on the Deck |
-| Verified emulator definitions | Definitions of our own for emulators the manifest lacks or gets only in part: DuckStation, melonDS, Azahar, xemu, and Cemu's Flatpak and Documents installs. Each install tried on hardware, with a "tested on" line | The loader tests; each on its device |
-| Notices | A third-party notices file with Ludusavi's MIT licence and the PCGamingWiki credit, in each release package and in About | `build/check-package.sh`'s file list |
-| Scheduled update | A weekly workflow that runs the converter and opens a pull request when the output changes | One manual run of the workflow |
-
-Not in this phase: globs and single files; Ludusavi's registry entries; a run-time download of the imported file.
+Everything else for this phase is in [phase-3.5-ludusavi-definitions.md](phase-3.5-ludusavi-definitions.md): the trial of 2026-11-19, the owner's decisions, the conversion rules, tasks T1 to T9, and the progress of each task.
 
 Exit test: on Windows and on the Deck, a game that has no hand-written definition is found by Add app, near the top when it was played recently, applied, and its saves load on the other device.
 
