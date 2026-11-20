@@ -39,7 +39,10 @@ public static class InstallScan
         ArgumentNullException.ThrowIfNull(environment);
 
         var resolver = new PathResolver(environment, cacheSteamLibraries: true);
-        using var hits = new BlockingCollection<ScanHit>();
+        // Linked to the caller's token so that a consumer that stops early also stops the producer.
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        var token = stop.Token;
+        var hits = new BlockingCollection<ScanHit>();
         var worker = Task.Run(
             () =>
             {
@@ -47,12 +50,22 @@ public static class InstallScan
                 {
                     Parallel.ForEach(
                         definitions,
-                        new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = cancel },
+                        new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = token },
                         definition =>
                         {
-                            foreach (var hit in Scan(definition, resolver, environment, valuesFor?.Invoke(definition.Id) ?? DeviceValues.None, cancel))
+                            // One hit per app: its newest-written install, chosen before it is published.
+                            ScanHit? best = null;
+                            foreach (var hit in Scan(definition, resolver, environment, valuesFor?.Invoke(definition.Id) ?? DeviceValues.None, token))
                             {
-                                hits.Add(hit, CancellationToken.None);
+                                if (best is null || (hit.NewestWrite ?? DateTime.MinValue) > (best.NewestWrite ?? DateTime.MinValue))
+                                {
+                                    best = hit;
+                                }
+                            }
+
+                            if (best is not null)
+                            {
+                                hits.Add(best, CancellationToken.None);
                             }
                         });
                 }
@@ -67,12 +80,20 @@ public static class InstallScan
             },
             CancellationToken.None);
 
-        foreach (var hit in hits.GetConsumingEnumerable(CancellationToken.None))
+        try
         {
-            yield return hit;
+            foreach (var hit in hits.GetConsumingEnumerable(CancellationToken.None))
+            {
+                yield return hit;
+            }
         }
-
-        worker.GetAwaiter().GetResult();
+        finally
+        {
+            // Also runs when the caller stops early: stop the producer and wait for it before the collection goes.
+            stop.Cancel();
+            worker.GetAwaiter().GetResult();
+            hits.Dispose();
+        }
     }
 
     /// <summary>The hits of one app: at most one per install.</summary>
@@ -119,43 +140,62 @@ public static class InstallScan
     {
         DateTime? newest = null;
         var seen = 0;
+        try
+        {
+            // A save folder that is itself a link would show its target's files: look at nothing.
+            if (new DirectoryInfo(folder).Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                return null;
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
         var level = new List<string> { folder };
         for (var depth = 0; depth < MaxDepth && level.Count > 0; depth++)
         {
             var next = new List<string>();
             foreach (var directory in level)
             {
-                IEnumerable<FileSystemInfo> entries;
+                // Lazy: the cap and cancellation are checked before the enumerator advances, so a huge folder is never read whole.
                 try
                 {
-                    entries = new DirectoryInfo(directory).EnumerateFileSystemInfos().ToList();
+                    using var entries = new DirectoryInfo(directory).EnumerateFileSystemInfos().GetEnumerator();
+                    while (true)
+                    {
+                        cancel.ThrowIfCancellationRequested();
+                        if (seen >= MaxEntries || !entries.MoveNext())
+                        {
+                            break;
+                        }
+
+                        seen++;
+                        var entry = entries.Current;
+                        if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                        {
+                            continue;
+                        }
+
+                        if (entry is DirectoryInfo)
+                        {
+                            next.Add(entry.FullName);
+                        }
+                        else if (newest is null || entry.LastWriteTimeUtc > newest)
+                        {
+                            newest = entry.LastWriteTimeUtc;
+                        }
+                    }
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
-                    continue;
+                    // Unreadable folder: what was seen so far counts.
                 }
 
-                foreach (var entry in entries)
+                if (seen >= MaxEntries)
                 {
-                    cancel.ThrowIfCancellationRequested();
-                    if (++seen > MaxEntries)
-                    {
-                        return newest;
-                    }
-
-                    if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                    {
-                        continue;
-                    }
-
-                    if (entry is DirectoryInfo)
-                    {
-                        next.Add(entry.FullName);
-                    }
-                    else if (newest is null || entry.LastWriteTimeUtc > newest)
-                    {
-                        newest = entry.LastWriteTimeUtc;
-                    }
+                    return newest;
                 }
             }
 

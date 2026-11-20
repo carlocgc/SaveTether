@@ -174,6 +174,58 @@ public class InstallScanTests
     }
 
     [Fact]
+    public void An_app_with_two_installs_is_one_hit_the_newer_one()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        File.SetLastWriteTimeUtc(sandbox.FileAt("x", "home", "older", "saves", "a.sav"), new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        File.SetLastWriteTimeUtc(sandbox.FileAt("x", "home", "newer", "saves", "a.sav"), new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var game = new AppDefinition(
+            1, "game", "game", AppKind.Game,
+            [
+                new InstallDefinition("older", [TargetOs.Linux], new DetectRule(Dir: "{home}/older"), new BaseLocation(Path: "{home}/older")),
+                new InstallDefinition("newer", [TargetOs.Linux], new DetectRule(Dir: "{home}/newer"), new BaseLocation(Path: "{home}/newer")),
+            ],
+            [new RoleDefinition("save", RoleClass.Save, true, new Dictionary<string, string> { ["older"] = "saves", ["newer"] = "saves" }, "save", 1, [], null)],
+            [], DefinitionTier.Imported, null, null, [], []);
+
+        var hit = Assert.Single(Scan(Linux(home), game));
+
+        Assert.Equal("newer", hit.InstallId);
+    }
+
+    [Fact]
+    public void A_consumer_that_stops_early_stops_the_scan_cleanly()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.FileAt("x", "home", ".local", "share", "game", "saves", "a.sav");
+
+        var first = InstallScan.Run(Enumerable.Repeat(Native(), 50), Linux(home)).First();
+
+        Assert.Equal("game", first.AppId);
+    }
+
+    [Fact]
+    public void A_save_folder_that_is_a_link_is_a_hit_with_no_newest_write()
+    {
+        using var sandbox = new Sandbox();
+        var home = sandbox.Dir("home");
+        sandbox.Dir("home", ".local", "share", "game");
+        sandbox.FileAt("x", "elsewhere", "a.sav");
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(home, ".local", "share", "game", "saves"), Path.Combine(sandbox.Work, "elsewhere"));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return; // This machine may not create links; the check is covered where it can.
+        }
+
+        Assert.Null(Assert.Single(Scan(Linux(home), Native())).NewestWrite);
+    }
+
+    [Fact]
     public void A_scan_changes_nothing()
     {
         using var sandbox = new Sandbox();
