@@ -114,25 +114,28 @@ public sealed class DefinitionCatalog
     /// <summary>Every ID that can be added: shared, built-in and (by default) imported, sorted, each once.</summary>
     public IReadOnlyList<string> AvailableIds(bool includeImported = true)
     {
-        var ids = new SortedSet<string>(BuiltInIds, StringComparer.Ordinal);
+        var ids = new SortedSet<string>(BuiltInIds, IdComparer);
         if (includeImported)
         {
             ids.UnionWith(_imported.Definitions.Keys);
         }
 
-        ids.UnionWith(SharedIds());
+        ids.UnionWith(SharedFiles().Keys);
         return [.. ids];
     }
 
-    /// <summary>The IDs of the files in the shared folder, from one directory listing.</summary>
-    private HashSet<string> SharedIds()
+    // File names are case-insensitive on Windows, so a shared CEMU.jsonc is the definition for 'cemu' there.
+    private static StringComparer IdComparer { get; } = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    /// <summary>The files in the shared folder by ID, from one directory listing, matched as the host filesystem matches names.</summary>
+    private Dictionary<string, string> SharedFiles()
     {
-        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var ids = new Dictionary<string, string>(IdComparer);
         if (_sharedFolder is not null && Directory.Exists(_sharedFolder))
         {
             foreach (var file in Directory.EnumerateFiles(_sharedFolder, "*" + AppDefinition.FileExtension))
             {
-                ids.Add(Path.GetFileNameWithoutExtension(file));
+                ids[Path.GetFileNameWithoutExtension(file)] = file;
             }
         }
 
@@ -152,7 +155,7 @@ public sealed class DefinitionCatalog
         }
 
         var hits = new List<string>();
-        var shared = SharedIds();
+        var shared = SharedFiles();
         foreach (var id in AvailableIds())
         {
             if (id.Contains(typed, StringComparison.OrdinalIgnoreCase))
@@ -161,7 +164,7 @@ public sealed class DefinitionCatalog
                 continue;
             }
 
-            var definition = shared.Contains(id) || BuiltInIds.Contains(id, StringComparer.Ordinal)
+            var definition = shared.ContainsKey(id) || BuiltInIds.Contains(id, StringComparer.Ordinal)
                 ? FindCore(id, includeImported: true, shared)?.Definition
                 : _imported.Definitions.GetValueOrDefault(id);
             if (definition is not null
@@ -186,11 +189,11 @@ public sealed class DefinitionCatalog
     public IReadOnlyList<(string Id, CatalogEntry Entry)> FindAll(IEnumerable<string> ids)
     {
         ArgumentNullException.ThrowIfNull(ids);
-        var shared = SharedIds();
+        var shared = SharedFiles();
         return ids.Select(id => (id, FindCore(id, includeImported: true, shared)!)).ToList();
     }
 
-    private CatalogEntry? FindCore(string appId, bool includeImported, HashSet<string>? knownShared)
+    private CatalogEntry? FindCore(string appId, bool includeImported, Dictionary<string, string>? knownShared)
     {
         ArgumentNullException.ThrowIfNull(appId);
         var fileName = appId + AppDefinition.FileExtension;
@@ -198,7 +201,7 @@ public sealed class DefinitionCatalog
         if (_sharedFolder is not null)
         {
             var shared = Path.Combine(_sharedFolder, fileName);
-            if (knownShared is null ? File.Exists(shared) : knownShared.Contains(appId))
+            if (knownShared is null ? File.Exists(shared) : knownShared.ContainsKey(appId))
             {
                 var loaded = DefinitionLoader.LoadFile(shared);
                 return new CatalogEntry(loaded.Definition, DefinitionSource.Shared, shared, loaded.Errors);

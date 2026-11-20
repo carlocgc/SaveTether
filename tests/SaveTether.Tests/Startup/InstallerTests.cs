@@ -23,6 +23,7 @@ public class InstallerTests
         }
 
         File.WriteAllText(Path.Combine(folder, "LICENSE"), "MIT");
+        File.WriteAllText(Path.Combine(folder, "ludusavi.LICENSE.txt"), "Ludusavi notice");
         File.WriteAllText(Path.Combine(folder, "savetether.png"), "icon");
         return folder;
     }
@@ -150,6 +151,7 @@ public class InstallerTests
         Assert.Equal("savetether-gui 0.2.0", File.ReadAllText(layout.AppPath));
         Assert.Equal("savetether 0.2.0", File.ReadAllText(layout.CliPath));
         Assert.Equal("MIT", File.ReadAllText(Path.Combine(layout.AppFolder, "LICENSE")));
+        Assert.Equal("Ludusavi notice", File.ReadAllText(Path.Combine(layout.AppFolder, "ludusavi.LICENSE.txt")));
         Assert.Equal("0.2.0+abc", Installer.InstalledVersion(layout));
         Assert.Equal(EntryKind.Symlink, SafeFs.Probe(layout.AppLink));
         Assert.Equal(layout.AppPath, SafeFs.ReadLinkTarget(layout.AppLink));

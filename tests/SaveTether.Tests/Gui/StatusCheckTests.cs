@@ -56,6 +56,24 @@ public class StatusCheckTests
     }
 
     [Fact]
+    public void A_manual_mapping_named_like_an_imported_app_keeps_its_choose_folder_action_when_its_folder_is_missing()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        var local = new LocalStore(pc.LocalFolder);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", Id, "--copy");
+        Directory.Delete(pc.Source, recursive: true);
+
+        // ppsspp.savedata is a hand-made mapping: the imported PPSSPP definition has no 'savedata' role.
+        var row = Assert.Single(StatusCheck.Run(local).Mappings);
+        Assert.False(row.HasDefinition);
+        Assert.Equal(HealthReason.FolderMissing, row.Health.Reason);
+        Assert.Equal((RowAction?)RowAction.ChooseFolderAgain, AppsPage.Row(row).Main);
+    }
+
+    [Fact]
     public void Linked_and_not_applied_mappings_are_green_and_a_replaced_link_is_amber()
     {
         using var sandbox = new Sandbox();

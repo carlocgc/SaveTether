@@ -47,6 +47,39 @@ public sealed class DefinitionCatalogTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void A_shared_file_matches_an_id_as_the_filesystem_matches_names_in_lookup_listing_and_search()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var sandbox = new Sandbox();
+        var shared = sandbox.Dir("shared");
+        File.WriteAllText(Path.Combine(shared, "CEMU.jsonc"), File.ReadAllText(Path.Combine(RepositoryRoot(), "definitions", "cemu.jsonc")).Replace("\"name\": \"Cemu\"", "\"name\": \"Shared Wii U\"", StringComparison.Ordinal));
+        var catalog = new DefinitionCatalog(shared);
+
+        var single = catalog.Find("cemu")!;
+        Assert.Equal("Shared Wii U", single.Definition!.Name);
+        Assert.Equal(DefinitionSource.Shared, single.Source);
+        Assert.Single(catalog.AvailableIds(), id => id.Equals("cemu", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("cemu", catalog.Search("cemu"), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(catalog.Search("Shared Wii U"), id => id.Equals("cemu", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(DefinitionSource.Shared, catalog.FindAll(["cemu"]).Single().Entry.Source);
+    }
+
+    private static string RepositoryRoot()
+    {
+        var folder = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(folder, "SaveTether.slnx")))
+        {
+            folder = Path.GetDirectoryName(folder) ?? throw new InvalidOperationException("The repository root was not found.");
+        }
+
+        return folder;
+    }
+
+    [Fact]
     public void The_status_lookup_skips_imported_definitions_so_a_manual_mapping_keeps_its_folder_action()
     {
         var catalog = Catalog(null, Line("alpha", "Alpha Quest"));
