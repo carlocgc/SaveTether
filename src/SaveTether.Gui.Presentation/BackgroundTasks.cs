@@ -211,6 +211,13 @@ public sealed class BackgroundTasks
         Raise();
     }
 
+    /// <summary>Ends the footer's wait (see <see cref="StatusPacer.Flush"/>) and has the window draw the latest line.</summary>
+    public void SkipPacing()
+    {
+        Status.Flush();
+        Changed?.Invoke();
+    }
+
     internal void Raise()
     {
         // Offered under the gate, so two threads cannot hand the footer an older line after a newer one.

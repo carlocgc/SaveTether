@@ -71,6 +71,26 @@ public class StatusPacerTests
     }
 
     [Fact]
+    public void Flush_ends_the_wait_and_shows_the_latest_line()
+    {
+        var clock = new Clock();
+        var pacer = new StatusPacer("Idle", clock);
+        var advanced = 0;
+        pacer.Advanced += () => advanced++;
+        pacer.Offer("Scanning: 2 found");
+        pacer.TryNext(out _);
+        pacer.Offer("Idle");
+        Assert.False(pacer.CaughtUp);
+
+        pacer.Flush();
+
+        Assert.True(pacer.CaughtUp);
+        Assert.Equal("Idle", pacer.Shown);
+        Assert.Null(pacer.TryNext(out _));
+        Assert.Equal(2, advanced);
+    }
+
+    [Fact]
     public void Counts_waiting_to_be_shown_collapse_to_the_latest_and_repeats_are_ignored()
     {
         var clock = new Clock();

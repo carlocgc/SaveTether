@@ -77,6 +77,19 @@ public sealed class StatusPacer
         }
     }
 
+    /// <summary>Ends the wait: whatever is waiting is dropped and the latest line is on show at once.</summary>
+    public void Flush()
+    {
+        lock (_gate)
+        {
+            _waiting.Clear();
+            _shownLine = _last;
+            _shownAt = _time.GetTimestamp();
+        }
+
+        Advanced?.Invoke();
+    }
+
     /// <summary>
     /// The next line to draw, when the one on show has been up long enough; otherwise null, and
     /// <paramref name="wait"/> is how long until it may change (zero when nothing is waiting).

@@ -129,6 +129,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
         // The scan the button offers to cancel: the one running when it was last drawn. A click acts on what the
         // button says, not on what is true a moment later (a scan may have ended since, and then Cancel does nothing).
         BackgroundTask? cancelTarget = null;
+        var showsCancel = false;
 
         void Refresh()
         {
@@ -136,11 +137,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
             cancelTarget = _scans.Tasks.Current is { State: BackgroundTaskState.Running } current ? current : null;
             var running = cancelTarget is not null;
 
-            // The footer lags behind a scan so it can be read; the button waits for it, so the two agree and
-            // clicking over and over cannot queue a drip of lines there.
-            scan.IsEnabled = running || _scans.Tasks.Status.CaughtUp;
-            scan.Content = running ? "Cancel scan" : "Scan for games";
-            AutomationProperties.SetName(scan, running ? "Cancel the scan" : "Scan for games, including apps that are no longer installed");
+            // The footer lags behind a scan so it can be read. The button stays Cancel for as long as the scan runs
+            // or the footer is still catching up, so the two agree; a click ends whichever is still going.
+            showsCancel = running || !_scans.Tasks.Status.CaughtUp;
+            scan.Content = showsCancel ? "Cancel scan" : "Scan for games";
+            AutomationProperties.SetName(scan, showsCancel ? "Cancel the scan" : "Scan for games, including apps that are no longer installed");
             if (!string.IsNullOrWhiteSpace(search.Text))
             {
                 return;
@@ -257,10 +258,19 @@ internal sealed class AddAppScreen : UserControl, IScreen
         search.TextChanged += (_, _) => _ = SearchAsync();
         scan.Click += (_, _) =>
         {
-            if (cancelTarget is { } shown)
+            if (showsCancel)
             {
-                // The button said Cancel: cancel that scan, even if it has just ended, and never start another.
-                shown.Cancel();
+                // The button said Cancel, so this never starts a scan. It cancels the scan it was drawn for (a no-op if
+                // that has just ended); with no scan running it ends the footer's wait instead.
+                if (cancelTarget is { } shown)
+                {
+                    shown.Cancel();
+                }
+                else
+                {
+                    _scans.Tasks.SkipPacing();
+                }
+
                 Refresh();
                 return;
             }

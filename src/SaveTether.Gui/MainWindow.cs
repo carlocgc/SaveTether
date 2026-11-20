@@ -83,10 +83,8 @@ internal sealed class MainWindow : Window
     private void DrawStrip()
     {
         Volatile.Write(ref _stripRefreshPending, 0);
-        if (Tasks.Status.TryNext(out var wait) is { } line)
-        {
-            _stripText.Text = line;
-        }
+        _ = Tasks.Status.TryNext(out var wait);
+        _stripText.Text = Tasks.Status.Shown;
 
         _stripButton.IsVisible = Tasks.Current is { State: BackgroundTaskState.Failed };
         if (wait > TimeSpan.Zero && Interlocked.Exchange(ref _stripRefreshPending, 1) == 0)
