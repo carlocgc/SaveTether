@@ -383,11 +383,10 @@ internal static class CliApp
             var search = command.Value("--search");
             if (command.Has("--found"))
             {
-                var typed = search?.Trim();
+                // The same match as the plain list's --search (name, ID or Steam app ID), so the two agree.
+                var matching = search is null ? null : catalog.Search(search).ToHashSet(StringComparer.Ordinal);
                 var found = workspace.ScanFound(environment.Resolver, SaveTether.Core.Detection.ScanOptions.Default)
-                    .Where(f => string.IsNullOrEmpty(typed)
-                        || f.Entry.Definition!.Name.Contains(typed, StringComparison.OrdinalIgnoreCase)
-                        || f.Hit.AppId.Contains(typed, StringComparison.OrdinalIgnoreCase))
+                    .Where(f => matching is null || matching.Contains(f.Hit.AppId))
                     .OrderByDescending(f => f.Hit.NewestWrite ?? DateTime.MinValue)
                     .ThenBy(f => f.Entry.Definition!.Name, StringComparer.OrdinalIgnoreCase)
                     .Select(f => new FoundEntry(f.Hit.AppId, f.Entry.Definition!.Name, f.Entry.Source, f.Hit.InstallId, f.Hit.SaveFolder, f.Hit.NewestWrite))

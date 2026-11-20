@@ -75,7 +75,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
     public void Leave()
     {
         _closed = true;
-        _unsubscribe?.Invoke();
+        ReleaseCatalog();
         _close();
     }
 
@@ -84,8 +84,16 @@ internal sealed class AddAppScreen : UserControl, IScreen
     private const string ScanIntro =
         "Choose an app. SaveTether looks for apps on this device, newest saves first, and shows what it would share before anything is written.";
 
+    /// <summary>Detaches page 1 from the scan session and the strip, so a page that is no longer shown is not kept alive or refreshed.</summary>
+    private void ReleaseCatalog()
+    {
+        _unsubscribe?.Invoke();
+        _unsubscribe = null;
+    }
+
     private async Task ShowCatalogAsync()
     {
+        ReleaseCatalog();
         _page.Content = null;
         var added = await Guard(() => _flow.AddedApps());
         if (added is null)
@@ -103,6 +111,20 @@ internal sealed class AddAppScreen : UserControl, IScreen
         var states = new CheckBox { Content = "Save states" };
         var searchVersion = 0;
         StackPanel? page = null;
+        // Found and added rows are kept by app, so a refresh adds or updates them and never replaces a focused one.
+        var rows = new Dictionary<string, RowParts>(StringComparer.Ordinal);
+        var addedHeader = new TextBlock { Text = "Already added", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 12, 0, 4) };
+
+        RowParts RowFor(string key, string name, Action open)
+        {
+            if (!rows.TryGetValue(key, out var parts))
+            {
+                parts = MakeRow(name, new TextBlock { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center }, open);
+                rows[key] = parts;
+            }
+
+            return parts;
+        }
 
         void Refresh()
         {
@@ -113,27 +135,34 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 return;
             }
 
-            list.Children.Clear();
             var addedIds = added.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
             var found = _scans.Found.Where(f => !addedIds.Contains(f.App.Id)).ToList();
             scanNote.Text = found.Count == 0
-                ? (running ? "Looking for apps on this device…" : "No apps were found on this device. Search for one by name, or scan for saved data.")
+                ? (running ? "Looking for apps on this device…" : "No apps were found on this device. Search for one by name, or scan for games.")
                 : $"{found.Count:N0} found on this device";
+            var desired = new List<Control>();
             foreach (var f in found)
             {
                 var app = f.App;
-                list.Children.Add(Row(app.Name, AddAppFlow.LastPlayed(f.NewestWrite), Marks(app, f.Installed), () => _ = PlanAsync(() => _flow.Start(app.Id))));
+                var parts = RowFor("found:" + app.Id, app.Name, () => _ = PlanAsync(() => _flow.Start(app.Id)));
+                parts.Detail.Text = AddAppFlow.LastPlayed(f.NewestWrite);
+                ((TextBlock)parts.Trailing).Text = Marks(app, f.Installed);
+                desired.Add(parts.Button);
             }
 
             if (added.Count > 0)
             {
-                list.Children.Add(new TextBlock { Text = "Already added", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 12, 0, 4) });
+                desired.Add(addedHeader);
                 foreach (var app in added)
                 {
                     var id = app.Id;
-                    list.Children.Add(Row(app.Name, string.Empty, "Added", () => _ = PlanAsync(() => _flow.Start(id))));
+                    var parts = RowFor("added:" + id, app.Name, () => _ = PlanAsync(() => _flow.Start(id)));
+                    ((TextBlock)parts.Trailing).Text = "Added";
+                    desired.Add(parts.Button);
                 }
             }
+
+            Reconcile(list.Children, desired);
         }
 
         async Task SearchAsync()
@@ -146,7 +175,27 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 return;
             }
 
-            var result = await Task.Run(() => _flow.Search(text));
+            SearchResult result;
+            try
+            {
+                result = await Task.Run(() => _flow.Search(text));
+            }
+            catch (Exception e)
+            {
+                // The task is not awaited, so an exception here would vanish and leave the old results under the new query.
+                var expected = e is StoreException or IOException or UnauthorizedAccessException;
+                App.Options.Log.Write(expected ? $"add app: search: {e.GetType().Name}: {e.Message}" : $"unexpected error: search: {e}");
+                if (version == searchVersion && !_closed)
+                {
+                    list.Children.Clear();
+                    scanNote.Text = expected
+                        ? $"The search could not read the definitions: {e.Message}"
+                        : $"Something went wrong with the search: {e.Message}. The details are in gui.log.";
+                }
+
+                return;
+            }
+
             if (version != searchVersion || _closed)
             {
                 return;
@@ -311,9 +360,20 @@ internal sealed class AddAppScreen : UserControl, IScreen
         return string.Join(", ", marks);
     }
 
+    /// <summary>One row of the list: its button, and the texts that change as a scan goes on.</summary>
+    private sealed record RowParts(Button Button, TextBlock Detail, Control Trailing);
+
     private static Button Row(string name, string detail, object trailing, Action open)
     {
         var right = trailing as Control ?? new TextBlock { Text = trailing.ToString(), Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+        var parts = MakeRow(name, right, open);
+        parts.Detail.Text = detail;
+        return parts.Button;
+    }
+
+    private static RowParts MakeRow(string name, Control trailing, Action open)
+    {
+        var detail = new TextBlock { Opacity = 0.65, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
         var button = new Button
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -324,14 +384,42 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 Children =
                 {
                     Column(new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis }, 0),
-                    Column(new TextBlock { Text = detail, Opacity = 0.65, FontSize = 13, VerticalAlignment = VerticalAlignment.Center }, 1),
-                    Column(right, 2),
+                    Column(detail, 1),
+                    Column(trailing, 2),
                 },
             },
         };
         AutomationProperties.SetName(button, name);
         button.Click += (_, _) => open();
-        return button;
+        return new RowParts(button, detail, trailing);
+    }
+
+    /// <summary>
+    /// Makes <paramref name="children"/> hold <paramref name="desired"/> in order, adding and removing only what differs, so a
+    /// control that stays (the one with the focus) is never detached. A scan only adds rows, so nearly every change is an insert.
+    /// </summary>
+    private static void Reconcile(Avalonia.Controls.Controls children, List<Control> desired)
+    {
+        var keep = desired.ToHashSet();
+        for (var i = children.Count - 1; i >= 0; i--)
+        {
+            if (!keep.Contains(children[i]))
+            {
+                children.RemoveAt(i);
+            }
+        }
+
+        for (var i = 0; i < desired.Count; i++)
+        {
+            if (i < children.Count && ReferenceEquals(children[i], desired[i]))
+            {
+                continue;
+            }
+
+            // A row that moved (its newest save changed) is detached for the move; a new one is only inserted.
+            children.Remove(desired[i]);
+            children.Insert(i, desired[i]);
+        }
     }
 
     // ---- Page 2 ----
@@ -894,6 +982,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
     /// <summary>A page: its title, sentences and content; its way back goes to the bar above it.</summary>
     private StackPanel Page(Control back, string title, IReadOnlyList<string> sentences, params Control[] content)
     {
+        ReleaseCatalog();
         Bar.Content = back;
         _content.MaxWidth = 820;
         _content.HorizontalAlignment = HorizontalAlignment.Left;

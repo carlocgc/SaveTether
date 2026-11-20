@@ -146,6 +146,25 @@ public class AppAddCliTests
     }
 
     [Fact]
+    public void App_list_found_search_matches_a_steam_app_id_as_the_plain_list_does()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        ShareDefinition(deck, "testapp", TestApp.Replace("\"quirks\"", "\"store_ids\": { \"steam\": 424242 }, \"quirks\"", StringComparison.Ordinal));
+        var install = Path.Combine(deck.Home, "portable");
+        CliDevice.Write(install, "app.cfg", "config");
+        CliDevice.Write(install, "saves/slot1.sav", "save");
+        deck.Ok("app", "add", "testapp", "--install-dir", install);
+
+        var plain = deck.Ok("app", "list", "--search", "424242", "--json").Json().GetProperty("apps");
+        var found = deck.Ok("app", "list", "--found", "--search", "424242", "--json").Json().GetProperty("found");
+
+        Assert.Equal(["testapp"], plain.EnumerateArray().Select(a => a.GetProperty("id").GetString()).ToList());
+        Assert.Equal(["testapp"], found.EnumerateArray().Select(a => a.GetProperty("id").GetString()).ToList());
+        Assert.Equal(0, deck.Ok("app", "list", "--found", "--search", "999999", "--json").Json().GetProperty("found").GetArrayLength());
+    }
+
+    [Fact]
     public void App_add_of_an_imported_app_says_it_is_unverified()
     {
         using var sandbox = new Sandbox();
