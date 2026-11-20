@@ -1,0 +1,10 @@
+Claim One:
+  files:
+    "<winAppData>/Publisher/Shared":
+      tags: [save]
+    "<winAppData>/ClaimOne":
+      tags: [save]
+Claim Two:
+  files:
+    "<winAppData>/publisher/shared":
+      tags: [save]

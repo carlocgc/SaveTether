@@ -1,0 +1,1 @@
+{"schema":1,"id":"claim-one","name":"Claim One","kind":"game","installs":[{"id":"windows","os":"windows","detect":{"dir":"{appdata}/ClaimOne"},"base":"{appdata}"}],"roles":[{"id":"save","class":"save","default":true,"path":{"windows":"ClaimOne"},"target":"save"}],"tier":"imported","origin":"ludusavi"}

@@ -1,0 +1,14 @@
+Account Game:
+  steam:
+    id: 1001
+  files:
+    "<winLocalAppData>/AccountGame/Saves/<storeUserId>/slots":
+      tags: [save]
+Account End:
+  files:
+    "<winAppData>/AccountEnd/<storeUserId>":
+      tags: [save]
+Account First:
+  files:
+    "<winAppData>/<storeUserId>":
+      tags: [save]

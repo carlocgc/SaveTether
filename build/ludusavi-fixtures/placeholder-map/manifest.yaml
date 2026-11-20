@@ -1,0 +1,34 @@
+Placeholder Game:
+  steam:
+    id: 2002
+  files:
+    "<winAppData>/PG/Roaming":
+      tags: [save]
+      when:
+        - os: windows
+    "<winLocalAppData>/PG/Local":
+      tags: [save]
+      when:
+        - os: windows
+    "<winLocalAppDataLow>/PG/Low":
+      tags: [save]
+      when:
+        - os: windows
+    "<winDocuments>/PG/Docs":
+      tags: [save]
+      when:
+        - os: windows
+    "<xdgData>/PG":
+      tags: [save]
+      when:
+        - os: linux
+    "<xdgConfig>/PG":
+      tags: [save]
+      when:
+        - os: linux
+    "<home>/.var/app/org.example.PG/data/PG":
+      tags: [save]
+      when:
+        - os: linux
+    "<base>/saves":
+      tags: [save]

@@ -1,0 +1,14 @@
+Cloud Game:
+  steam:
+    id: 6006
+  cloud:
+    steam: true
+    gog: false
+    epic: true
+    origin: true
+    uplay: true
+  files:
+    "<winAppData>/CloudGame":
+      tags: [save]
+Cloud Alias:
+  alias: Cloud Game

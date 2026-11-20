@@ -1,0 +1,4 @@
+Odd Game:
+  files:
+    "<winAppData>/Odd/../Game":
+      tags: [save]
