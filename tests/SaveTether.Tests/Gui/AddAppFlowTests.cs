@@ -320,6 +320,49 @@ public class AddAppFlowTests
     }
 
     [Fact]
+    public void A_refusal_for_the_install_found_still_offers_the_page_to_choose_another()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var portable = Path.Combine(deck.Home, "portable");
+        CliDevice.Write(portable, "app.cfg", "config");
+        var native = Path.Combine(deck.Home, "native", "data");
+        Directory.CreateDirectory(Path.Combine(native, "saves"));
+        // Another mapping already uses the native install's save folder, so that install's plan is refused.
+        deck.Ok("map", "add", "flash.objects", "--target", "flash/objects", "--source", Path.Combine(native, "saves"));
+
+        var view = flow.Start("testapp");
+        Assert.Equal(AddAppPage.ChooseInstall, view.Page);
+        Assert.Equal(["native", "portable"], view.Candidates.Select(c => c.Id));
+
+        var refused = flow.ChooseInstall("native");
+        Assert.Equal(AddAppPage.Refused, refused.Page);
+        Assert.Equal(AddAppPage.ChooseInstall, flow.Back(refused.Page)!.Page);
+
+        Assert.Equal(AddAppPage.NeedsLocation, flow.ChooseInstall("portable").Page);
+        var plan = flow.SetLocation(LocationField.InstallFolder, portable);
+        Assert.Equal(AddAppPage.Plan, plan.Page);
+        Assert.True(flow.Add(plan).Succeeded);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void An_imported_app_keeps_the_older_flow_even_with_a_detected_install_folder()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var install = Path.Combine(deck.Home, "great-war");
+        Directory.CreateDirectory(Path.Combine(install, "savegame"));
+        deck.Ok("app", "add", "1914-the-great-war", "--install-dir", install);
+
+        // Its install folder is stored and found: the plan, as before, not a page asking for the folder.
+        var view = flow.Start("1914-the-great-war");
+        Assert.Equal(AddAppPage.Plan, view.Page);
+        Assert.Empty(view.InstallPaths);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void A_ticked_folder_whose_parent_is_missing_is_warned_about_before_Add()
     {
         using var sandbox = new Sandbox();
@@ -344,6 +387,13 @@ public class AddAppFlowTests
 
         // usr is there but the save folder is not: Apply creates it, so there is nothing to warn about.
         Directory.CreateDirectory(Path.Combine(install, "mlc01", "usr"));
+        Assert.Null(flow.SetLocation(LocationField.InstallFolder, install).MissingFolderWarning);
+
+        // usr is a link to a folder that is there: Apply follows it, so the warning follows it too.
+        var elsewhere = Path.Combine(deck.Home, "elsewhere", "usr");
+        Directory.CreateDirectory(elsewhere);
+        Directory.Delete(Path.Combine(install, "mlc01", "usr"));
+        Sandbox.Link(Path.Combine(install, "mlc01", "usr"), elsewhere);
         Assert.Null(flow.SetLocation(LocationField.InstallFolder, install).MissingFolderWarning);
         sandbox.AssertCanaryIntact();
     }

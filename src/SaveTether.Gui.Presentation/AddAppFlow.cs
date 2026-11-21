@@ -284,7 +284,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         _lastPlan = null;
         _chooseView = null;
         var view = Plan();
-        if (view.Page is not (AddAppPage.Plan or AddAppPage.ChooseInstall or AddAppPage.NeedsLocation))
+        if (view.Page is not (AddAppPage.Plan or AddAppPage.ChooseInstall or AddAppPage.NeedsLocation or AddAppPage.Refused))
         {
             return view;
         }
@@ -294,14 +294,16 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         // lone portable install goes to its folder page, so the folder it was last given can be changed.
         var workspace = Open();
         var entry = workspace.Definitions.Find(appId);
-        if (entry?.Definition is not { } definition)
+        if (entry?.Definition is not { } definition || entry.Source == DefinitionSource.Imported)
         {
             return view;
         }
 
+        // Only installs the core looked at: a refusal for the auto-picked install (a folder another mapping uses) still lists
+        // them all, so the chooser is built from the candidates before that install's refusal is shown.
         var options = definition.Installs
             .Where(i => i.Os.Contains(environment.Os))
-            .Where(i => view.Candidates.Any(c => c.Id == i.Id && c.IsDetected) || (entry.Source != DefinitionSource.Imported && UsesInstallFolder(definition, i)))
+            .Where(i => view.Candidates.Any(c => c.Id == i.Id && (c.IsDetected || UsesInstallFolder(definition, i))))
             .ToList();
         if (options.Count > 1)
         {
@@ -362,8 +364,10 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     {
         var request = Request with { Install = installId, Roles = null };
         var workspace = Open();
-        var definition = workspace.Definitions.Find(request.AppId)?.Definition;
-        if (definition?.Installs.FirstOrDefault(i => i.Id == installId) is { } install && UsesInstallFolder(definition, install))
+        var entry = workspace.Definitions.Find(request.AppId);
+        var definition = entry?.Definition;
+        if (entry?.Source != DefinitionSource.Imported
+            && definition?.Installs.FirstOrDefault(i => i.Id == installId) is { } install && UsesInstallFolder(definition, install))
         {
             // A portable install: ask for its folder, with the one given or stored before filled in.
             _request = request;
@@ -643,7 +647,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             var noParent = roles
                 .Where(r => r.Ticked && !r.AlreadyAdded && r.Planned is { Exists: false, IsLink: false })
                 .Select(r => (r.RoleId, Parent: Path.GetDirectoryName(PathRules.Normalize(r.Planned!.Source))))
-                .Where(x => x.Parent is not null && SafeFs.Probe(x.Parent) != EntryKind.Directory)
+                .Where(x => x.Parent is not null && SafeFs.Probe(PathRules.ResolveAll(x.Parent)) != EntryKind.Directory)
                 .ToList();
             var warning = noParent.Count == 0
                 ? null
