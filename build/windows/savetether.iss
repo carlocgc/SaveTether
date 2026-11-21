@@ -57,6 +57,10 @@ UninstallDisplayIcon={app}\savetether-gui.exe
 CloseApplications=yes
 RestartApplications=no
 ChangesEnvironment=yes
+; Inno Setup 6.5 turns on Windows' RedirectionGuard for Setup by default, and the app started from the last page inherits it: its first run after an install
+; then refuses every junction as "an untrusted mount point", so no folder could be linked until the app was restarted. Setup
+; runs without administrator rights and links nothing itself, so the protection (aimed at elevated installers) is off.
+RedirectionGuard=no
 
 [Tasks]
 Name: "addtopath"; Description: "Make the savetether command available in terminals (adds the install folder to your Path)"; Flags: unchecked
