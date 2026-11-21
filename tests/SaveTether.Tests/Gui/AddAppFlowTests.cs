@@ -286,7 +286,7 @@ public class AddAppFlowTests
         var (deck, flow) = NewDevice(sandbox);
 
         var view = flow.Start("testapp");
-        Assert.Equal("Test App was not found on this device.", view.Title);
+        Assert.Equal("No install of Test App was found.", view.Title);
         Assert.Contains(view.Sentences, s => s.StartsWith("native: No folder at", StringComparison.Ordinal));
 
         // An install that needs a value is said in words, not with the core's token (found on the Deck).

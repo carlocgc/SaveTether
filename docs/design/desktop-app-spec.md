@@ -108,7 +108,7 @@ A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmati
 |---|---|---|
 | Plan | For an imported definition an unverified note, and for one with `cloud_saves` a note naming those stores' cloud saves; the install used and what showed it is there; each role with its class, folder, size and file count, "already a link" or "not there yet" where so; the definition's quirks; each role's note | Role checkboxes (the definition's defaults ticked; `cache` and `media` classes unticked and labelled why), **Add** |
 | `install-choice-needed` | "More than one install of <app> was found." and the candidates, each with what was found | Pick one, then the plan |
-| `not-installed` | "<App> was not found on this device." with each install looked for and why it was not found | The fields below, for installs whose `ResolveProblem` is `needs-value`; Back |
+| `not-installed` | "No install of <App> was found." with each install looked for and why it was not found | The fields below, for installs whose `ResolveProblem` is `needs-value`; Back |
 | `unresolved` | "<Role>'s folder could not be worked out: <reason>." | The field that would resolve it, if any; Back |
 | `unknown-install`, `unknown-role` | Cannot happen from the window, which only offers what the definition lists. Shown as an unexpected error (section 10) | |
 | `invalid-definition` | "The definition for <app> has mistakes, so it cannot be used." with the core's message | Back |

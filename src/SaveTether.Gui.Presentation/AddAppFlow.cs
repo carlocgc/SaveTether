@@ -576,7 +576,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 return empty with
                 {
                     Page = AddAppPage.NeedsLocation,
-                    Title = $"{name} was not found on this device.",
+                    Title = $"No install of {name} was found.",
                     Sentences = sentences,
                     Fields = FieldsFor(wanting, definition, request),
                 };
