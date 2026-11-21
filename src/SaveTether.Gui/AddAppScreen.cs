@@ -43,6 +43,9 @@ internal sealed class AddAppScreen : UserControl, IScreen
     private Action? _unsubscribe;
     private readonly ScanSession _scans;
 
+    // The scan's optional kinds some definition has (none, with the definitions that ship): read once per screen.
+    private IReadOnlySet<Core.Definitions.RoleClass>? _extraClasses;
+
     /// <param name="startAt">Page 1; page 2 for an app, from a row's "Find the app again" or "Add"; or the hand form for a mapping.</param>
     public AddAppScreen(string localFolder, Overlay overlay, Func<Func<ActionFlow, Task>, Task> operate, Action close, AddAppStart startAt, ScanSession scans)
     {
@@ -87,16 +90,32 @@ internal sealed class AddAppScreen : UserControl, IScreen
     /// <summary>Detaches page 1 from the scan session and the strip, so a page that is no longer shown is not kept alive or refreshed.</summary>
     private void ReleaseCatalog()
     {
+        // Also ends any load of page 1 still reading: it finds it is no longer the latest and stops (see ShowCatalogAsync).
+        _catalogLoads.Invalidate();
         _unsubscribe?.Invoke();
         _unsubscribe = null;
     }
 
+    private readonly LatestLoad _catalogLoads = new();
+
     private async Task ShowCatalogAsync()
     {
         ReleaseCatalog();
+        var load = _catalogLoads.Begin();
+        bool Stale() => _closed || !_catalogLoads.IsCurrent(load);
         _page.Content = null;
-        var added = await Guard(() => _flow.AddedApps());
-        if (added is null)
+
+        // Each await below can finish, or fail, after the screen was left or another load began. A stale load stops
+        // before it changes a control, subscribes to the scan or starts one, and a stale failure is logged but does
+        // not draw its error page over the newer load (Guard checks Stale before it touches the page).
+        var added = await Guard(() => _flow.AddedApps(), Stale);
+        if (added is null || Stale())
+        {
+            return;
+        }
+
+        _extraClasses ??= await Guard(() => _flow.ExtraScanClasses(), Stale);
+        if (_extraClasses is null || Stale())
         {
             return;
         }
@@ -325,20 +344,29 @@ internal sealed class AddAppScreen : UserControl, IScreen
         ToolTip.SetTip(scan, "Also lists saves left by apps that are no longer installed");
         // Everything but the list is pinned above the scrolling area, so it stays in reach however long the list is:
         // the title and what the page is for, then one row (the way back, Add folder, the scan), then the search and how many were found.
-        // The scan and its two choices share a frame to show that the choices belong to the scan.
-        var scanGroup = new Border
+        // The scan and its choices share a frame to show that the choices belong to the scan. A choice is shown only
+        // when some definition has that kind of folder, since it would change nothing otherwise; with none, the scan is just its button.
+        var scanChoices = new List<Control> { scan };
+        if (_extraClasses.Contains(Core.Definitions.RoleClass.System))
         {
-            Child = new StackPanel
+            scanChoices.Add(system);
+        }
+
+        if (_extraClasses.Contains(Core.Definitions.RoleClass.State))
+        {
+            scanChoices.Add(states);
+        }
+
+        Control scanGroup = scanChoices.Count == 1
+            ? scan
+            : new Border
             {
-                Orientation = Orientation.Horizontal,
-                Spacing = 12,
-                Children = { scan, system, states },
-            },
-            BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(6, 4),
-        };
+                Child = ScanRow(scanChoices),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(6, 4),
+            };
         var actions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -388,6 +416,18 @@ internal sealed class AddAppScreen : UserControl, IScreen
             _scans.Start(_flow, Core.Detection.ScanOptions.Default);
             Refresh();
         }
+    }
+
+    // Built only for the framed group: the button must have one parent, so with no choices it goes in the bar on its own.
+    private static StackPanel ScanRow(IEnumerable<Control> choices)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        foreach (var choice in choices)
+        {
+            row.Children.Add(choice);
+        }
+
+        return row;
     }
 
     /// <summary>"Unverified" for an imported definition, "Not installed" for a deep-scan row with no install; else nothing.</summary>
@@ -984,7 +1024,8 @@ internal sealed class AddAppScreen : UserControl, IScreen
     /// flow. Anything else is section 10's unexpected error: logged with its stack and said, since the callers
     /// do not await this and an exception would otherwise vanish with the page left disabled (found on the Deck).
     /// </summary>
-    private async Task<T?> Guard<T>(Func<T> work)
+    /// <param name="stale">When it answers true after a failure, the failure is only logged: this work belongs to a page that is no longer shown.</param>
+    private async Task<T?> Guard<T>(Func<T> work, Func<bool>? stale = null)
         where T : class
     {
         try
@@ -995,6 +1036,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
         {
             var expected = e is StoreException or IOException or UnauthorizedAccessException;
             App.Options.Log.Write(expected ? $"add app: {e.GetType().Name}: {e.Message}" : $"unexpected error: {e}");
+            if (stale?.Invoke() == true)
+            {
+                return null;
+            }
+
             var back = Navigation.BackRow("Back to apps", Leave);
             _page.IsEnabled = true;
             _page.Content = expected

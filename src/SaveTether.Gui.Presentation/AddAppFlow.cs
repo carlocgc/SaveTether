@@ -133,6 +133,29 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             .ToList();
     }
 
+    /// <summary>
+    /// Which of the scan's optional folder kinds (system files, save states) some definition has. A box for a kind no
+    /// definition has would change nothing, so the page shows only the boxes this returns. Reads only.
+    /// </summary>
+    public IReadOnlySet<RoleClass> ExtraScanClasses()
+    {
+        try
+        {
+            var catalog = Open().Definitions;
+            return catalog.FindAll(catalog.AvailableIds())
+                .Select(e => e.Entry.Definition)
+                .OfType<AppDefinition>()
+                .SelectMany(d => d.Roles)
+                .Select(r => r.Class)
+                .Where(c => c is RoleClass.System or RoleClass.State)
+                .ToHashSet();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or StoreException)
+        {
+            return new HashSet<RoleClass>();
+        }
+    }
+
     /// <summary>Page 1's "already added" rows: apps with a folder set on this device, in name order. Reads only.</summary>
     public IReadOnlyList<CatalogApp> AddedApps()
     {

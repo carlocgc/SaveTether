@@ -74,6 +74,29 @@ public class StatusCheckTests
     }
 
     [Fact]
+    public void A_row_of_an_imported_app_has_a_definition_only_when_its_role_and_target_match_the_definitions()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", "pc", "--create-root");
+        var catalog = new Core.Definitions.DefinitionCatalog(null);
+        var id = catalog.AvailableIds().First(i => catalog.Find(i)!.Source == Core.Definitions.DefinitionSource.Imported);
+        var role = catalog.Find(id)!.Definition!.Roles[0];
+        var folder = sandbox.Dir("pc", "apps", "game");
+
+        // Made by hand with the target the definition gives: Add app can reuse it.
+        pc.Ok("map", "add", $"{id}.{role.Id}", "--target", role.MappingTargetFor(id), "--source", folder);
+        Assert.True(Assert.Single(StatusCheck.Run(new LocalStore(pc.LocalFolder)).Mappings).HasDefinition);
+
+        // The same app and role made by hand with a target of its own: Add app would refuse it (the target differs), so the
+        // hand form, which reuses the mapping's target, stays.
+        var hand = new CliDevice(sandbox, "hand");
+        hand.Ok("init", "--sync-root", hand.SyncRoot, "--device", "hand", "--create-root");
+        hand.Ok("map", "add", $"{id}.{role.Id}", "--target", $"{id}/custom", "--source", sandbox.Dir("hand", "apps", "game"));
+        Assert.False(Assert.Single(StatusCheck.Run(new LocalStore(hand.LocalFolder)).Mappings).HasDefinition);
+    }
+
+    [Fact]
     public void Linked_and_not_applied_mappings_are_green_and_a_replaced_link_is_amber()
     {
         using var sandbox = new Sandbox();
