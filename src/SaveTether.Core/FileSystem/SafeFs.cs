@@ -257,6 +257,31 @@ public sealed class SafeFs
     }
 
     /// <summary>
+    /// Moves one regular file inside the share to a new path inside it, in one rename, with the same checks as
+    /// <see cref="RemoveSharedFile"/> on both paths. Nothing is overwritten: a destination that exists is refused. The folders
+    /// the destination needs are made.
+    /// </summary>
+    public static void MoveSharedFile(string below, string from, string to)
+    {
+        var source = RequireAbsolute(from, nameof(from));
+        var destination = RequireAbsolute(to, nameof(to));
+        RequirePlainFolders(below, source);
+        if (Probe(source) != EntryKind.File)
+        {
+            throw new SafeFsException($"Refusing to move '{source}': it is {Describe(Probe(source))}, not a file.");
+        }
+
+        if (Probe(destination) != EntryKind.Missing)
+        {
+            throw new SafeFsException($"Refusing to move '{source}' to '{destination}': something is already there.");
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        RequirePlainFolders(below, destination);
+        File.Move(source, destination);
+    }
+
+    /// <summary>
     /// Removes an empty folder inside the sync root, with the same checks as <see cref="RemoveSharedFile"/>, and never what is in it:
     /// answers false, and leaves the folder, when it has anything in it (a sync tool may have just added something). A missing
     /// folder is not an error.
@@ -302,6 +327,14 @@ public sealed class SafeFs
     {
         var root = PathRules.Normalize(RequireAbsolute(below, nameof(below)));
         var target = PathRules.Normalize(RequireAbsolute(path, nameof(path)));
+
+        // The folder the shared data lives in must itself be a real folder: a link there would put every child outside the share.
+        var rootKind = Probe(root);
+        if (rootKind != EntryKind.Directory)
+        {
+            throw new SafeFsException($"Refusing to delete under '{root}': it is {Describe(rootKind)}, not a plain folder.");
+        }
+
         if (!PathRules.IsSameOrInside(target, root) || PathRules.AreSame(target, root))
         {
             throw new SafeFsException($"Refusing to delete '{target}': it is not inside '{root}'.");

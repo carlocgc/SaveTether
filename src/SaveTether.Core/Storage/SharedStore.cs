@@ -291,8 +291,13 @@ public sealed class SharedStore
             SafeFs.RemoveEmptySharedFolder(DataRoot, seed);
         }
 
+        // The folder a delete that stopped part way used for what it had set aside, once it holds nothing.
+        SafeFs.RemoveEmptySharedFolder(DataRoot, Path.Combine(MetaRoot, DeletingFolder, mappingId));
         SafeFs.RemoveSharedFile(DataRoot, MappingPath(mappingId));
     }
+
+    /// <summary>Where <c>map delete</c> sets a file aside, in one rename, before it checks the file and deletes it: below <see cref="MetaRoot"/>.</summary>
+    public const string DeletingFolder = "deleting";
 
     private string MappingPath(string mappingId) => Path.Combine(MetaRoot, MappingsFolder, mappingId + ".json");
 
