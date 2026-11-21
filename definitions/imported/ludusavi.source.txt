@@ -1,2 +1,2 @@
 Ludusavi manifest, https://github.com/mtkennerly/ludusavi-manifest
-commit 25a17c7ac6caac3e85cdda929a246d53eee92696
+commit 2fbcf8f16b5c391a6ce1809399cea5712b288758
