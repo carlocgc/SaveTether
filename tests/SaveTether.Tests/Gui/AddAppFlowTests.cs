@@ -60,6 +60,44 @@ public class AddAppFlowTests
     }
 
     [Fact]
+    public void An_added_app_opens_only_for_a_folder_it_has_not_added_and_Add_writes_only_the_new_one()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var data = Path.Combine(deck.Home, "native", "data");
+        CliDevice.Write(data, "saves/slot1.sav", "12345");
+        deck.Ok("app", "add", "testapp");
+
+        // Page 1: shots was not added (it is off by default), so the app still has a folder to add.
+        var row = Assert.Single(flow.AddedApps());
+        Assert.True(row.MoreToAdd);
+
+        // Page 2: the added folders show ticked and locked; Add is off until a new folder is ticked.
+        var view = flow.Start("testapp");
+        Assert.True(view.Roles.Single(r => r.RoleId == "saves").AlreadyAdded);
+        Assert.True(view.Roles.Single(r => r.RoleId == "states").AlreadyAdded);
+        var shots = view.Roles.Single(r => r.RoleId == "shots");
+        Assert.False(shots.AlreadyAdded);
+        Assert.False(shots.Ticked);
+        Assert.False(view.CanAdd);
+
+        // Unticking an added folder changes nothing: Add never removes one.
+        Assert.Equal(view, flow.SetRole("saves", ticked: false));
+
+        var ticked = flow.SetRole("shots", ticked: true);
+        Assert.True(ticked.CanAdd);
+        var result = flow.Add(ticked);
+
+        Assert.Equal(["testapp.shots"], result.Added);
+        Assert.True(MappingExists(deck, "testapp.saves"));
+        Assert.True(MappingExists(deck, "testapp.shots"));
+
+        // Now every folder is added: the app is listed but has nothing left to open.
+        Assert.False(Assert.Single(flow.AddedApps()).MoreToAdd);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void A_plan_shows_the_install_and_each_role_and_Add_writes_only_the_roles_ticked()
     {
         using var sandbox = new Sandbox();
@@ -107,7 +145,7 @@ public class AddAppFlowTests
     }
 
     [Fact]
-    public void Adding_an_app_again_whose_folders_are_linked_does_not_say_nothing_is_linked()
+    public void The_added_text_does_not_say_nothing_is_linked_when_some_folders_already_are()
     {
         // Found by the owner with Cemu: adding an app already added and applied said "Nothing is linked yet".
         using var sandbox = new Sandbox();
@@ -116,27 +154,21 @@ public class AddAppFlowTests
         deck.Ok("app", "add", "testapp");
         deck.Ok("apply", "testapp.saves", "--copy");
 
+        // Every folder of the app is added now, so the page has nothing new to add; a linked folder says so.
         var view = flow.Start("testapp");
-        Assert.Equal("already a link", AddAppFlow.SizeOf(view.Roles[0].Planned!));
-        var result = flow.Add(view);
+        Assert.Equal("already a link", AddAppFlow.SizeOf(view.Roles.Single(r => r.RoleId == "saves").Planned!));
+        Assert.False(view.CanAdd);
+        Assert.Throws<InvalidOperationException>(() => flow.Add(view));
 
-        Assert.True(result.Succeeded);
-        Assert.Equal(["testapp.saves"], result.AlreadyLinked);
-        Assert.Equal(["testapp.states"], result.ToApply);
-        var text = AddAppFlow.AddedText(result.Added, result.AlreadyLinked);
+        var text = AddAppFlow.AddedText(["testapp.saves", "testapp.states"], ["testapp.saves"]);
         Assert.DoesNotContain("Nothing is linked", text, StringComparison.Ordinal);
         Assert.Contains("Already linked here: testapp.saves.", text, StringComparison.Ordinal);
         Assert.Contains("Apply links testapp.states", text, StringComparison.Ordinal);
 
         // With every folder linked, there is nothing to apply.
-        deck.Ok("apply", "testapp.states", "--copy");
-        result = flow.Add(flow.Start("testapp"));
-        Assert.Equal(["testapp.saves", "testapp.states"], result.AlreadyLinked);
-        Assert.Empty(result.ToApply);
         Assert.Equal(
             "Added testapp.saves, testapp.states. Already linked here: testapp.saves, testapp.states. There is nothing to apply; the Apps page shows whether each link is healthy.",
-            AddAppFlow.AddedText(result.Added, result.AlreadyLinked));
-        Assert.All(StatusCheck.Run(new LocalStore(deck.LocalFolder)).Mappings, m => Assert.Equal(HealthState.Ok, m.Health.State));
+            AddAppFlow.AddedText(["testapp.saves", "testapp.states"], ["testapp.saves", "testapp.states"]));
         sandbox.AssertCanaryIntact();
     }
 

@@ -19,7 +19,10 @@ public class AppsPageTests
         AppRow For(HealthState state, HealthReason? reason = null) => AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", state, reason));
 
         var ok = For(HealthState.Ok);
-        Assert.Equal("This folder is a link to the shared folder.", ok.Sentence);
+        // The state word beside it already says Linked, so the sentence says what the folder is.
+        Assert.Equal("Link", ok.Sentence);
+        Assert.Equal("Symlink", AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.Ok) with { LinkKind = "Symlink" }).Sentence);
+        Assert.Equal("Junction", AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.Ok) with { LinkKind = "Junction" }).Sentence);
         Assert.Null(ok.Main);
         Assert.Equal([RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert], ok.Others);
 
@@ -28,6 +31,7 @@ public class AppsPageTests
         Assert.Contains(RowAction.Backups, For(HealthState.DoubleSeed).Others);
 
         var ready = For(HealthState.NotApplied, HealthReason.NotLinkedYet);
+        Assert.Equal("Original", ready.Sentence);
         Assert.Equal((RowAction?)RowAction.Apply, ready.Main);
         Assert.Equal([RowAction.OpenFolder, RowAction.Remove], ready.Others);
 

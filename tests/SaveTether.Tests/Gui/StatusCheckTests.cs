@@ -97,6 +97,26 @@ public class StatusCheckTests
     }
 
     [Fact]
+    public void A_linked_row_says_what_kind_of_link_its_folder_is_and_an_unlinked_one_says_original()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        var local = new LocalStore(pc.LocalFolder);
+
+        var before = AppsPage.From(StatusCheck.Run(local)).Groups.Single().Rows.Single();
+        Assert.Null(before.Mapping.LinkKind);
+        Assert.Equal("Original", before.Sentence);
+
+        pc.Ok("apply", Id, "--copy");
+
+        var after = AppsPage.From(StatusCheck.Run(local)).Groups.Single().Rows.Single();
+        Assert.True(after.Mapping.LinkKind is "Symlink" or "Junction", after.Mapping.LinkKind);
+        Assert.Equal(after.Mapping.LinkKind, after.Sentence);
+    }
+
+    [Fact]
     public void Linked_and_not_applied_mappings_are_green_and_a_replaced_link_is_amber()
     {
         using var sandbox = new Sandbox();

@@ -99,14 +99,14 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         var link = mapping.LinkTarget ?? "another folder";
         var (sentence, main, others) = (mapping.Health.State, mapping.Health.Reason) switch
         {
-            (HealthState.Ok, _) => ("This folder is a link to the shared folder.", (RowAction?)null,
+            (HealthState.Ok, _) => (mapping.LinkKind ?? "Link", (RowAction?)null,
                 new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert }),
             (HealthState.NotApplied, HealthReason.NoSaveFolder) => (
                 mapping.SetUpOn.Count == 0 ? "No device has a folder set for it." : $"Set up on {string.Join(", ", mapping.SetUpOn)}, not here.",
                 RowAction.AddHere, []),
             (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => (
                 $"This device's file has '{mapping.Health.Source}' as the folder.", null, new[] { RowAction.Details }),
-            (HealthState.NotApplied, _) => ("Not linked yet.", RowAction.Apply, new[] { RowAction.OpenFolder, RowAction.Remove }),
+            (HealthState.NotApplied, _) => ("Original", RowAction.Apply, new[] { RowAction.OpenFolder, RowAction.Remove }),
             (HealthState.Replaced, HealthReason.FolderEmpty) => ("The link is gone and the folder is empty.", RowAction.Apply, new[] { RowAction.OpenFolder }),
             (HealthState.Replaced, HealthReason.FolderMissing) => (
                 $"Nothing is at {source}. If the app has moved, find it again.",
