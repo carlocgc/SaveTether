@@ -76,6 +76,9 @@ Source: "{#SourceDir}\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreve
 Name: "{autoprograms}\SaveTether"; Filename: "{app}\savetether-gui.exe"; Comment: "Keeps game save folders linked to one synced folder"
 Name: "{autodesktop}\SaveTether"; Filename: "{app}\savetether-gui.exe"; Comment: "Keeps game save folders linked to one synced folder"; Tasks: desktopicon
 
+[Messages]
+ConfirmUninstall=Remove %1 from this computer?%n%nYour setup, backups and linked game folders are left as they are: linked folders stay linked and keep syncing. To get a game folder back as a plain folder, unlink it in SaveTether first.
+
 [Run]
 Filename: "{app}\savetether-gui.exe"; Description: "Start SaveTether"; Flags: nowait postinstall skipifsilent
 
