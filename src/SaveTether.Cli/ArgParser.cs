@@ -63,6 +63,7 @@ internal static class ArgParser
         new("init", 0, 0, ["--create-root", "--take-over"], ["--sync-root", "--device", "--backup-root"], None),
         new("map add", 1, 1, None, ["--target", "--source", "--entry-depth"], ["--process"]),
         new("map remove", 1, 1, None, None, None),
+        new("map delete", 1, 1, ["--confirm-delete"], None, None),
         new("app add", 1, 1, [DryRun], ["--install", "--install-dir", "--sd-card", "--wine-prefix"], ["--role"]),
         new("app list", 0, 0, ["--found"], ["--search"], None),
         new("status", 0, 1, None, None, None),

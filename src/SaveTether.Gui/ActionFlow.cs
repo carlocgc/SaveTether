@@ -2,7 +2,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using SaveTether.Core.Backup;
 using SaveTether.Core.Execution;
+using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Planning;
 using SaveTether.Core.Storage;
@@ -298,6 +300,42 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             {
                 log.Write($"map remove {mapping.MappingId} refused: {e.Problem}: {e.Message}");
                 await overlay.InformAsync("Nothing was changed", e.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// "Delete" (section 5), on a "Not on this device" row no device uses: <c>map delete</c> after its confirmation. It removes the
+    /// shared saves, record and markers for every device, after a verified backup on this device (design 5.3, invariant 2).
+    /// </summary>
+    public async Task DeleteMappingAsync(MappingState mapping)
+    {
+        var role = $"{mapping.AppName} {mapping.Role}";
+        var session = await BeginAsync("map delete");
+        if (session is null)
+        {
+            return;
+        }
+
+        using (session)
+        {
+            try
+            {
+                var described = await Work("Checking what the shared folder holds…", () => session.DescribeMappingDeletion(mapping.MappingId));
+                if (!await overlay.ConfirmAsync(
+                        AppsPage.DeleteTitle(role), AppsPage.DeleteText(role, described.Files, described.Bytes), "Delete", Overlay.OperationDialogTimeout, danger: true))
+                {
+                    return;
+                }
+
+                var done = await Work("Backing up the shared saves and deleting…", () => session.DeleteMapping(mapping.MappingId));
+                log.Write($"map delete {mapping.MappingId}: done{(done.Backup is { } backup ? $", backed up as {backup.Id}" : string.Empty)}");
+                await overlay.InformAsync("Deleted", AppsPage.DeletedText(role, done.Backup is not null));
+            }
+            catch (Exception e) when (e is StoreException or IOException or UnauthorizedAccessException or SafeFsException or BackupException)
+            {
+                log.Write($"map delete {mapping.MappingId} refused: {e.Message}");
+                await overlay.InformAsync("Nothing was deleted", e.Message);
             }
         }
     }

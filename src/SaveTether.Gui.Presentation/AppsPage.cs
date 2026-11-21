@@ -33,6 +33,12 @@ public enum RowAction
     /// <summary>"map remove": forget this device's folder for the mapping, which moves to "Not on this device". Only offered when Ready to link.</summary>
     Remove,
 
+    /// <summary>
+    /// "map delete": a mapping no device uses is deleted from the shared folder, saves and record, for every device. Shown as its own
+    /// red button, on a "Not on this device" row that says no device has a folder set for it.
+    /// </summary>
+    Delete,
+
     /// <summary>Show the core's own sentence for the state.</summary>
     Details,
 
@@ -52,7 +58,8 @@ public enum RowAction
 /// <summary>One row of the Apps page: a mapping, its sentence and its actions.</summary>
 /// <param name="Main">The row's main action, shown as its button; null when the state has none, or none built yet.</param>
 /// <param name="Others">The actions under "More", in the spec's order.</param>
-public sealed record AppRow(MappingState Mapping, string Sentence, RowAction? Main, IReadOnlyList<RowAction> Others);
+/// <param name="Destructive">An action that removes something for good, shown apart as a red button; null when the row has none.</param>
+public sealed record AppRow(MappingState Mapping, string Sentence, RowAction? Main, IReadOnlyList<RowAction> Others, RowAction? Destructive = null);
 
 /// <summary>An app with its rows (section 5): mappings grouped by the part of the ID before the dot.</summary>
 public sealed record AppGroup(string AppName, IReadOnlyList<AppRow> Rows)
@@ -129,7 +136,10 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
                 new[] { RowAction.Details }),
             _ => throw new ArgumentOutOfRangeException(nameof(mapping), mapping.Health.State, "A state with no row in section 5.1."),
         };
-        return new AppRow(mapping, sentence, main, others);
+
+        // No device has a folder set for it: nothing links to it, so it can be deleted from the shared folder.
+        var unused = mapping is { Health.Reason: HealthReason.NoSaveFolder, SetUpOn.Count: 0 };
+        return new AppRow(mapping, sentence, main, others, unused ? RowAction.Delete : null);
     }
 
     public static string Label(RowAction action) => action switch
@@ -143,6 +153,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         RowAction.OpenSharedFolder => "Open shared folder",
         RowAction.OpenSharedFolderParent => "Open shared folder's parent",
         RowAction.Remove => "Remove",
+        RowAction.Delete => "Delete",
         RowAction.Details => "Details",
         RowAction.FindAppAgain => "Find the app again",
         RowAction.ChooseFolderAgain => "Choose the folder again",
@@ -150,6 +161,38 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         RowAction.Backups => "Backups",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no label."),
     };
+
+    public static string DeleteTitle(string role) => $"Delete {role} from the shared folder?";
+
+    /// <summary>Delete's confirmation: what goes, for every device, and the backup taken first.</summary>
+    public static string DeleteText(string role, int files, long bytes) =>
+        $"No device has a folder set for {role}, so nothing is linked to it. Deleting removes its record and " +
+        (files == 0
+            ? "its shared folder (it holds no files)"
+            : $"its shared saves ({files:N0} file{(files == 1 ? string.Empty : "s")}, {FormatBytes(bytes)})") +
+        " from the sync folder, and the deletion reaches every device through the sync tool.\n\n" +
+        (files == 0 ? string.Empty : "The shared saves are backed up on this device first: Backups shows the copy as \"before deleting\".\n\n") +
+        "If a device linked it recently and its file has not synced here yet, wait for the sync tool to catch up before you go on.";
+
+    /// <summary>A size as people read it: 3.4 MiB.</summary>
+    public static string FormatBytes(long bytes)
+    {
+        string[] units = ["bytes", "KiB", "MiB", "GiB"];
+        var value = (double)bytes;
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return unit == 0
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes:N0} bytes")
+            : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value:0.#} {units[unit]}");
+    }
+
+    public static string DeletedText(string role, bool hadBackup) =>
+        $"{role} was deleted from the shared folder." + (hadBackup ? " Its shared saves are backed up on this device; Backups shows them." : string.Empty);
 
     /// <summary>Remove's confirmation (section 5).</summary>
     public static string RemoveWarning(string role) =>

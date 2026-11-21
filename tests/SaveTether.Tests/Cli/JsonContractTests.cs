@@ -173,6 +173,9 @@ public class JsonContractTests
 
         Record("usage-error", 64, "apply");
 
+        // Unused now (this device forgot its folder, and no other device has one): its shared record and folder go.
+        Record("map-delete", 0, "map", "delete", Id, "--confirm-delete");
+
         // "app add" and "app list", on a second device with a shared definition.
         var deck = new CliDevice(sandbox, "deck");
         deck.Ok("init", "--sync-root", deck.SyncRoot, "--device", "deck", "--create-root");

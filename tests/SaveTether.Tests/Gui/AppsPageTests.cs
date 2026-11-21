@@ -266,6 +266,67 @@ public class AppsPageTests
     }
 
     [Fact]
+    public void A_row_no_device_has_a_folder_for_offers_a_red_Delete_and_one_another_device_has_does_not()
+    {
+        var unused = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder));
+        Assert.Equal((RowAction?)RowAction.Delete, unused.Destructive);
+        Assert.Equal((RowAction?)RowAction.AddHere, unused.Main);
+        Assert.Equal("Delete", AppsPage.Label(RowAction.Delete));
+
+        var elsewhere = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { SetUpOn = ["pc"] });
+        Assert.Null(elsewhere.Destructive);
+
+        Assert.All(
+            Enum.GetValues<HealthState>().Where(s => s != HealthState.NotApplied),
+            s => Assert.Null(AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", s)).Destructive));
+        Assert.Null(AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NotLinkedYet)).Destructive);
+    }
+
+    [Fact]
+    public void The_Delete_confirmation_says_what_goes_for_every_device_and_that_a_backup_is_taken()
+    {
+        var text = AppsPage.DeleteText("PPSSPP savedata", 3, 5 * 1024 * 1024);
+
+        Assert.Contains("3 files, 5 MiB", text, StringComparison.Ordinal);
+        Assert.Contains("reaches every device", text, StringComparison.Ordinal);
+        Assert.Contains("backed up on this device first", text, StringComparison.Ordinal);
+        Assert.Contains("1 file,", AppsPage.DeleteText("PPSSPP savedata", 1, 10), StringComparison.Ordinal);
+        Assert.DoesNotContain("backed up", AppsPage.DeleteText("PPSSPP savedata", 0, 0), StringComparison.Ordinal);
+        Assert.Equal("PPSSPP savedata was deleted from the shared folder.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: false));
+        Assert.Equal("before deleting", BackupsPage.Reason(Core.Backup.BackupReason.PreDelete));
+    }
+
+    [Fact]
+    public void Delete_removes_a_mapping_nobody_uses_and_the_row_goes()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", Id, "--copy");
+        pc.Ok("revert", Id);
+        pc.Ok("map", "remove", Id);
+        var local = new LocalStore(pc.LocalFolder);
+        var row = Assert.Single(AppsPage.From(StatusCheck.Run(local)).NotOnThisDevice);
+        Assert.Equal((RowAction?)RowAction.Delete, row.Destructive);
+
+        var (session, _) = OperationSession.Begin(local, "map delete", new NoProcesses(), null);
+        using (session)
+        {
+            var described = session!.DescribeMappingDeletion(Id);
+            Assert.Equal(1, described.Files);
+            var done = session.DeleteMapping(Id);
+            Assert.NotNull(done.Backup);
+        }
+
+        var status = StatusCheck.Run(local);
+        Assert.Empty(AppsPage.From(status).NotOnThisDevice);
+        Assert.Empty(status.Mappings);
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void Remove_forgets_this_devices_folder_and_is_refused_while_linked()
     {
         using var sandbox = new Sandbox();

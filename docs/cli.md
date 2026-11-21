@@ -6,7 +6,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 - [Concepts](#concepts)
 - [Options every command takes](#options-every-command-takes)
-- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
+- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
 - [Workflows](#workflows)
 - [Files and environment](#files-and-environment)
 - [Exit codes](#exit-codes)
@@ -103,6 +103,20 @@ Forgets this device's save folder for a mapping. Nothing is deleted: the folder,
 
 ```bash
 savetether map remove eden.saves
+```
+
+## map delete
+
+```
+savetether map delete <id> [--confirm-delete]
+```
+
+Deletes a mapping no device uses, from the shared folder, **for every device**: its shared saves, its record and its seed markers. It is the way to clean up a mapping that every device has reverted and removed, which otherwise stays in `status` as "Not applied" with its saves still in the sync folder. The shared saves are backed up on this device first and the backup is verified (`backup list` shows it as `pre-delete`); only then is anything deleted. It cannot be undone from the share, so it asks first, or needs `--confirm-delete`.
+
+Refused while any device, this one included, has a folder set for the mapping: `revert` and `map remove` it there first. The check reads the device files in the sync folder, so a device that has not yet synced its own file cannot be seen; check that the sync tool has caught up before you delete. Safe to run again if it stopped part way.
+
+```bash
+savetether map delete eden.saves --confirm-delete
 ```
 
 ## app add

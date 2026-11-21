@@ -271,6 +271,20 @@ public sealed class SharedStore
         return superseded;
     }
 
+    /// <summary>
+    /// Deletes a mapping's seed markers and its mapping file, in that order, through <paramref name="fs"/> (design 5.3,
+    /// invariant 2: the tool's own metadata may be retired, only through the safe filesystem layer). The caller has checked
+    /// the mapping is unused and dealt with its shared folder.
+    /// </summary>
+    public void RetireMapping(string mappingId, SafeFs fs)
+    {
+        RequireInitialized();
+        ArgumentNullException.ThrowIfNull(fs);
+        RequireMappingId(mappingId);
+        fs.DeleteTree(SeedFolderOf(mappingId), SharedDataDeletion.ExplicitlyConfirmed);
+        fs.DeleteTree(MappingPath(mappingId), SharedDataDeletion.ExplicitlyConfirmed);
+    }
+
     private string MappingPath(string mappingId) => Path.Combine(MetaRoot, MappingsFolder, mappingId + ".json");
 
     private string DevicePathOf(string deviceName) => Path.Combine(MetaRoot, DevicesFolder, deviceName + ".json");

@@ -104,6 +104,11 @@ internal static class CliApp
               the unit --add-missing copies in. Give it again later to change it.
           savetether map remove <id>
               Remove this device's save folder for a mapping. Other devices keep theirs.
+          savetether map delete <id> [--confirm-delete]
+              Delete a mapping no device uses, from the shared folder, for every device: its shared saves,
+              its record and its seed markers. The shared saves are backed up on this device first. It cannot
+              be undone from the share, so it asks first, or needs --confirm-delete. Refused while any device
+              has a folder set for it.
 
           savetether app add <app> [--install <id>] [--role <id>]... [--install-dir <path>]
                                    [--sd-card <path>] [--wine-prefix <path>] [--dry-run]
@@ -197,6 +202,7 @@ internal static class CliApp
                     "init" => Init(),
                     "map add" => MapAdd(),
                     "map remove" => MapRemove(),
+                    "map delete" => MapDelete(),
                     "app add" => AppAdd(),
                     "app list" => AppList(),
                     "status" => Status(),
@@ -320,6 +326,37 @@ internal static class CliApp
                     id, mapping?.Target ?? string.Empty, removed.Source, removed.ProcessNames, mapping?.Depth ?? 1,
                     CreatedMapping: false, EntryDepthChanged: false, Removed: true),
             };
+        }
+
+        /// <summary>
+        /// "map delete": a mapping no device uses, after a confirmation at a terminal or with --confirm-delete. The
+        /// deletion reaches every device through the sync tool, so what goes is said before it is asked.
+        /// </summary>
+        private CliOutput MapDelete()
+        {
+            var id = command.Positionals[0];
+            var workspace = Open();
+            var described = workspace.DescribeMappingDeletion(id);
+            if (!command.Has("--confirm-delete"))
+            {
+                var what = described.TargetExists
+                    ? $"its shared folder '{described.TargetFolder}' ({described.Files} file(s), {OutputWriter.FormatBytes(described.Bytes)})"
+                    : "its record (the shared folder is already gone)";
+                if (!CanAsk)
+                {
+                    return Failed(ExitRefused, $"Deleting '{id}' removes {what} from the shared folder, on every device. Add --confirm-delete to go ahead.");
+                }
+
+                var question =
+                    $"Delete '{id}' from the shared folder? This removes {what}, and the deletion reaches every device through the sync tool." +
+                    "\nThe shared saves are backed up on this device first.";
+                if (!Confirm(question))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was deleted.");
+                }
+            }
+
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, MappingDeleted = workspace.DeleteMapping(id) };
         }
 
         private CliOutput AppAdd()

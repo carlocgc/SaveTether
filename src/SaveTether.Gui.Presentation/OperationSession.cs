@@ -85,6 +85,12 @@ public sealed class OperationSession : IDisposable
     /// <summary>"Remove": the core's <c>map remove</c>. Its refusal (the folder is linked) is a <see cref="StoreException"/>.</summary>
     public void Remove(string mappingId) => Workspace.MapRemove(mappingId);
 
+    /// <summary>What "Delete" on a mapping no device uses would remove; refused (a <see cref="StoreException"/>) while one uses it.</summary>
+    public MappingDeletion DescribeMappingDeletion(string mappingId) => Workspace.DescribeMappingDeletion(mappingId);
+
+    /// <summary>"map delete": the shared folder, markers and record, after a verified backup on this device. Under the operation lock.</summary>
+    public MappingDeletion DeleteMapping(string mappingId) => Workspace.DeleteMapping(mappingId);
+
     /// <summary>
     /// Apply all's first half (section 9.4): each mapping planned with no choice, in the order given. Those
     /// that plan can all be run after one confirmation; the others need the owner, each with why.
