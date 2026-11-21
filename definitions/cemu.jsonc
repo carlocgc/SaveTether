@@ -1,5 +1,6 @@
-// Cemu (Wii U emulator). Shipped with SaveTether: its paths were used on both of the owner's
-// devices in the M7 trial, 2026-11-12. Design 5.2 explains the format.
+// Cemu (Wii U emulator). Shipped with SaveTether: win-portable and linux-native were used on both of the
+// owner's devices in the M7 trial, 2026-11-12; win-documents and linux-flatpak come from the Ludusavi manifest
+// and are not yet tested on hardware. Design 5.2 explains the format.
 {
   "schema": 1,
   "id": "cemu",
@@ -11,6 +12,20 @@
       "os": "windows",
       "detect": { "dir": "{install_dir}/mlc01" },
       "base": "{install_dir}/mlc01"
+    },
+    {
+      // The default for an installed (not portable) Cemu on Windows, per PCGamingWiki and the Ludusavi
+      // manifest (commit 2fbcf8f): %USERPROFILE%\Documents\mlc01. Not yet run on a real machine.
+      "id": "win-documents",
+      "os": "windows",
+      "detect": { "dir": "{documents}/mlc01" },
+      "base": "{documents}/mlc01"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:info.cemu.Cemu}/data/Cemu/mlc01" },
+      "base": "{flatpak:info.cemu.Cemu}/data/Cemu/mlc01"
     },
     {
       "id": "linux-native",
