@@ -148,8 +148,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     public const int MaxDevicesNamed = 3;
 
     /// <summary>
-    /// "Set up on pc, deck, not here." for a few devices; for more, the first few and a count ("Set up on a, b, c and 9 more, not
-    /// here."), with the Devices button listing them all. Nothing at all when no device has it.
+    /// "Set up on pc, deck." for a few devices; for more, the first few and a count ("Set up on a, b, c and 9 more."), with the Devices button listing them all. Nothing at all when no device has it.
     /// </summary>
     public static string SetUpOnSentence(IReadOnlyList<string> devices)
     {
@@ -160,8 +159,8 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         }
 
         return devices.Count <= MaxDevicesNamed
-            ? $"Set up on {string.Join(", ", devices)}, not here."
-            : $"Set up on {string.Join(", ", devices.Take(MaxDevicesNamed))} and {devices.Count - MaxDevicesNamed} more, not here.";
+            ? $"Set up on {string.Join(", ", devices)}."
+            : $"Set up on {string.Join(", ", devices.Take(MaxDevicesNamed))} and {devices.Count - MaxDevicesNamed} more.";
     }
 
     /// <summary>The Devices button's list: the title and one device per line.</summary>

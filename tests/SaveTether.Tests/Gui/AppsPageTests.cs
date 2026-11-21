@@ -90,7 +90,7 @@ public class AppsPageTests
         pc.DeliverTo(deck, metadataOnly: true);
 
         var notHere = AppsPage.From(StatusCheck.Run(new LocalStore(deck.LocalFolder))).NotOnThisDevice;
-        Assert.Equal("Set up on pc, not here.", Assert.Single(notHere).Sentence);
+        Assert.Equal("Set up on pc.", Assert.Single(notHere).Sentence);
 
         // A link SaveTether did not make, at pc's save folder.
         var elsewhere = sandbox.Dir("elsewhere");
@@ -285,13 +285,13 @@ public class AppsPageTests
     [Fact]
     public void A_row_set_up_on_many_devices_names_a_few_and_counts_the_rest_with_a_Devices_list()
     {
-        Assert.Equal("Set up on a, b, c, not here.", AppsPage.SetUpOnSentence(["a", "b", "c"]));
-        Assert.Equal("Set up on a, b, c and 9 more, not here.", AppsPage.SetUpOnSentence(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]));
+        Assert.Equal("Set up on a, b, c.", AppsPage.SetUpOnSentence(["a", "b", "c"]));
+        Assert.Equal("Set up on a, b, c and 9 more.", AppsPage.SetUpOnSentence(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]));
         Assert.Equal("No device links this role.", AppsPage.SetUpOnSentence([]));
 
         var many = Enumerable.Range(1, 12).Select(i => $"device-{i:00}").ToList();
         var row = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { SetUpOn = many });
-        Assert.Equal("Set up on device-01, device-02, device-03 and 9 more, not here.", row.Sentence);
+        Assert.Equal("Set up on device-01, device-02, device-03 and 9 more.", row.Sentence);
         Assert.Equal(many, row.Devices);
         Assert.Null(row.Destructive);
         Assert.False(row.Sentence.Contains('\n', StringComparison.Ordinal));
