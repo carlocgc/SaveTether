@@ -207,6 +207,7 @@ A throwaway device, and a shared definition in its sync folder's `.savetether/de
 - Tick and untick a role: the page is made again each time. Add: "Apply it now?" with Not now focused. Apply: the ordinary Apply flow; on disk the link and the shared copy; the row Linked.
 - Add the app again with one role applied: the dialog names it under "Already linked here" and Apply goes to the other role only. With every role applied: "<App> added" with OK alone, nothing to apply.
 - Rename the install folder, Check now: Folder gone with Find the app again. It opens page 2 with "may have moved" and the old folder prefilled. Give the new one: "already a link". Add, Not now: the row is Linked at the new folder.
+- Install folder on the plan page: add the portable test app, then Remove it on the Apps page and add it again: the plan opens with the stored Install folder filled in. Copy the folder, type the copy's path and press Use this folder: the plan lists the copy's save folder, and Add records it. Check the field is absent on the plan of an install that does not use `{install_dir}`.
 
 ### Add a folder by hand
 

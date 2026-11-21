@@ -530,6 +530,9 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 Page = AddAppPage.Plan,
                 Title = $"Add {name}",
                 Found = found is null ? $"Install: {plan.Install}." : $"Install: {plan.Install}, found at {found}.",
+                // The install folder stays editable: the one stored or given is shown, so a copied or moved install can be
+                // pointed at (the stored folder may still exist, which is why Look again never came up).
+                Fields = FieldsFor([install], definition, request).Where(f => f.Field == LocationField.InstallFolder).ToList(),
                 Roles = roles,
                 Quirks = plan.Quirks,
                 Plan = plan,

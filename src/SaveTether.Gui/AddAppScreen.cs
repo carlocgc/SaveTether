@@ -571,6 +571,22 @@ internal sealed class AddAppScreen : UserControl, IScreen
             yield return new TextBlock { Text = cloud, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 };
         }
 
+        foreach (var (field, value) in view.Fields)
+        {
+            var (locationBox, locationRow) = PathField(value ?? string.Empty, AddAppFlow.FieldLabel(field));
+            yield return new TextBlock { Text = AddAppFlow.FieldLabel(field), FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
+            yield return locationRow;
+            var change = new Button { Content = "Use this folder" };
+            var locationField = field;
+            change.Click += (_, _) =>
+            {
+                // Read here, on the UI thread: a control cannot be read from the planning thread.
+                var typed = locationBox.Text;
+                _ = PlanAsync(() => _flow.SetLocation(locationField, typed));
+            };
+            yield return change;
+        }
+
         yield return new TextBlock { Text = "Folders to share", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
         foreach (var role in view.Roles)
         {

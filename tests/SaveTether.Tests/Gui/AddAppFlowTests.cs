@@ -256,6 +256,30 @@ public class AddAppFlowTests
     }
 
     [Fact]
+    public void A_plan_for_a_portable_install_keeps_its_folder_editable_and_a_copied_install_can_be_chosen()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var first = Path.Combine(deck.Home, "first");
+        var copy = Path.Combine(deck.Home, "copy");
+        CliDevice.Write(first, "app.cfg", "config");
+        CliDevice.Write(copy, "app.cfg", "config");
+
+        // The folder is found, so the page goes straight to the plan: the field is still there, filled in.
+        Assert.Equal(AddAppPage.NeedsLocation, flow.Start("testapp").Page);
+        var view = flow.SetLocation(LocationField.InstallFolder, first);
+        Assert.Equal(AddAppPage.Plan, view.Page);
+        Assert.Equal([(LocationField.InstallFolder, (string?)first)], view.Fields);
+
+        // The copy is given, though the first still exists: the plan is made again at the copy.
+        view = flow.SetLocation(LocationField.InstallFolder, copy);
+        Assert.Equal(AddAppPage.Plan, view.Page);
+        Assert.Equal(Path.Combine(copy, "saves"), view.Plan!.Roles.Single().Source);
+        Assert.Equal([(LocationField.InstallFolder, (string?)copy)], view.Fields);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void Not_found_offers_only_the_fields_that_would_help_and_a_relative_path_is_refused()
     {
         using var sandbox = new Sandbox();
