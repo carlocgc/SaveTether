@@ -288,7 +288,9 @@ public class AppsPageTests
         var text = AppsPage.DeleteText("PPSSPP savedata", 3, 5 * 1024 * 1024);
 
         Assert.Contains("3 files, 5 MiB", text, StringComparison.Ordinal);
-        Assert.Contains("reaches every device", text, StringComparison.Ordinal);
+        Assert.Contains("every device's sync folder", text, StringComparison.Ordinal);
+        Assert.Contains("not touched", text, StringComparison.Ordinal);
+        Assert.Contains("would be lost", text, StringComparison.Ordinal);
         Assert.Contains("backed up on this device first", text, StringComparison.Ordinal);
         Assert.Contains("1 file,", AppsPage.DeleteText("PPSSPP savedata", 1, 10), StringComparison.Ordinal);
         Assert.DoesNotContain("backed up", AppsPage.DeleteText("PPSSPP savedata", 0, 0), StringComparison.Ordinal);

@@ -105,10 +105,10 @@ internal static class CliApp
           savetether map remove <id>
               Remove this device's save folder for a mapping. Other devices keep theirs.
           savetether map delete <id> [--confirm-delete]
-              Delete a mapping no device uses, from the shared folder, for every device: its shared saves,
-              its record and its seed markers. The shared saves are backed up on this device first. It cannot
-              be undone from the share, so it asks first, or needs --confirm-delete. Refused while any device
-              has a folder set for it.
+              Delete a mapping no device uses from the sync folder: its shared copy, its record and its seed
+              markers, on every device's sync folder. Each device's own save folders and backups are not
+              touched. The shared copy is backed up on this device first. It cannot be undone from the share,
+              so it asks first, or needs --confirm-delete. Refused while any device has a folder set for it.
 
           savetether app add <app> [--install <id>] [--role <id>]... [--install-dir <path>]
                                    [--sd-card <path>] [--wine-prefix <path>] [--dry-run]
@@ -344,12 +344,12 @@ internal static class CliApp
                     : "its record (the shared folder is already gone)";
                 if (!CanAsk)
                 {
-                    return Failed(ExitRefused, $"Deleting '{id}' removes {what} from the shared folder, on every device. Add --confirm-delete to go ahead.");
+                    return Failed(ExitRefused, $"Deleting '{id}' removes {what} from the sync folder, on every device. Each device's own save folders and backups are not touched. Add --confirm-delete to go ahead.");
                 }
 
                 var question =
-                    $"Delete '{id}' from the shared folder? This removes {what}, and the deletion reaches every device through the sync tool." +
-                    "\nThe shared saves are backed up on this device first.";
+                    $"Delete '{id}' from the shared folder? This removes {what}, and the sync tool carries the deletion to every device's sync folder. Each device's own save folders and backups are not touched." +
+                    "\nThe shared copy is backed up on this device first.";
                 if (!Confirm(question))
                 {
                     return Failed(ExitRefused, "Cancelled. Nothing was deleted.");

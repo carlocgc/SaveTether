@@ -34,7 +34,7 @@ public enum RowAction
     Remove,
 
     /// <summary>
-    /// "map delete": a mapping no device uses is deleted from the shared folder, saves and record, for every device. Shown as its own
+    /// "map delete": a mapping no device uses is deleted from the shared folder (its shared copy and its record, on every device's sync folder). Shown as its own
     /// red button, on a "Not on this device" row that says no device has a folder set for it.
     /// </summary>
     Delete,
@@ -164,15 +164,21 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
 
     public static string DeleteTitle(string role) => $"Delete {role} from the shared folder?";
 
-    /// <summary>Delete's confirmation: what goes, for every device, and the backup taken first.</summary>
+    /// <summary>
+    /// Delete's confirmation: what goes (the shared copy and the record, from the sync folder on every device), what stays (each device's
+    /// own save folder and backups), the backup taken first, and the one case that can still lose saves.
+    /// </summary>
     public static string DeleteText(string role, int files, long bytes) =>
-        $"No device has a folder set for {role}, so nothing is linked to it. Deleting removes its record and " +
+        $"No device has a folder set for {role}, so nothing is linked to it, and a device that used it keeps its own save folder. " +
+        "Deleting removes its record and " +
         (files == 0
             ? "its shared folder (it holds no files)"
-            : $"its shared saves ({files:N0} file{(files == 1 ? string.Empty : "s")}, {FormatBytes(bytes)})") +
-        " from the sync folder, and the deletion reaches every device through the sync tool.\n\n" +
-        (files == 0 ? string.Empty : "The shared saves are backed up on this device first: Backups shows the copy as \"before deleting\".\n\n") +
-        "If a device linked it recently and its file has not synced here yet, wait for the sync tool to catch up before you go on.";
+            : $"its shared copy ({files:N0} file{(files == 1 ? string.Empty : "s")}, {FormatBytes(bytes)})") +
+        " from the sync folder, and the sync tool carries that deletion to every device's sync folder. " +
+        "The save folders on your devices, and their backups, are not touched.\n\n" +
+        (files == 0 ? string.Empty : "The shared copy is backed up on this device first: Backups shows it as \"before deleting\".\n\n") +
+        "If a device linked it recently and its file has not synced here yet, that device's saves are the shared copy and would be lost: " +
+        "wait for the sync tool to catch up before you go on.";
 
     /// <summary>A size as people read it: 3.4 MiB.</summary>
     public static string FormatBytes(long bytes)
