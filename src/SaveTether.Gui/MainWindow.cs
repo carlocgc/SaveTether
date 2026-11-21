@@ -358,7 +358,7 @@ internal sealed class MainWindow : Window
         // extra button, such as Delete, does not move the sentence of the rows without one.
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,3*,0,2*" : "Auto,150,170,*")
+            ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,2*,0,3*" : "Auto,150,170,*")
             {
                 new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowAction" },
                 new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowMore" },
