@@ -11,6 +11,9 @@ name: Update imported definitions
 # when GitHub shows that prompt, then merge once the checks pass.
 
 on:
+  # TEMPORARY, remove before merge: test run from this branch.
+  push:
+    branches: [phase-3.5-t7-monthly-update]
   schedule:
     - cron: '0 6 1 * *'
   workflow_dispatch:
