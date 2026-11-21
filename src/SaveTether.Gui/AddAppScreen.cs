@@ -531,7 +531,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
                 if (fields.Count > 0)
                 {
-                    var look = new Button { Content = "Look again", IsDefault = true };
+                    var look = new Button { Content = "Use folder", IsDefault = true };
                     look.Click += (_, _) =>
                     {
                         // Read here, on the UI thread: a control cannot be read from the planning thread (found on the Deck).
