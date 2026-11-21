@@ -11,7 +11,12 @@ namespace SaveTether.Core.Operations;
 /// <param name="Files">Files in the shared folder.</param>
 /// <param name="Bytes">Their total size.</param>
 /// <param name="Backup">Set once the deletion ran: the verified backup taken first, or null when the folder held no files.</param>
-public sealed record MappingDeletion(string MappingId, string TargetFolder, bool TargetExists, int Files, long Bytes, BackupInfo? Backup = null);
+/// <param name="StagingInShare">
+/// True when there is no place beside the sync folder on the same drive to set files aside, so they are set aside inside the share's
+/// own metadata folder, where a sync tool can see them for a moment. Said before anything is changed.
+/// </param>
+public sealed record MappingDeletion(
+    string MappingId, string TargetFolder, bool TargetExists, int Files, long Bytes, BackupInfo? Backup = null, bool StagingInShare = false);
 
 /// <summary>
 /// A <c>map delete</c> that stopped after it had started removing the shared copy, so part of it is gone: the files the backup
@@ -50,8 +55,14 @@ public sealed class MappingDeletionIncompleteException : IOException
 
 public sealed partial class Workspace
 {
+    private const string StagingNote = "backup.json";
+    private const string StagingFiles = "files";
+
     /// <summary>Test seam: called with the stage the deletion is at, so a test can change the share the way a sync tool would.</summary>
     internal Action<string>? DeletionSeam { get; set; }
+
+    /// <summary>Test seam: false makes the delete set files aside inside the share's metadata, as it must when there is no place beside it.</summary>
+    internal bool StageOutsideShare { get; set; } = true;
 
     /// <summary>
     /// What <see cref="DeleteMapping"/> would remove, after the same checks. Reads only. Refuses (a <see cref="StoreException"/>,
@@ -60,44 +71,54 @@ public sealed partial class Workspace
     public MappingDeletion DescribeMappingDeletion(string mappingId)
     {
         var target = CheckMappingUnused(mappingId);
+        var inShare = OutsideStagingBase() is null;
         if (SafeFs.Probe(target) == EntryKind.Missing)
         {
-            return new MappingDeletion(mappingId, target, TargetExists: false, Files: 0, Bytes: 0);
+            return new MappingDeletion(mappingId, target, TargetExists: false, Files: 0, Bytes: 0, StagingInShare: inShare);
         }
 
         var files = SafeFs.EnumerateTree(target).Where(e => e.Kind == EntryKind.File).ToList();
-        return new MappingDeletion(mappingId, target, TargetExists: true, files.Count, files.Sum(f => f.Length));
+        return new MappingDeletion(mappingId, target, TargetExists: true, files.Count, files.Sum(f => f.Length), StagingInShare: inShare);
     }
 
     /// <summary>
     /// "map delete" (design 5.3, invariant 2's third exception): removes a mapping no device uses, from the shared folder, for every
     /// device. The shared folder is backed up on this device first and the backup verified. Then, for each file the backup holds, the
-    /// file is moved aside in one rename, checked against the backup's size and hash, and deleted only if it matches; a file that
-    /// changed in the meantime is put back (or, if a sync tool has already put another file at its path, kept aside for recovery),
-    /// and a file that arrived after the backup is not touched. Then the folders left empty, the app's own folder if it is empty,
-    /// the seed markers and the mapping file. Anything left stays, and the record with it: the run says so
-    /// (<see cref="MappingDeletionIncompleteException"/>) and can be run again, which first settles anything an earlier run left aside.
-    /// The caller holds the operation lock and has the owner's confirmation.
+    /// file is moved aside in one rename (to a folder beside the sync folder, outside what a sync tool watches, when that is on the
+    /// same drive), checked against the backup's size and hash, and deleted only if it matches; a file that changed in the meantime
+    /// is put back (or, if a sync tool has already put another file at its path, kept aside for recovery), and a file that arrived
+    /// after the backup is not touched. Then the folders left empty, the app's own folder if it is empty, the seed markers and the
+    /// mapping file. Anything left stays, and the record with it: the run says so (<see cref="MappingDeletionIncompleteException"/>)
+    /// and can be run again, which first settles anything an earlier run left aside. The caller holds the operation lock and has
+    /// the owner's confirmation.
     /// </summary>
     public MappingDeletion DeleteMapping(string mappingId)
     {
         var described = DescribeMappingDeletion(mappingId);
         var below = Shared.DataRoot;
-        var stageFolder = Path.Combine(Shared.MetaRoot, SharedStore.DeletingFolder, mappingId);
+        var outside = OutsideStagingBase();
+        if (outside is not null && !SafeFs.CanWriteIn(outside))
+        {
+            outside = null;
+        }
+
+        var stageFolder = outside is not null
+            ? Path.Combine(outside, mappingId)
+            : Path.Combine(Shared.MetaRoot, SharedStore.DeletingFolder, mappingId);
         BackupInfo? backup = null;
         var started = false;
         try
         {
             // What an earlier run set aside and did not finish with is dealt with first, from the backup it names. Settling can put a
             // changed file back, so whether the shared folder is there is looked at after it.
-            var carried = SettleInterrupted(stageFolder, described.TargetFolder, below);
-            if (carried > 0)
+            var carried = SettleInterrupted(mappingId, described.TargetFolder, below);
+            if (carried.Kept > 0)
             {
                 started = true;
                 throw new MappingDeletionIncompleteException(
-                    $"'{mappingId}' was deleted only in part: {carried} file(s) an earlier run set aside could not be put back or deleted, " +
-                    $"and are kept in '{stageFolder}'. Look at them, then run 'map delete {mappingId}' again.",
-                    null, carried);
+                    $"'{mappingId}' was deleted only in part: {carried.Kept} file(s) an earlier run set aside could not be put back or deleted, " +
+                    $"and are kept in '{carried.Where}'. Look at them, then run 'map delete {mappingId}' again.",
+                    null, carried.Kept);
             }
 
             if (SafeFs.Probe(described.TargetFolder) == EntryKind.Directory)
@@ -151,21 +172,70 @@ public sealed partial class Workspace
                 $"Run 'map delete {mappingId}' again to finish, once what stopped it is dealt with.",
                 backup, 0, e);
         }
+        finally
+        {
+            TidyOutside(outside, mappingId, below);
+        }
 
         return described with { Backup = backup };
     }
 
+    /// <summary>Removes the empty folders a delete made beside the sync folder, leaving anything that still holds a file.</summary>
+    private static void TidyOutside(string? outside, string mappingId, string below)
+    {
+        if (outside is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (SafeFs.RemoveEmptyStagedFolder(below, Path.Combine(outside, mappingId))
+                && SafeFs.RemoveEmptyStagedFolder(below, outside)
+                && Path.GetDirectoryName(outside) is { } top && Path.GetFileName(top) == ".savetether-deleting")
+            {
+                SafeFs.RemoveEmptyStagedFolder(below, top);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Tidying up is best effort: an empty folder left beside the sync folder harms nothing.
+        }
+    }
+
+    /// <summary>
+    /// The folder beside the sync folder where a delete sets files aside, when that is outside what a sync tool watches, on the same drive
+    /// (so a move into it is one rename) and can be made; null otherwise. Reads only: nothing is created here.
+    /// </summary>
+    private string? OutsideStagingBase()
+    {
+        if (!StageOutsideShare)
+        {
+            return null;
+        }
+
+        var syncRoot = PathRules.Normalize(Shared.SyncRoot);
+        var beside = Path.GetDirectoryName(syncRoot);
+        if (beside is null || SafeFs.Probe(beside) != EntryKind.Directory || !PathRules.OnSameVolume(beside, Shared.DataRoot))
+        {
+            return null;
+        }
+
+        return Path.Combine(beside, ".savetether-deleting", Path.GetFileName(syncRoot));
+    }
+
     /// <summary>
     /// Deletes the files a backup holds from the shared folder, one at a time: the file is moved to <paramref name="operation"/> (a
-    /// folder of the tool's own, below the share's metadata, so on the same filesystem and a single rename), then checked against
-    /// the backup's size and hash and deleted only if it matches. A save a sync tool writes at any moment is therefore either
-    /// moved with the file (and put back, since it no longer matches) or lands afterwards at the original path (and is left).
-    /// Then every folder that is empty by then, deepest first. Answers the files still in the shared folder, and the changed
-    /// copies kept aside for recovery.
+    /// staging folder of the tool's own: beside the sync folder when it can be, else below the share's metadata; either way on the same
+    /// filesystem, so a single rename), then checked against the backup's size and hash and deleted only if it matches. A save a sync
+    /// tool writes at any moment is therefore either moved with the file (and put back, since it no longer matches) or lands afterwards
+    /// at the original path (and is left). Then every folder that is empty by then, deepest first. Answers the files still in the
+    /// shared folder, and the changed copies kept aside for recovery.
     /// </summary>
     private (int Remaining, int Kept) RemoveBackedUp(string target, BackupManifest? manifest, string below, string operation, string? backupId)
     {
         var kept = 0;
+        var noted = false;
         foreach (var file in manifest?.Files ?? [])
         {
             var path = Path.Combine([target, .. file.Path.Split('/')]);
@@ -174,14 +244,16 @@ public sealed partial class Workspace
                 continue;
             }
 
-            // The name of the backup goes first, so an interrupted run can be settled from it.
-            if (SafeFs.Probe(Path.Combine(operation, "backup")) != EntryKind.File)
+            // The name of the backup goes first, in its own file beside the folder of set-aside files, so a save named "backup.json"
+            // cannot be mistaken for it, and an interrupted run can be settled from it.
+            if (!noted)
             {
                 Directory.CreateDirectory(operation);
-                SafeFs.WriteFileAtomically(Path.Combine(operation, "backup"), backupId ?? string.Empty);
+                SafeFs.WriteFileAtomically(Path.Combine(operation, StagingNote), backupId ?? string.Empty);
+                noted = true;
             }
 
-            var staged = Path.Combine([operation, .. file.Path.Split('/')]);
+            var staged = Path.Combine([operation, StagingFiles, .. file.Path.Split('/')]);
             DeletionSeam?.Invoke("before-stage:" + file.Path);
             SafeFs.MoveSharedFile(below, path, staged);
             DeletionSeam?.Invoke("after-stage:" + file.Path);
@@ -228,7 +300,7 @@ public sealed partial class Workspace
             && new FileInfo(staged).Length == entry.Size
             && string.Equals(FileHasher.Sha256Hex(staged), entry.Sha256, StringComparison.Ordinal))
         {
-            SafeFs.RemoveSharedFile(below, staged);
+            SafeFs.RemoveStagedFile(below, staged);
             return true;
         }
 
@@ -242,47 +314,73 @@ public sealed partial class Workspace
     }
 
     /// <summary>
-    /// Settles what an earlier <c>map delete</c> left set aside, from the backup it recorded. Answers the files that could not be
-    /// settled (a sync tool put another file at their path), which stay where they are.
+    /// Settles what an earlier <c>map delete</c> left set aside, beside the sync folder or below the share's metadata, from the backup it
+    /// recorded. Answers the files that could not be settled (a sync tool put another file at their path), which stay where they are, and
+    /// where.
     /// </summary>
-    private int SettleInterrupted(string stageFolder, string target, string below)
+    private (int Kept, string Where) SettleInterrupted(string mappingId, string target, string below)
     {
-        if (SafeFs.Probe(stageFolder) != EntryKind.Directory)
-        {
-            return 0;
-        }
-
         var kept = 0;
-        foreach (var operation in Directory.EnumerateDirectories(stageFolder))
+        var where = string.Empty;
+        foreach (var stageFolder in StagingFolders(mappingId))
         {
-            var backupFile = Path.Combine(operation, "backup");
-            var backupId = SafeFs.Probe(backupFile) == EntryKind.File ? File.ReadAllText(backupFile).Trim() : string.Empty;
-            var manifest = backupId.Length == 0 ? null : OpenBackups(ReadOwnDevice()).ReadManifest(backupId);
-            foreach (var entry in SafeFs.EnumerateTree(operation).Where(e => e.Kind == EntryKind.File && e.RelativePath != "backup").ToList())
+            if (SafeFs.Probe(stageFolder) != EntryKind.Directory)
             {
-                var staged = Path.Combine([operation, .. entry.RelativePath.Split('/')]);
-                var path = Path.Combine([target, .. entry.RelativePath.Split('/')]);
-                if (!SettleStaged(staged, path, manifest?.Files.FirstOrDefault(f => f.Path == entry.RelativePath), below))
+                continue;
+            }
+
+            foreach (var operation in Directory.EnumerateDirectories(stageFolder))
+            {
+                var note = Path.Combine(operation, StagingNote);
+                var backupId = SafeFs.Probe(note) == EntryKind.File ? File.ReadAllText(note).Trim() : string.Empty;
+                var manifest = backupId.Length == 0 ? null : OpenBackups(ReadOwnDevice()).ReadManifest(backupId);
+                var files = Path.Combine(operation, StagingFiles);
+                var left = 0;
+                if (SafeFs.Probe(files) == EntryKind.Directory)
                 {
-                    kept++;
+                    foreach (var entry in SafeFs.EnumerateTree(files).Where(e => e.Kind == EntryKind.File).ToList())
+                    {
+                        var staged = Path.Combine([files, .. entry.RelativePath.Split('/')]);
+                        var path = Path.Combine([target, .. entry.RelativePath.Split('/')]);
+                        if (!SettleStaged(staged, path, manifest?.Files.FirstOrDefault(f => f.Path == entry.RelativePath), below))
+                        {
+                            left++;
+                        }
+                    }
+                }
+
+                if (left == 0)
+                {
+                    ClearStaging(operation, below);
+                }
+                else
+                {
+                    kept += left;
+                    where = operation;
                 }
             }
 
             if (kept == 0)
             {
-                ClearStaging(operation, below);
+                SafeFs.RemoveEmptyStagedFolder(below, stageFolder);
             }
         }
 
-        if (kept == 0)
-        {
-            SafeFs.RemoveEmptySharedFolder(below, stageFolder);
-        }
-
-        return kept;
+        return (kept, where);
     }
 
-    /// <summary>Removes a staging folder that holds nothing but its backup note and empty folders. A folder that still holds a file stays.</summary>
+    /// <summary>The staging folders a delete of this mapping may have used: beside the sync folder, and below the share's metadata.</summary>
+    private IEnumerable<string> StagingFolders(string mappingId)
+    {
+        if (OutsideStagingBase() is { } outside)
+        {
+            yield return Path.Combine(outside, mappingId);
+        }
+
+        yield return Path.Combine(Shared.MetaRoot, SharedStore.DeletingFolder, mappingId);
+    }
+
+    /// <summary>Removes a staging folder that holds nothing but its note and empty folders. A folder that still holds a file stays.</summary>
     private static void ClearStaging(string operation, string below)
     {
         if (SafeFs.Probe(operation) != EntryKind.Directory)
@@ -297,21 +395,20 @@ public sealed partial class Workspace
             .ToList();
         foreach (var folder in folders)
         {
-            SafeFs.RemoveEmptySharedFolder(below, folder);
+            SafeFs.RemoveEmptyStagedFolder(below, folder);
         }
 
-        var note = Path.Combine(operation, "backup");
-        if (SafeFs.EnumerateTree(operation).All(e => e.RelativePath == "backup"))
+        if (SafeFs.EnumerateTree(operation).All(e => e.RelativePath == StagingNote))
         {
-            SafeFs.RemoveSharedFile(below, note);
+            SafeFs.RemoveStagedFile(below, Path.Combine(operation, StagingNote));
         }
 
-        SafeFs.RemoveEmptySharedFolder(below, operation);
+        SafeFs.RemoveEmptyStagedFolder(below, operation);
 
         // The mapping's own staging folder goes too once no operation is left in it.
         if (Path.GetDirectoryName(operation) is { } mappingFolder)
         {
-            SafeFs.RemoveEmptySharedFolder(below, mappingFolder);
+            SafeFs.RemoveEmptyStagedFolder(below, mappingFolder);
         }
     }
 

@@ -106,6 +106,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `target_exists` | boolean | False when the shared folder was already gone, which a `map delete` that stopped part way leaves; there is then no backup. |
 | `files` | number | Files the shared folder held. |
 | `bytes` | number | Their total size. |
+| `staging_in_share` | boolean | True when there was no place beside the sync folder, on the same drive, to set files aside while deleting them, so they were set aside inside the share's own metadata folder, where a sync tool can see them for a moment. False when they were set aside beside the sync folder, outside what a sync tool watches. |
 | `backup` | object or null | The verified backup of the shared folder taken on this device first, with the fields of `backups[]` above (`reason` is `pre-delete`); null when the folder held no files. |
 
 ### `app add` and `app list`

@@ -25,9 +25,9 @@ public class MappingDeletionTests
         Path.Combine(device.SyncRoot, "savetether", ".savetether", "seed", Id);
 
     /// <summary>A device whose mapping was applied and reverted, then forgotten: the shared folder still holds the saves.</summary>
-    private static CliDevice Unused(Sandbox sandbox)
+    private static CliDevice Unused(Sandbox sandbox, string name = "pc")
     {
-        var pc = new CliDevice(sandbox, "pc");
+        var pc = new CliDevice(sandbox, name);
         pc.SetUp(createRoot: true);
         pc.Save("GAME1/save.bin", "one");
         pc.Ok("apply", Id, "--copy");
@@ -185,7 +185,12 @@ public class MappingDeletionTests
         sandbox.AssertCanaryIntact();
     }
 
+    /// <summary>Where files are set aside by default: beside the sync folder, outside what a sync tool watches.</summary>
     private static string DeletingFolder(CliDevice device) =>
+        Path.Combine(Path.GetDirectoryName(device.SyncRoot)!, ".savetether-deleting", Path.GetFileName(device.SyncRoot), Id);
+
+    /// <summary>Where they are set aside when there is no place beside the sync folder: below the share's own metadata.</summary>
+    private static string DeletingFolderInShare(CliDevice device) =>
         Path.Combine(device.SyncRoot, "savetether", ".savetether", "deleting", Id);
 
     [Fact]
@@ -297,6 +302,87 @@ public class MappingDeletionTests
         Assert.False(File.Exists(MappingFile(pc)));
         Assert.Equal("one", File.ReadAllText(Path.Combine(stopped.Backup.Location, "data", "GAME1", "save.bin")));
         Assert.Null(done.Backup);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void Files_are_set_aside_outside_the_share_by_default_and_the_limit_is_said_when_that_is_not_possible()
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+        var workspace = Open(pc);
+        Assert.False(workspace.DescribeMappingDeletion(Id).StagingInShare);
+        var seen = new List<string>();
+        workspace.DeletionSeam = stage =>
+        {
+            if (stage == "after-stage:GAME1/save.bin")
+            {
+                seen.AddRange(Directory.GetFiles(DeletingFolder(pc), "*", SearchOption.AllDirectories));
+                Assert.False(Directory.Exists(DeletingFolderInShare(pc)), "nothing is set aside inside the share");
+            }
+        };
+
+        workspace.DeleteMapping(Id);
+
+        Assert.Contains(seen, f => f.EndsWith("save.bin", StringComparison.Ordinal));
+        Assert.False(Directory.Exists(Path.Combine(Path.GetDirectoryName(pc.SyncRoot)!, ".savetether-deleting")), "the folder beside the sync folder is tidied away");
+
+        // No place beside the sync folder: said before anything is changed, and the files are set aside inside the share's metadata.
+        var other = Unused(sandbox, "pc2");
+        var inShare = Open(other);
+        inShare.StageOutsideShare = false;
+        Assert.True(inShare.DescribeMappingDeletion(Id).StagingInShare);
+        var inside = new List<string>();
+        inShare.DeletionSeam = stage =>
+        {
+            if (stage == "after-stage:GAME1/save.bin")
+            {
+                inside.AddRange(Directory.GetFiles(DeletingFolderInShare(other), "*", SearchOption.AllDirectories));
+            }
+        };
+
+        inShare.DeleteMapping(Id);
+
+        Assert.Contains(inside, f => f.EndsWith("save.bin", StringComparison.Ordinal));
+        Assert.False(Directory.Exists(DeletingFolderInShare(other)));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_save_named_like_the_note_is_set_aside_deleted_and_recovered_like_any_other(bool outsideTheShare)
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+        CliDevice.Write(pc.Target, "backup.json", "a save that happens to be called backup.json");
+        CliDevice.Write(pc.Target, "files/inner.bin", "and a folder called files");
+        var workspace = Open(pc);
+        workspace.StageOutsideShare = outsideTheShare;
+        var folder = outsideTheShare ? DeletingFolder(pc) : DeletingFolderInShare(pc);
+        workspace.DeletionSeam = stage =>
+        {
+            if (stage == "after-stage:backup.json")
+            {
+                throw new IOException("the process was stopped here");
+            }
+        };
+
+        // Stopped right after the save named like the note was set aside: it is in the payload folder, and the note is untouched.
+        var stopped = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
+        var staged = Directory.GetFiles(folder, "backup.json", SearchOption.AllDirectories);
+        Assert.Equal(2, staged.Length);
+        Assert.Contains(staged, f => File.ReadAllText(f).Contains("called backup.json", StringComparison.Ordinal));
+        Assert.Contains(staged, f => File.ReadAllText(f).StartsWith(Id + "/", StringComparison.Ordinal));
+
+        // The next run settles it from the backup the note names, then deletes the rest.
+        workspace.DeletionSeam = null;
+        workspace.DeleteMapping(Id);
+
+        Assert.False(Directory.Exists(folder));
+        Assert.False(Directory.Exists(pc.Target));
+        Assert.False(File.Exists(MappingFile(pc)));
+        Assert.Equal("a save that happens to be called backup.json", File.ReadAllText(Path.Combine(stopped.Backup!.Location, "data", "backup.json")));
         sandbox.AssertCanaryIntact();
     }
 

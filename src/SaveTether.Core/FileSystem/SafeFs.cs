@@ -257,15 +257,20 @@ public sealed class SafeFs
     }
 
     /// <summary>
-    /// Moves one regular file inside the share to a new path inside it, in one rename, with the same checks as
-    /// <see cref="RemoveSharedFile"/> on both paths. Nothing is overwritten: a destination that exists is refused. The folders
-    /// the destination needs are made.
+    /// Moves one regular file in one rename, for <c>map delete</c>: out of the share to a staging folder, or back into it. The path
+    /// that is inside <paramref name="below"/> gets the checks of <see cref="RemoveSharedFile"/> (every folder from
+    /// <paramref name="below"/> down must be a real folder); the other is the tool's own staging folder, which it makes.
+    /// Nothing is overwritten: a destination that exists is refused. The folders the destination needs are made.
     /// </summary>
     public static void MoveSharedFile(string below, string from, string to)
     {
         var source = RequireAbsolute(from, nameof(from));
         var destination = RequireAbsolute(to, nameof(to));
-        RequirePlainFolders(below, source);
+        if (PathRules.IsSameOrInside(source, PathRules.Normalize(below)))
+        {
+            RequirePlainFolders(below, source);
+        }
+
         if (Probe(source) != EntryKind.File)
         {
             throw new SafeFsException($"Refusing to move '{source}': it is {Describe(Probe(source))}, not a file.");
@@ -277,8 +282,97 @@ public sealed class SafeFs
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        RequirePlainFolders(below, destination);
+        if (PathRules.IsSameOrInside(destination, PathRules.Normalize(below)))
+        {
+            RequirePlainFolders(below, destination);
+        }
+
         File.Move(source, destination);
+    }
+
+    /// <summary>
+    /// Whether a folder can be made at <paramref name="folder"/> and written in, checked by making it and a small file in it, which is
+    /// removed again. False when the system refuses. For choosing where <c>map delete</c> sets files aside.
+    /// </summary>
+    public static bool CanWriteIn(string folder)
+    {
+        var path = RequireAbsolute(folder, nameof(folder));
+        try
+        {
+            Directory.CreateDirectory(path);
+            var probe = Path.Combine(path, "probe-" + Guid.NewGuid().ToString("N"));
+            File.WriteAllText(probe, string.Empty);
+            File.Delete(probe);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Deletes a file <c>map delete</c> set aside: with the checks of <see cref="RemoveSharedFile"/> when it is inside the share,
+    /// and as a plain file when it is in the tool's staging folder outside it. A link or a folder is refused either way.
+    /// </summary>
+    public static void RemoveStagedFile(string below, string path)
+    {
+        var filePath = RequireAbsolute(path, nameof(path));
+        if (PathRules.IsSameOrInside(filePath, PathRules.Normalize(below)))
+        {
+            RemoveSharedFile(below, filePath);
+            return;
+        }
+
+        var kind = Probe(filePath);
+        if (kind == EntryKind.Missing)
+        {
+            return;
+        }
+
+        if (kind != EntryKind.File)
+        {
+            throw new SafeFsException($"Refusing to delete '{filePath}' as a file: it is {Describe(kind)}.");
+        }
+
+        ClearReadOnly(filePath, File.GetAttributes(filePath));
+        File.Delete(filePath);
+    }
+
+    /// <summary>The empty-folder removal of <see cref="RemoveEmptySharedFolder"/> for a staging folder, inside the share or outside it.</summary>
+    public static bool RemoveEmptyStagedFolder(string below, string path)
+    {
+        var folder = RequireAbsolute(path, nameof(path));
+        if (PathRules.IsSameOrInside(folder, PathRules.Normalize(below)))
+        {
+            return RemoveEmptySharedFolder(below, folder);
+        }
+
+        var kind = Probe(folder);
+        if (kind == EntryKind.Missing)
+        {
+            return true;
+        }
+
+        if (kind != EntryKind.Directory)
+        {
+            throw new SafeFsException($"Refusing to remove '{folder}' as a folder: it is {Describe(kind)}.");
+        }
+
+        if (Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            return false;
+        }
+
+        try
+        {
+            Directory.Delete(folder, recursive: false);
+            return true;
+        }
+        catch (IOException) when (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            return false;
+        }
     }
 
     /// <summary>
