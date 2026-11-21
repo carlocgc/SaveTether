@@ -185,16 +185,16 @@ public class MappingDeletionTests
         sandbox.AssertCanaryIntact();
     }
 
-    /// <summary>Where files are set aside by default: beside the sync folder, outside what a sync tool watches.</summary>
-    private static string DeletingFolder(CliDevice device) =>
+    /// <summary>Where an earlier build set files aside: beside the sync folder.</summary>
+    private static string LegacyFolderBeside(CliDevice device) =>
         Path.Combine(Path.GetDirectoryName(device.SyncRoot)!, ".savetether-deleting", Path.GetFileName(device.SyncRoot), Id);
 
-    /// <summary>Where they are set aside when there is no place beside the sync folder: below the share's own metadata.</summary>
-    private static string DeletingFolderInShare(CliDevice device) =>
+    /// <summary>Where an earlier build set files aside when it had no place beside the sync folder: below the share's metadata.</summary>
+    private static string LegacyFolderInShare(CliDevice device) =>
         Path.Combine(device.SyncRoot, "savetether", ".savetether", "deleting", Id);
 
     [Fact]
-    public void A_save_replaced_after_the_backup_and_before_it_is_set_aside_is_put_back_and_both_versions_survive()
+    public void A_save_that_changed_after_the_backup_is_left_with_the_record_and_both_versions_survive()
     {
         using var sandbox = new Sandbox();
         var pc = Unused(sandbox);
@@ -202,7 +202,7 @@ public class MappingDeletionTests
         var save = Path.Combine(pc.Target, "GAME1", "save.bin");
         workspace.DeletionSeam = stage =>
         {
-            if (stage == "before-stage:GAME1/save.bin")
+            if (stage == "after-backup")
             {
                 File.WriteAllText(save, "the newer save a sync tool just wrote");
             }
@@ -210,232 +210,112 @@ public class MappingDeletionTests
 
         var partial = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
 
-        // The newer version is back where it was; the backup has the old one; the record stays; nothing is left aside.
+        // The newer version is where it was; the backup has the old one; the record stays.
         Assert.Equal("the newer save a sync tool just wrote", File.ReadAllText(save));
         Assert.Equal("one", File.ReadAllText(Path.Combine(partial.Backup!.Location, "data", "GAME1", "save.bin")));
         Assert.Equal(1, partial.Left);
         Assert.True(File.Exists(MappingFile(pc)));
-        Assert.False(Directory.Exists(DeletingFolder(pc)));
+        Assert.Contains("only in part", partial.Message, StringComparison.Ordinal);
         sandbox.AssertCanaryIntact();
     }
 
     [Fact]
-    public void A_changed_save_whose_path_a_sync_tool_has_refilled_is_kept_aside_and_both_versions_survive()
+    public void Delete_works_with_no_place_beside_the_sync_folder_and_leaves_a_usable_backup()
     {
         using var sandbox = new Sandbox();
         var pc = Unused(sandbox);
+
+        // A file where a staging folder would have gone: nothing is set aside any more, so it makes no difference.
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(pc.SyncRoot)!, ".savetether-deleting"), "in the way");
         var workspace = Open(pc);
-        var save = Path.Combine(pc.Target, "GAME1", "save.bin");
-        workspace.DeletionSeam = stage =>
-        {
-            if (stage == "before-stage:GAME1/save.bin")
-            {
-                File.WriteAllText(save, "the newer save");
-            }
-            else if (stage == "after-stage:GAME1/save.bin")
-            {
-                // The sync tool delivers yet another file at the original path before the changed one can be put back.
-                File.WriteAllText(save, "delivered at the original path");
-            }
-        };
 
-        var partial = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
-
-        Assert.Equal("delivered at the original path", File.ReadAllText(save));
-        var kept = Directory.GetFiles(DeletingFolder(pc), "save.bin", SearchOption.AllDirectories).Single();
-        Assert.Equal("the newer save", File.ReadAllText(kept));
-        Assert.Contains(DeletingFolder(pc), partial.Message, StringComparison.Ordinal);
-        Assert.Equal(2, partial.Left);
-        Assert.True(File.Exists(MappingFile(pc)), "the record stays while something is kept");
-        sandbox.AssertCanaryIntact();
-    }
-
-    [Fact]
-    public void A_save_recreated_at_the_original_path_after_the_move_is_left_alone_and_the_matching_copy_is_deleted()
-    {
-        using var sandbox = new Sandbox();
-        var pc = Unused(sandbox);
-        var workspace = Open(pc);
-        var save = Path.Combine(pc.Target, "GAME1", "save.bin");
-        workspace.DeletionSeam = stage =>
-        {
-            if (stage == "after-stage:GAME1/save.bin")
-            {
-                File.WriteAllText(save, "recreated by the sync tool");
-            }
-        };
-
-        var partial = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
-
-        Assert.Equal("recreated by the sync tool", File.ReadAllText(save));
-        Assert.Equal(1, partial.Left);
-        Assert.False(Directory.Exists(DeletingFolder(pc)), "the copy that matched the backup was deleted");
-        Assert.True(File.Exists(MappingFile(pc)));
-        sandbox.AssertCanaryIntact();
-    }
-
-    [Fact]
-    public void A_run_stopped_after_a_file_was_set_aside_is_settled_by_the_next_run_from_its_backup()
-    {
-        using var sandbox = new Sandbox();
-        var pc = Unused(sandbox);
-        var workspace = Open(pc);
-        workspace.DeletionSeam = stage =>
-        {
-            if (stage == "after-stage:GAME1/save.bin")
-            {
-                throw new IOException("the process was stopped here");
-            }
-        };
-
-        var stopped = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
-
-        Assert.NotNull(stopped.Backup);
-        Assert.Single(Directory.GetFiles(DeletingFolder(pc), "save.bin", SearchOption.AllDirectories));
-        Assert.True(File.Exists(MappingFile(pc)));
-
-        workspace.DeletionSeam = null;
         var done = workspace.DeleteMapping(Id);
 
-        Assert.False(Directory.Exists(DeletingFolder(pc)));
+        var backup = Assert.IsType<BackupInfo>(done.Backup);
+        Assert.Equal("one", File.ReadAllText(Path.Combine(backup.Location, "data", "GAME1", "save.bin")));
+        Assert.True(new BackupStore(pc.BackupRoot, pc.SyncRoot).Verify(backup.Id).IsValid);
         Assert.False(Directory.Exists(pc.Target));
         Assert.False(File.Exists(MappingFile(pc)));
-        Assert.Equal("one", File.ReadAllText(Path.Combine(stopped.Backup.Location, "data", "GAME1", "save.bin")));
+        Assert.False(Directory.Exists(SeedFolder(pc)));
+        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(pc.SyncRoot)!, ".savetether-deleting")), "what was there is untouched");
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_backup_that_cannot_be_taken_deletes_nothing()
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+        var workspace = Open(pc);
+        var save = Path.Combine(pc.Target, "GAME1", "save.bin");
+
+        // The folder for this mapping's backups is a file, so no backup can be made.
+        var folder = Path.Combine(pc.BackupRoot, Id);
+        Directory.Delete(folder, recursive: true);
+        File.WriteAllText(folder, "in the way");
+
+        Assert.ThrowsAny<IOException>(() => workspace.DeleteMapping(Id));
+
+        Assert.Equal("one", File.ReadAllText(save));
+        Assert.True(Directory.Exists(SeedFolder(pc)));
+        Assert.True(File.Exists(MappingFile(pc)));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Files_an_earlier_build_set_aside_are_still_settled_from_the_backup_they_name(bool besideTheSyncFolder)
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+        var workspace = Open(pc);
+
+        // The earlier build moved the save aside and was stopped before it deleted it. Its note names a backup that holds the save.
+        var folder = besideTheSyncFolder ? LegacyFolderBeside(pc) : LegacyFolderInShare(pc);
+        var operation = Path.Combine(folder, "20261121T000000000");
+        var staged = Path.Combine(operation, "files", "GAME1", "save.bin");
+        Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
+        File.Move(Path.Combine(pc.Target, "GAME1", "save.bin"), staged);
+        File.WriteAllText(Path.Combine(operation, "backup.json"), workspace.ListBackups(Id)[0].Id);
+
+        var done = workspace.DeleteMapping(Id);
+
+        Assert.False(Directory.Exists(folder), "what was set aside is settled and its folder removed");
+        Assert.False(Directory.Exists(pc.Target));
+        Assert.False(File.Exists(MappingFile(pc)));
         Assert.Null(done.Backup);
         sandbox.AssertCanaryIntact();
     }
 
     [Fact]
-    public void Files_are_set_aside_beside_the_sync_folder_and_never_inside_the_share()
+    public void A_set_aside_file_that_changed_is_put_back_and_one_whose_place_is_taken_is_kept_and_reported()
     {
         using var sandbox = new Sandbox();
         var pc = Unused(sandbox);
-        var workspace = Open(pc);
-        var seen = new List<string>();
-        workspace.DeletionSeam = stage =>
-        {
-            if (stage == "after-stage:GAME1/save.bin")
-            {
-                seen.AddRange(Directory.GetFiles(DeletingFolder(pc), "*", SearchOption.AllDirectories));
-                Assert.False(Directory.Exists(DeletingFolderInShare(pc)), "nothing is set aside inside the share");
-            }
-        };
-
-        workspace.DeleteMapping(Id);
-
-        Assert.Contains(seen, f => f.EndsWith("save.bin", StringComparison.Ordinal));
-        Assert.False(Directory.Exists(Path.Combine(Path.GetDirectoryName(pc.SyncRoot)!, ".savetether-deleting")), "the folder beside the sync folder is tidied away");
-        sandbox.AssertCanaryIntact();
-    }
-
-    [Fact]
-    public void With_no_usable_place_to_set_files_aside_nothing_is_deleted_and_the_app_and_the_command_line_say_why()
-    {
-        using var sandbox = new Sandbox();
-        var pc = Unused(sandbox);
-
-        // A file where the staging folder would go: nothing can be set aside beside the sync folder.
-        var blocker = Path.Combine(Path.GetDirectoryName(pc.SyncRoot)!, ".savetether-deleting");
-        File.WriteAllText(blocker, "in the way");
         var workspace = Open(pc);
         var save = Path.Combine(pc.Target, "GAME1", "save.bin");
+        var operation = Path.Combine(LegacyFolderBeside(pc), "20261121T000000000");
+        var staged = Path.Combine(operation, "files", "GAME1", "save.bin");
+        Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
+        File.Move(save, staged);
+        File.WriteAllText(staged, "a newer save than the backup has");
+        File.WriteAllText(Path.Combine(operation, "backup.json"), workspace.ListBackups(Id)[0].Id);
 
-        var described = Assert.Throws<StoreException>(() => workspace.DescribeMappingDeletion(Id));
-        var refused = Assert.Throws<StoreException>(() => workspace.DeleteMapping(Id));
-
-        Assert.Equal(described.Message, refused.Message);
-        Assert.Contains("Nothing was deleted", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("same drive", refused.Message, StringComparison.Ordinal);
-        Assert.Contains(".savetether-deleting", refused.Message, StringComparison.Ordinal);
-        AssertUntouched(pc, workspace, save);
-
-        // The command line says the same, with the flag that skips the question.
-        var cli = pc.Expect(CliApp.ExitRefused, "map", "delete", Id, "--confirm-delete");
-        Assert.Contains("Nothing was deleted", cli.Err, StringComparison.Ordinal);
-        Assert.DoesNotContain("Deleted '", cli.Out, StringComparison.Ordinal);
-        AssertUntouched(pc, workspace, save);
-
-        // And with the seam that stands for a drive or permission that cannot be used.
-        File.Delete(blocker);
-        workspace.StagingUnavailable = true;
-        Assert.Equal(refused.Message, Assert.Throws<StoreException>(() => workspace.DeleteMapping(Id)).Message);
-        AssertUntouched(pc, workspace, save);
-        sandbox.AssertCanaryIntact();
-    }
-
-    private static void AssertUntouched(CliDevice pc, Workspace workspace, string save)
-    {
-        Assert.Equal("one", File.ReadAllText(save));
-        Assert.True(Directory.Exists(SeedFolder(pc)));
+        // Its place is taken: the set-aside copy is kept and the delete stops, with the record.
+        File.WriteAllText(save, "delivered at the original path");
+        var kept = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
+        Assert.Contains(operation, kept.Message, StringComparison.Ordinal);
+        Assert.Equal("a newer save than the backup has", File.ReadAllText(staged));
+        Assert.Equal("delivered at the original path", File.ReadAllText(save));
         Assert.True(File.Exists(MappingFile(pc)));
-        Assert.False(Directory.Exists(DeletingFolderInShare(pc)), "no staging inside the share");
-        Assert.False(Directory.Exists(DeletingFolder(pc)), "none beside it either");
-        Assert.DoesNotContain(workspace.ListBackups(Id), b => b.Reason == BackupReason.PreDelete);
-    }
 
-    [Fact]
-    public void Files_an_earlier_run_set_aside_are_still_settled_when_no_place_is_usable_for_new_ones()
-    {
-        using var sandbox = new Sandbox();
-        var pc = Unused(sandbox);
-        var workspace = Open(pc);
-        workspace.DeletionSeam = stage =>
-        {
-            if (stage == "after-stage:GAME1/save.bin")
-            {
-                throw new IOException("the process was stopped here");
-            }
-        };
-        var stopped = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
-
-        // What an earlier version left below the share's metadata is still there to settle: put it where such a run would have.
-        var legacy = DeletingFolderInShare(pc);
-        Directory.CreateDirectory(Path.GetDirectoryName(legacy)!);
-        Directory.Move(DeletingFolder(pc), legacy);
-        workspace.DeletionSeam = null;
-        workspace.StagingUnavailable = true;
-
-        workspace.DeleteMapping(Id);
-
-        Assert.False(Directory.Exists(legacy));
-        Assert.False(Directory.Exists(pc.Target));
+        // Its place is free: it is put back, and then the run deletes as usual, backing it up first.
+        File.Delete(save);
+        var done = workspace.DeleteMapping(Id);
+        Assert.Equal("a newer save than the backup has", File.ReadAllText(Path.Combine(done.Backup!.Location, "data", "GAME1", "save.bin")));
+        Assert.False(Directory.Exists(LegacyFolderBeside(pc)));
         Assert.False(File.Exists(MappingFile(pc)));
-        Assert.Equal("one", File.ReadAllText(Path.Combine(stopped.Backup!.Location, "data", "GAME1", "save.bin")));
-        sandbox.AssertCanaryIntact();
-    }
-
-    [Fact]
-    public void A_save_named_like_the_note_is_set_aside_deleted_and_recovered_like_any_other()
-    {
-        using var sandbox = new Sandbox();
-        var pc = Unused(sandbox);
-        CliDevice.Write(pc.Target, "backup.json", "a save that happens to be called backup.json");
-        CliDevice.Write(pc.Target, "files/inner.bin", "and a folder called files");
-        var workspace = Open(pc);
-        var folder = DeletingFolder(pc);
-        workspace.DeletionSeam = stage =>
-        {
-            if (stage == "after-stage:backup.json")
-            {
-                throw new IOException("the process was stopped here");
-            }
-        };
-
-        // Stopped right after the save named like the note was set aside: it is in the payload folder, and the note is untouched.
-        var stopped = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
-        var staged = Directory.GetFiles(folder, "backup.json", SearchOption.AllDirectories);
-        Assert.Equal(2, staged.Length);
-        Assert.Contains(staged, f => File.ReadAllText(f).Contains("called backup.json", StringComparison.Ordinal));
-        Assert.Contains(staged, f => File.ReadAllText(f).StartsWith(Id + "/", StringComparison.Ordinal));
-
-        // The next run settles it from the backup the note names, then deletes the rest.
-        workspace.DeletionSeam = null;
-        workspace.DeleteMapping(Id);
-
-        Assert.False(Directory.Exists(folder));
-        Assert.False(Directory.Exists(pc.Target));
-        Assert.False(File.Exists(MappingFile(pc)));
-        Assert.Equal("a save that happens to be called backup.json", File.ReadAllText(Path.Combine(stopped.Backup!.Location, "data", "backup.json")));
         sandbox.AssertCanaryIntact();
     }
 

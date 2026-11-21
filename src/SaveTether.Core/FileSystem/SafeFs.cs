@@ -291,29 +291,8 @@ public sealed class SafeFs
     }
 
     /// <summary>
-    /// Whether a folder can be made at <paramref name="folder"/> and written in, checked by making it and a small file in it, which is
-    /// removed again. False when the system refuses. For choosing where <c>map delete</c> sets files aside.
-    /// </summary>
-    public static bool CanWriteIn(string folder)
-    {
-        var path = RequireAbsolute(folder, nameof(folder));
-        try
-        {
-            Directory.CreateDirectory(path);
-            var probe = Path.Combine(path, "probe-" + Guid.NewGuid().ToString("N"));
-            File.WriteAllText(probe, string.Empty);
-            File.Delete(probe);
-            return true;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Deletes a file <c>map delete</c> set aside: with the checks of <see cref="RemoveSharedFile"/> when it is inside the share,
-    /// and as a plain file when it is in the tool's staging folder outside it. A link or a folder is refused either way.
+    /// Deletes a file an earlier build of <c>map delete</c> set aside: with the checks of <see cref="RemoveSharedFile"/> when it is inside the share,
+    /// and as a plain file when it is in the staging folder it used outside it. A link or a folder is refused either way.
     /// </summary>
     public static void RemoveStagedFile(string below, string path)
     {

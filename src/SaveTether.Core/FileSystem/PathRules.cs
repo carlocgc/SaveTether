@@ -84,34 +84,6 @@ public static class PathRules
     public static bool AreSame(string a, string b) => string.Equals(Normalize(a), Normalize(b), NameComparison);
 
     /// <summary>
-    /// Whether two paths are on the same volume or mount, so a rename between them is one atomic step and not a copy and a delete.
-    /// Each path is looked up among the drives the system reports (by the longest drive path that holds it), after links are
-    /// resolved. False when either is not found.
-    /// </summary>
-    public static bool OnSameVolume(string a, string b)
-    {
-        var first = VolumeOf(a);
-        return first is not null && string.Equals(first, VolumeOf(b), NameComparison);
-    }
-
-    private static string? VolumeOf(string path)
-    {
-        var resolved = Normalize(ResolveAll(path));
-        try
-        {
-            return DriveInfo.GetDrives()
-                .Select(d => Normalize(d.RootDirectory.FullName))
-                .Where(root => IsSameOrInside(resolved, root))
-                .OrderByDescending(root => root.Length)
-                .FirstOrDefault();
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
     /// True when <paramref name="path"/> is <paramref name="root"/> or lies below it. Purely lexical:
     /// pass paths through <see cref="ResolveParents"/> or <see cref="ResolveAll"/> first when links matter.
     /// </summary>

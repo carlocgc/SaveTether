@@ -189,10 +189,14 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     public static string DeleteTitle(string role) => $"Delete {role}, orphaned in the shared folder?";
 
     /// <summary>
-    /// Delete's confirmation, kept short (the owner's wording): the title says what, this says the one thing to know. The shared copy
-    /// is backed up on this device first without being asked about, and the result says where.
+    /// Delete's confirmation, kept short (the owner's wording): the title says what, and this says the two things to know. The
+    /// owner confirms the condition nothing here can check: every write to the role's shared folder is complete and the sync tool has
+    /// finished with it on every device. The shared copy is backed up on this device first without being asked about, and the result
+    /// says where.
     /// </summary>
-    public const string DeleteText = "This deletion will sync to all devices.";
+    public const string DeleteText =
+        "This deletion will sync to all devices. Before confirming, make sure all writes to this role's shared folder are complete " +
+        "and your sync tool has finished syncing it on every device.";
 
     public static string DeletedText(string role, bool hadBackup) =>
         $"{role} was deleted from the shared folder." + (hadBackup ? " Its shared saves are backed up on this device; Backups shows them." : string.Empty);
