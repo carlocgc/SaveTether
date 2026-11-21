@@ -14,9 +14,6 @@
       "base": "{install_dir}/mlc01"
     },
     {
-      // The older default for Cemu on Windows, per PCGamingWiki and the Ludusavi manifest (commit 2fbcf8f):
-      // %USERPROFILE%\Documents\mlc01. A portable copy (win-portable) may sit beside it; when both are found,
-      // Add app asks which to share. Not yet run on a real machine.
       "id": "win-documents",
       "os": "windows",
       "detect": { "dir": "{documents}/mlc01" },
@@ -48,6 +45,7 @@
   ],
   "quirks": [
     "Link usr/save, not mlc01: game updates and DLC install into mlc01/usr/title and can run to many gigabytes.",
-    "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it."
+    "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it.",
+    "The older default on Windows is Documents\mlc01 (win-documents). A portable copy may sit beside it; when both are found, Add app asks which to share."
   ]
 }
