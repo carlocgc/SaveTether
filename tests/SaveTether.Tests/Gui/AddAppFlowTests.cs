@@ -295,6 +295,7 @@ public class AddAppFlowTests
 
         view = flow.Start("testapp");
         Assert.Equal(AddAppPage.ChooseInstall, view.Page);
+        Assert.Equal("<install folder>/saves", view.InstallPaths["portable"]);
 
         // The folder given before is filled in, and a copy can be given instead though the first still exists.
         view = flow.ChooseInstall("portable");

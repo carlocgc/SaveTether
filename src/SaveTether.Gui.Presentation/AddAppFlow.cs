@@ -313,7 +313,9 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 InstallFolderHint = null,
                 InstallPaths = options.ToDictionary(
                     i => i.Id,
-                    i => view.Candidates.First(c => c.Id == i.Id).Found ?? ManualPathText(definition, i)),
+                    // An install that needs a folder always shows what the owner would enter, even when the folder given before
+                    // still holds it: the folder page shows that one.
+                    i => UsesInstallFolder(definition, i) ? ManualPathText(definition, i) : view.Candidates.First(c => c.Id == i.Id).Found ?? string.Empty),
             };
             return _chooseView;
         }
