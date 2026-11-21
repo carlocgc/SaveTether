@@ -293,6 +293,29 @@ public class AddAppFlowTests
     }
 
     [Fact]
+    public void A_plan_at_the_default_install_still_offers_the_install_folder_for_a_portable_copy()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var portable = Path.Combine(deck.Home, "portable");
+        CliDevice.Write(portable, "app.cfg", "config");
+        Directory.CreateDirectory(Path.Combine(deck.Home, "native", "data"));
+
+        // Only the native install is found, and its plan does not use the install folder; the field is there all the same.
+        var view = flow.Start("testapp");
+        Assert.Equal(AddAppPage.Plan, view.Page);
+        Assert.Equal("native", view.Plan!.Install);
+        Assert.Equal([(LocationField.InstallFolder, (string?)null)], view.Fields);
+        Assert.NotNull(view.InstallFolderHint);
+
+        // Giving the portable folder finds both, and the owner chooses.
+        view = flow.SetLocation(LocationField.InstallFolder, portable);
+        Assert.Equal(AddAppPage.ChooseInstall, view.Page);
+        Assert.Equal(["native", "portable"], view.Candidates.Select(c => c.Id));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void Not_found_offers_only_the_fields_that_would_help_and_a_relative_path_is_refused()
     {
         using var sandbox = new Sandbox();

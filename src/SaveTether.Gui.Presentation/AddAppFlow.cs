@@ -512,6 +512,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         if (outcome.Plan is { } plan)
         {
             var install = definition!.Installs.First(i => i.Id == plan.Install);
+            var forThisOs = definition.Installs.Where(i => i.Os.Contains(environment.Os)).ToList();
             var device = workspace.Shared.TryReadDevice(workspace.DeviceName);
             var addedHere = device?.Paths ?? new Dictionary<string, DevicePath>();
             var roles = definition.Roles
@@ -534,9 +535,11 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 Title = $"Add {name}",
                 Found = found is null ? $"Install: {plan.Install}." : $"Install: {plan.Install}, found at {found}.",
                 // The install folder stays editable: the one stored or given is shown, so a copied or moved install can be
-                // pointed at (the stored folder may still exist, which is why Look again never came up).
-                Fields = FieldsFor([install], definition, request).Where(f => f.Field == LocationField.InstallFolder).ToList(),
-                InstallFolderHint = InstallFolderHintFor(definition, [install]),
+                // pointed at (the stored folder may still exist, which is why Look again never came up). It is offered when
+                // any install for this system uses it, not only the chosen one: an app found at its default place may also have
+                // a portable copy, and giving its folder makes both found, so the owner picks (found on the owner's Cemu).
+                Fields = FieldsFor(forThisOs, definition, request).Where(f => f.Field == LocationField.InstallFolder).ToList(),
+                InstallFolderHint = InstallFolderHintFor(definition, forThisOs),
                 Roles = roles,
                 Quirks = plan.Quirks,
                 Plan = plan,
