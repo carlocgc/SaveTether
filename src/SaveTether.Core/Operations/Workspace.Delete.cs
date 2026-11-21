@@ -94,10 +94,9 @@ public sealed partial class Workspace
         if (usedBy.Count > 0 || Local.ReadState().Mappings.ContainsKey(mappingId))
         {
             var where = usedBy.Count > 0 ? string.Join(", ", usedBy) : DeviceName;
+            // No next step: the CLI words RemoveMapping for another case ("use it, or remove it"), and the message already says what to do.
             throw new StoreException(
-                new Note(
-                    $"'{mappingId}' is still set up on {where}. Remove it there first ('map remove', after 'revert' if it is applied).",
-                    new NextStep(NextStepKind.RemoveMapping, mappingId)),
+                new Note($"'{mappingId}' is still set up on {where}. Remove it there first ('map remove', after 'revert' if it is applied)."),
                 new ConflictFacts(ConflictKind.InUseOnDevices, mappingId));
         }
 
