@@ -505,6 +505,48 @@ Everything else for this phase is in [phase-3.5-ludusavi-definitions.md](phase-3
 
 Exit test: on Windows and on the Deck, a game that has no hand-written definition is found by Add app, near the top when it was played recently, applied, and its saves load on the other device.
 
+## 5b. Phase 3.6: device removal and reset (stub)
+
+Added 2026-11-21 by the owner. Stub: the task list below is the starting point; the open questions must be settled in the design (new section in `save-redirection-design.md`) before T2.
+
+Goal: one flow that takes this device out of SaveTether completely, so the device can be sold, decommissioned, or started again from scratch, and the sync folder is left in a state where a new device can be added from nothing. Three outcomes, chosen by the user up front:
+
+| Outcome | Shared data under `<sync root>/savetether/` | This device |
+|---|---|---|
+| **Remove this device** (other devices stay in use) | Delete only this device's files: `.savetether/devices/<device>.json` and its `.savetether/seed/<mapping>/<device>.json` markers. Mappings, app folders and saves stay: other devices use them. Mappings no other device uses are offered for cleanup (open question 5) | Links undone, local state removed |
+| **Reset everything** (last device, or start over) | Delete all of `<sync root>/savetether/` (mappings, every device file, seed markers, custom definitions, app save folders), after a typed confirmation that lists what goes | Links undone, local state removed |
+| **Export only** | Nothing deleted | Writes the export (T1) and stops |
+
+Every outcome first writes an **export**: a single archive, outside the sync root, holding this device's config file, the mapping list, its seed markers, custom definitions and the operation history. It can re-create the setup later (T7).
+
+Order of a removal (each step journalled, so a crash resumes or undoes, as in design 5.3): export, then make every link a real local folder again (copy back from the sync folder, verified by comparison; or skip for a device that is being wiped), then delete shared files, then delete local state, bootstrap and backups. The shared deletes come last, so a failure before them loses nothing.
+
+Open questions, for the owner:
+1. After removal, does the device keep its saves as ordinary local folders (default, safe for decommissioning) or is it left without them (selling: the saves should not travel)? Probably a choice, with "wipe the local copies too" needing its own confirmation.
+2. Should "reset everything" delete the save data in the sync folder, or only the metadata and leave the app folders for the user? Default proposed: delete only metadata, with a separate, explicit "also delete saves" confirmation.
+3. Backups (local, outside the sync root): keep, move into the export location, or delete? Default proposed: ask, default keep.
+4. Another device still lists a removed name, or is offline during the removal: the sync tool may restore a deleted file from that device. Need a tombstone file, or a check in `status` that flags a device file that reappears.
+5. Orphaned mappings: a mapping whose only seed marker belonged to the removed device is used by nobody once the device goes. Proposed: the plan lists them, and the user chooses per mapping to keep it, delete the mapping only, or delete the mapping and its save folder (the last needs its own confirmation, since those are the only copy of the saves). Default: keep. A mapping that another device has a marker for is never offered.
+6. Removing a device that is not this one (the PC is gone, so remove the Deck's entry from the PC): in scope or not.
+
+Tasks (each small enough to delegate; test names are suggestions):
+
+| # | Task | Files | Done when |
+|---|---|---|---|
+| T1 | Design section: outcomes, order, journal steps, answers to the open questions, the export format and its schema version | `docs/design/save-redirection-design.md` | Owner approves; open questions answered |
+| T2 | Export: `ExportService` writes the archive to a path outside the sync root; `Import` reads it back and validates the schema version | `SaveTether.Core` (new `DeviceRemoval/`), `tests/` | Round trip test; refuses a path inside the sync root; archive holds no credentials |
+| T3 | Plan for removal: `RemovalPlanner` returns the list of steps for an outcome (links to undo, shared files to delete, local state to delete) without touching disk | `SaveTether.Core` | Plan tests for each outcome and for a device with no mappings; plan lists exactly the files that will go. The planner finds orphaned mappings (no seed marker left after this device's go) and lists them separately; test: a mapping shared with a second device is never listed |
+| T4 | Executor: runs the plan through the journal; every delete goes through `SafeFs`; undone links verified by comparison before any shared file is deleted | `SaveTether.Core` | Fault-injection test at each step: nothing shared is deleted before links are restored; a crash resumes |
+| T5 | Other-device safety: refuse "remove" when the device file's install ID is not this install's unless forced; handle the reappearing-file case from open question 4 | `SaveTether.Core` | Tests for a foreign install ID and for a file that comes back |
+| T6 | CLI: `savetether device remove [--reset] [--export-only <path>] [--keep-local-saves]`, dry run by default, `--json` output, typed confirmation for the destructive outcomes | `SaveTether.Cli`, `docs/cli.md`, `docs/cli-json.md` | `JsonContractTests` updated; exit codes documented |
+| T7 | Start again: after a reset, `init` on a clean sync folder works with no leftovers; an export can be imported to restore a device | `SaveTether.Core`, `SaveTether.Cli` | Test: reset, then init and add a device from scratch; test: import restores the removed device's mappings |
+| T8 | Desktop app: a "Remove this device" screen in Settings: choose the outcome, show the plan, export location, typed confirmation, progress, result. Texts in `SaveTether.Gui.Presentation`, spec section added with "As built" notes | `SaveTether.Gui.Presentation`, `SaveTether.Gui`, `docs/design/desktop-app-spec.md` | Presentation tests; every refusal has a text |
+| T9 | Hardware: run both outcomes on the Mint box and on the Deck with throwaway folders under `~/sttest`; add the test flow to `docs/testing/hardware-testing.md` and rows to section 8 | `docs/testing/hardware-testing.md` | Results recorded here; bugs found get a regression test |
+
+Exit test: on a throwaway Deck setup and a throwaway Windows setup that share a sync folder, remove the Deck: the PC is untouched and the Deck holds ordinary local saves and no SaveTether files. Reset the PC: the sync folder has no SaveTether metadata. Add both devices again from scratch, and import the export to restore the PC's mappings.
+
+Progress: not started.
+
 ## 6. Phase 4: Decky plugin
 
 Goal, revised 2026-11-17: status in Game Mode, with only the actions that need no input (design 5.11). Starts with a short design step against the then-current Decky API.
