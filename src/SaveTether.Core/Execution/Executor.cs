@@ -52,7 +52,8 @@ public sealed record ExecutionResult(
     PlanOperation? Operation,
     IReadOnlyList<string> BackupIds,
     IReadOnlyList<Note> Messages,
-    Note? Error = null);
+    Note? Error = null,
+    string? Diagnostic = null);
 
 /// <summary>One step of a running plan starting or finishing, for a front end that shows progress.</summary>
 /// <param name="Index">The step's position in the plan, from 0.</param>
@@ -582,8 +583,17 @@ public sealed partial class Executor
     /// <summary>A step that failed, as opposed to a bug or a simulated crash.</summary>
     private static bool IsFailure(Exception e) => e is IOException or UnauthorizedAccessException;
 
-    private static ExecutionResult Result(ExecutionStatus status, Transaction tx, Note? error = null) =>
-        new(status, tx.Plan.MappingId, tx.Plan.Operation, tx.Entry.BackupIds, tx.Messages, error);
+    private static ExecutionResult Result(ExecutionStatus status, Transaction tx, Note? error = null, string? diagnostic = null) =>
+        new(status, tx.Plan.MappingId, tx.Plan.Operation, tx.Entry.BackupIds, tx.Messages, error, diagnostic);
+
+    /// <summary>For the log, not the screen: which step stopped, and the exception with its stack, so a failure can be found without a debugger.</summary>
+    private static string Diagnose(Transaction tx, Exception failure)
+    {
+        var steps = tx.Plan.Steps;
+        var at = tx.Entry.Steps.ToList().FindIndex(s => s.Status != StepStatus.Done);
+        var where = at >= 0 && at < steps.Count ? $"step {at + 1} of {steps.Count} ({steps[at].Kind} {steps[at].Path})" : "after the last step";
+        return $"failed at {where}: {failure}";
+    }
 
     /// <summary>The operation in progress: its journal entry as last written, and what to tell the owner.</summary>
     private sealed class Transaction(JournalFile entry)

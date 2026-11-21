@@ -210,6 +210,9 @@ public class ExecutorTests
 
         Assert.Equal(ExecutionStatus.RolledBack, result.Status);
         Assert.Contains("injected failure", result.Error?.Text, StringComparison.Ordinal);
+        // The log gets the step that stopped and the exception, which the screen's message leaves out.
+        Assert.Contains("CreateLink", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Contains("injected failure", result.Diagnostic, StringComparison.Ordinal);
         Assert.Equal(EntryKind.Directory, SafeFs.Probe(world.Source));
         Assert.Equal(before, ExecWorld.Files(world.Source));
         Assert.Equal(EntryKind.Missing, SafeFs.Probe(world.Aside));

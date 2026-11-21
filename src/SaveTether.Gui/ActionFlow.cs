@@ -642,6 +642,10 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             });
             var result = await work;
             log.Write($"{result.Operation?.ToString() ?? "recover"} {result.MappingId}: {result.Status}{(result.Error is { } e ? $": {e.Text}" : string.Empty)}");
+            if (result.Diagnostic is not null)
+            {
+                log.Write($"  {result.Diagnostic}");
+            }
             return result;
         }
     }
