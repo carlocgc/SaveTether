@@ -59,7 +59,8 @@ public enum RowAction
 /// <param name="Main">The row's main action, shown as its button; null when the state has none, or none built yet.</param>
 /// <param name="Others">The actions under "More", in the spec's order.</param>
 /// <param name="Destructive">An action that removes something for good, shown apart as a red button; null when the row has none.</param>
-public sealed record AppRow(MappingState Mapping, string Sentence, RowAction? Main, IReadOnlyList<RowAction> Others, RowAction? Destructive = null);
+/// <param name="Devices">For a row set up on more devices than the sentence names: all of them, for the Devices button's list; null otherwise.</param>
+public sealed record AppRow(MappingState Mapping, string Sentence, RowAction? Main, IReadOnlyList<RowAction> Others, RowAction? Destructive = null, IReadOnlyList<string>? Devices = null);
 
 /// <summary>An app with its rows (section 5): mappings grouped by the part of the ID before the dot.</summary>
 public sealed record AppGroup(string AppName, IReadOnlyList<AppRow> Rows)
@@ -109,7 +110,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
             (HealthState.Ok, _) => (mapping.LinkKind ?? "Link", (RowAction?)null,
                 new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert }),
             (HealthState.NotApplied, HealthReason.NoSaveFolder) => (
-                mapping.SetUpOn.Count == 0 ? "No device links this role." : $"Set up on {string.Join(", ", mapping.SetUpOn)}, not here.",
+                SetUpOnSentence(mapping.SetUpOn),
                 RowAction.AddHere, []),
             (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => (
                 $"This device's file has '{mapping.Health.Source}' as the folder.", null, new[] { RowAction.Details }),
@@ -139,7 +140,35 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
 
         // No device links this role (none has a folder set for it): nothing links to it, so it can be deleted from the shared folder.
         var unused = mapping is { Health.Reason: HealthReason.NoSaveFolder, SetUpOn.Count: 0 };
-        return new AppRow(mapping, sentence, main, others, unused ? RowAction.Delete : null);
+        var devices = mapping.Health.Reason == HealthReason.NoSaveFolder && mapping.SetUpOn.Count > MaxDevicesNamed ? mapping.SetUpOn : null;
+        return new AppRow(mapping, sentence, main, others, unused ? RowAction.Delete : null, devices);
+    }
+
+    /// <summary>How many devices a "Set up on" sentence names before it counts the rest, so a row stays one line however many there are.</summary>
+    public const int MaxDevicesNamed = 3;
+
+    /// <summary>
+    /// "Set up on pc, deck, not here." for a few devices; for more, the first few and a count ("Set up on a, b, c and 9 more, not
+    /// here."), with the Devices button listing them all. Nothing at all when no device has it.
+    /// </summary>
+    public static string SetUpOnSentence(IReadOnlyList<string> devices)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+        if (devices.Count == 0)
+        {
+            return "No device links this role.";
+        }
+
+        return devices.Count <= MaxDevicesNamed
+            ? $"Set up on {string.Join(", ", devices)}, not here."
+            : $"Set up on {string.Join(", ", devices.Take(MaxDevicesNamed))} and {devices.Count - MaxDevicesNamed} more, not here.";
+    }
+
+    /// <summary>The Devices button's list: the title and one device per line.</summary>
+    public static (string Title, string Text) DevicesList(string role, IReadOnlyList<string> devices)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+        return ($"{role} is set up on {devices.Count} devices", string.Join("\n", devices));
     }
 
     public static string Label(RowAction action) => action switch

@@ -272,17 +272,26 @@ public sealed class SharedStore
     }
 
     /// <summary>
-    /// Deletes a mapping's seed markers and its mapping file, in that order, through <paramref name="fs"/> (design 5.3,
-    /// invariant 2: the tool's own metadata may be retired, only through the safe filesystem layer). The caller has checked
-    /// the mapping is unused and dealt with its shared folder.
+    /// Deletes a mapping's seed markers and then its mapping file (design 5.3, invariant 2: the tool's own metadata may be retired).
+    /// The caller has checked the mapping is unused and dealt with its shared folder. Each delete refuses a link in the way
+    /// (<see cref="SafeFs.RemoveSharedFile"/>), and a markers folder that has gained anything is left.
     /// </summary>
-    public void RetireMapping(string mappingId, SafeFs fs)
+    public void RetireMapping(string mappingId)
     {
         RequireInitialized();
-        ArgumentNullException.ThrowIfNull(fs);
         RequireMappingId(mappingId);
-        fs.DeleteTree(SeedFolderOf(mappingId), SharedDataDeletion.ExplicitlyConfirmed);
-        fs.DeleteTree(MappingPath(mappingId), SharedDataDeletion.ExplicitlyConfirmed);
+        var seed = SeedFolderOf(mappingId);
+        if (SafeFs.Probe(seed) == EntryKind.Directory)
+        {
+            foreach (var marker in Directory.EnumerateFiles(seed))
+            {
+                SafeFs.RemoveSharedFile(DataRoot, marker);
+            }
+
+            SafeFs.RemoveEmptySharedFolder(DataRoot, seed);
+        }
+
+        SafeFs.RemoveSharedFile(DataRoot, MappingPath(mappingId));
     }
 
     private string MappingPath(string mappingId) => Path.Combine(MetaRoot, MappingsFolder, mappingId + ".json");

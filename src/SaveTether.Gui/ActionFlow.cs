@@ -6,6 +6,7 @@ using SaveTether.Core.Backup;
 using SaveTether.Core.Execution;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
+using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
 using SaveTether.Core.Storage;
 using SaveTether.Gui.Presentation;
@@ -331,6 +332,12 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 var done = await Work("Backing up the shared saves and deleting…", () => session.DeleteMapping(mapping.MappingId));
                 log.Write($"map delete {mapping.MappingId}: done{(done.Backup is { } backup ? $", backed up as {backup.Id}" : string.Empty)}");
                 await overlay.InformAsync("Deleted", AppsPage.DeletedText(role, done.Backup is not null));
+            }
+            catch (MappingDeletionIncompleteException e)
+            {
+                // It stopped after it had started: the shared copy may already be gone, so this is not "nothing was deleted".
+                log.Write($"map delete {mapping.MappingId} stopped part way: {e.Message}");
+                await overlay.InformAsync("Deleted only in part", e.Message);
             }
             catch (Exception e) when (e is StoreException or IOException or UnauthorizedAccessException or SafeFsException or BackupException)
             {

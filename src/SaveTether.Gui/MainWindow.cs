@@ -394,6 +394,19 @@ internal sealed class MainWindow : Window
             Add(grid, 4, button);
         }
 
+        // A row set up on many devices names the first few in its sentence; the Devices button lists them all, one per line.
+        if (row.Devices is { Count: > 0 } devices)
+        {
+            var list = new Button { Content = "Devices", Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            AutomationProperties.SetName(list, $"Devices that have {role}");
+            list.Click += (_, _) =>
+            {
+                var (title, text) = AppsPage.DevicesList(role, devices);
+                _ = _overlay.InformAsync(title, text);
+            };
+            Add(grid, 5, list);
+        }
+
         // An action that deletes for good is its own red button, apart from More (the owner asked for red). Such a row has no More.
         if (row.Destructive is { } destructive)
         {

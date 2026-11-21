@@ -283,6 +283,29 @@ public class AppsPageTests
     }
 
     [Fact]
+    public void A_row_set_up_on_many_devices_names_a_few_and_counts_the_rest_with_a_Devices_list()
+    {
+        Assert.Equal("Set up on a, b, c, not here.", AppsPage.SetUpOnSentence(["a", "b", "c"]));
+        Assert.Equal("Set up on a, b, c and 9 more, not here.", AppsPage.SetUpOnSentence(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]));
+        Assert.Equal("No device links this role.", AppsPage.SetUpOnSentence([]));
+
+        var many = Enumerable.Range(1, 12).Select(i => $"device-{i:00}").ToList();
+        var row = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { SetUpOn = many });
+        Assert.Equal("Set up on device-01, device-02, device-03 and 9 more, not here.", row.Sentence);
+        Assert.Equal(many, row.Devices);
+        Assert.Null(row.Destructive);
+        Assert.False(row.Sentence.Contains('\n', StringComparison.Ordinal));
+
+        var few = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { SetUpOn = ["pc", "deck"] });
+        Assert.Null(few.Devices);
+        Assert.Null(AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder)).Devices);
+
+        var (title, text) = AppsPage.DevicesList("PPSSPP savedata", many);
+        Assert.Equal("PPSSPP savedata is set up on 12 devices", title);
+        Assert.Equal(12, text.Split('\n').Length);
+    }
+
+    [Fact]
     public void The_Delete_confirmation_is_short_and_says_the_deletion_syncs_to_all_devices()
     {
         Assert.Equal("Delete PPSSPP savedata, orphaned in the shared folder?", AppsPage.DeleteTitle("PPSSPP savedata"));

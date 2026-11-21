@@ -231,6 +231,105 @@ public sealed class SafeFs
     }
 
     /// <summary>
+    /// Deletes one regular file inside the sync root, for a mapping the owner confirmed deleting (design 5.3, invariant 2's third
+    /// exception). Every folder from <paramref name="below"/> (the folder the shared data lives in) down to the file's parent
+    /// must be a real folder: a link in the way, such as an app folder that is a symlink or junction, would take the delete
+    /// somewhere else, so it is refused. A missing file is not an error.
+    /// </summary>
+    public static void RemoveSharedFile(string below, string path)
+    {
+        var filePath = RequireAbsolute(path, nameof(path));
+        RequirePlainFolders(below, filePath);
+        var kind = Probe(filePath);
+        if (kind == EntryKind.Missing)
+        {
+            return;
+        }
+
+        if (kind != EntryKind.File)
+        {
+            throw new SafeFsException($"Refusing to delete '{filePath}' as a file: it is {Describe(kind)}.");
+        }
+
+        var attributes = File.GetAttributes(filePath);
+        ClearReadOnly(filePath, attributes);
+        File.Delete(filePath);
+    }
+
+    /// <summary>
+    /// Removes an empty folder inside the sync root, with the same checks as <see cref="RemoveSharedFile"/>, and never what is in it:
+    /// answers false, and leaves the folder, when it has anything in it (a sync tool may have just added something). A missing
+    /// folder is not an error.
+    /// </summary>
+    public static bool RemoveEmptySharedFolder(string below, string path)
+    {
+        var folder = RequireAbsolute(path, nameof(path));
+        RequirePlainFolders(below, folder);
+        var kind = Probe(folder);
+        if (kind == EntryKind.Missing)
+        {
+            return true;
+        }
+
+        if (kind != EntryKind.Directory)
+        {
+            throw new SafeFsException($"Refusing to remove '{folder}' as a folder: it is {Describe(kind)}.");
+        }
+
+        if (Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            return false;
+        }
+
+        try
+        {
+            MakeDirectoryDeletable(folder, File.GetAttributes(folder));
+            Directory.Delete(folder, recursive: false);
+            return true;
+        }
+        catch (IOException) when (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            // Something arrived between the look and the removal: it is left alone.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Requires every folder below <paramref name="below"/>, down to the parent of <paramref name="path"/>, to be a real folder, not
+    /// a link or anything else. Lexical on the path as given, each part looked at itself (a link is seen, not followed).
+    /// </summary>
+    public static void RequirePlainFolders(string below, string path)
+    {
+        var root = PathRules.Normalize(RequireAbsolute(below, nameof(below)));
+        var target = PathRules.Normalize(RequireAbsolute(path, nameof(path)));
+        if (!PathRules.IsSameOrInside(target, root) || PathRules.AreSame(target, root))
+        {
+            throw new SafeFsException($"Refusing to delete '{target}': it is not inside '{root}'.");
+        }
+
+        var folders = new Stack<string>();
+        for (var folder = Path.GetDirectoryName(target); folder is not null && !PathRules.AreSame(folder, root); folder = Path.GetDirectoryName(folder))
+        {
+            folders.Push(folder);
+        }
+
+        foreach (var folder in folders)
+        {
+            var kind = Probe(folder);
+            if (kind == EntryKind.Missing)
+            {
+                // Nothing below a missing folder exists either: there is nothing to follow.
+                return;
+            }
+
+            if (kind != EntryKind.Directory)
+            {
+                throw new SafeFsException($"Refusing to delete under '{folder}': it is {Describe(kind)}, not a plain folder inside '{root}'.");
+            }
+        }
+    }
+
+    /// <summary>
     /// Deletes the tree at <paramref name="path"/>. Links found inside are removed, never entered,
     /// so nothing outside the tree is touched. A missing path is not an error.
     /// </summary>

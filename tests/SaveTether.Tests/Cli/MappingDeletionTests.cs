@@ -1,6 +1,7 @@
 using SaveTether.Cli;
 using SaveTether.Core.Backup;
 using SaveTether.Core.Execution;
+using SaveTether.Core.FileSystem;
 using SaveTether.Core.Health;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
@@ -150,6 +151,155 @@ public class MappingDeletionTests
         Assert.False(File.Exists(MappingFile(pc)));
         Assert.False(Directory.Exists(SeedFolder(pc)));
         Assert.Equal(StoreProblem.NotFound, Assert.Throws<StoreException>(() => workspace.DeleteMapping(Id)).Problem);
+        sandbox.AssertCanaryIntact();
+    }
+
+    private static string AppFolder(CliDevice device) => Path.Combine(device.SyncRoot, "savetether", "ppsspp");
+
+    [Fact]
+    public void An_app_folder_that_is_a_link_is_refused_and_what_it_points_at_is_untouched()
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+
+        // savetether/ppsspp is a link to a folder outside the share, which holds a SAVEDATA folder of its own.
+        var outside = sandbox.Dir("outside");
+        Directory.Move(AppFolder(pc), Path.Combine(outside, "ppsspp"));
+        Sandbox.Link(AppFolder(pc), Path.Combine(outside, "ppsspp"));
+        var canary = Path.Combine(outside, "ppsspp", "SAVEDATA", "GAME1", "save.bin");
+        Assert.True(File.Exists(canary));
+        var workspace = Open(pc);
+
+        var described = Assert.Throws<StoreException>(() => workspace.DescribeMappingDeletion(Id));
+        var refused = Assert.Throws<StoreException>(() => workspace.DeleteMapping(Id));
+
+        Assert.Contains("link", described.Message, StringComparison.Ordinal);
+        Assert.Contains("link", refused.Message, StringComparison.Ordinal);
+        Assert.True(File.Exists(canary));
+        Assert.True(File.Exists(MappingFile(pc)));
+        Assert.DoesNotContain(workspace.ListBackups(Id), b => b.Reason == BackupReason.PreDelete);
+
+        // The file layer refuses a link too, whatever called it.
+        Assert.Throws<SafeFsException>(() => SafeFs.RemoveSharedFile(Path.Combine(pc.SyncRoot, "savetether"), Path.Combine(AppFolder(pc), "SAVEDATA", "GAME1", "save.bin")));
+        Assert.True(File.Exists(canary));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_save_a_sync_tool_delivers_after_the_backup_is_kept_not_deleted_and_the_run_can_be_run_again()
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+        var workspace = Open(pc);
+        var late = Path.Combine(pc.Target, "GAME2", "late.bin");
+        workspace.DeletionSeam = stage =>
+        {
+            if (stage == "after-backup")
+            {
+                CliDevice.Write(pc.Target, "GAME2/late.bin", "delivered meanwhile");
+            }
+        };
+
+        var partial = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
+
+        Assert.Equal(1, partial.Left);
+        Assert.NotNull(partial.Backup);
+        Assert.Contains(partial.Backup.Id, partial.Message, StringComparison.Ordinal);
+        Assert.Equal("delivered meanwhile", File.ReadAllText(late));
+        Assert.False(File.Exists(Path.Combine(pc.Target, "GAME1", "save.bin")), "what the backup holds is removed");
+        Assert.True(File.Exists(MappingFile(pc)), "the record stays while something is left");
+        Assert.False(File.Exists(Path.Combine(partial.Backup.Location, "data", "GAME2", "late.bin")), "the late file was not in that backup");
+
+        // Run again, once the sync tool is done: the late file is backed up this time, then everything goes.
+        workspace.DeletionSeam = null;
+        var done = workspace.DeleteMapping(Id);
+        Assert.NotNull(done.Backup);
+        Assert.Equal("delivered meanwhile", File.ReadAllText(Path.Combine(done.Backup.Location, "data", "GAME2", "late.bin")));
+        Assert.False(Directory.Exists(pc.Target));
+        Assert.False(File.Exists(MappingFile(pc)));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_save_delivered_to_a_folder_that_looked_empty_is_backed_up_before_it_is_deleted()
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+        var workspace = Open(pc);
+
+        // Nothing but empty folders when it is described; a save arrives before the delete looks again.
+        Directory.Delete(pc.Target, recursive: true);
+        Directory.CreateDirectory(Path.Combine(pc.Target, "GAME1"));
+        Assert.Equal(0, workspace.DescribeMappingDeletion(Id).Files);
+        workspace.DeletionSeam = stage =>
+        {
+            if (stage == "before-backup")
+            {
+                CliDevice.Write(pc.Target, "GAME1/new.bin", "arrived");
+            }
+        };
+
+        var done = workspace.DeleteMapping(Id);
+
+        var backup = Assert.IsType<BackupInfo>(done.Backup);
+        Assert.Equal("arrived", File.ReadAllText(Path.Combine(backup.Location, "data", "GAME1", "new.bin")));
+        Assert.False(Directory.Exists(pc.Target));
+        Assert.False(File.Exists(MappingFile(pc)));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void An_app_folder_that_gains_another_role_while_the_delete_runs_is_left_with_what_it_holds()
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+        var workspace = Open(pc);
+        var other = Path.Combine(AppFolder(pc), "STATES", "state1.bin");
+        workspace.DeletionSeam = stage =>
+        {
+            if (stage == "before-app-folder")
+            {
+                CliDevice.Write(AppFolder(pc), "STATES/state1.bin", "another role's saves");
+            }
+        };
+
+        var done = workspace.DeleteMapping(Id);
+
+        Assert.NotNull(done.Backup);
+        Assert.Equal("another role's saves", File.ReadAllText(other));
+        Assert.False(Directory.Exists(pc.Target));
+        Assert.False(File.Exists(MappingFile(pc)));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_failure_after_the_shared_copy_is_removed_says_so_names_the_backup_and_can_be_run_again()
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+        var workspace = Open(pc);
+        workspace.DeletionSeam = stage =>
+        {
+            if (stage == "before-retire")
+            {
+                throw new IOException("the sync folder is read-only");
+            }
+        };
+
+        var partial = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
+
+        Assert.Contains("only in part", partial.Message, StringComparison.Ordinal);
+        Assert.Contains("read-only", partial.Message, StringComparison.Ordinal);
+        Assert.NotNull(partial.Backup);
+        Assert.Contains(partial.Backup.Id, partial.Message, StringComparison.Ordinal);
+        Assert.Contains($"map delete {Id}", partial.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(pc.Target), "the shared saves are already gone");
+        Assert.True(File.Exists(MappingFile(pc)), "the record is still there");
+
+        workspace.DeletionSeam = null;
+        var done = workspace.DeleteMapping(Id);
+        Assert.False(done.TargetExists);
+        Assert.False(File.Exists(MappingFile(pc)));
         sandbox.AssertCanaryIntact();
     }
 

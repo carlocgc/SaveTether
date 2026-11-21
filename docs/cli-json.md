@@ -95,7 +95,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 
 ### `map delete`
 
-`map delete <id>`, with `--confirm-delete`. With `--json` nothing is asked, so without `--confirm-delete` it is refused (exit 1) and nothing is deleted. Refused (exit 1, `problem` `conflict`, `conflict.kind` `in-use-on-devices`) while any device, this one included, has a folder set for the mapping, and (exit 3) while an operation is unfinished. Added 2026-11-21.
+`map delete <id>`, with `--confirm-delete`. With `--json` nothing is asked, so without `--confirm-delete` it is refused (exit 1) and nothing is deleted. Refused (exit 1, `problem` `conflict`, `conflict.kind` `in-use-on-devices`) while any device, this one included, has a folder set for the mapping, and (exit 3) while an operation is unfinished. A deletion that stops part way (a file arrived after the backup, or a delete failed) is a refusal (exit 1) whose message says what was removed and names the backup; running it again finishes. Added 2026-11-21.
 
 `mapping_deleted` object, present when the mapping was deleted from the shared folder:
 
