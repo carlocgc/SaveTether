@@ -40,11 +40,14 @@ public sealed class InstallOffer(string localFolder, InstallLayout layout, strin
 
     public InstallCheck Check() => Installer.Inspect(runningFolder, Layout, Version);
 
-    /// <summary>What to ask, or null: nothing to offer, or "Not now" was chosen for this location.</summary>
-    public InstallOfferView? Offer()
+    /// <summary>
+    /// What to ask, or null: nothing to offer, or "Not now" was chosen for this location. Settings asks with
+    /// <paramref name="ignoreDeclined"/>, so "Not now" can be taken back.
+    /// </summary>
+    public InstallOfferView? Offer(bool ignoreDeclined = false)
     {
         var check = Check();
-        if (!check.Offers || Declined())
+        if (!check.Offers || (!ignoreDeclined && Declined()))
         {
             return null;
         }

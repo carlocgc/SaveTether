@@ -326,6 +326,8 @@ public class InstallerTests
 
         offer.Decline();
         Assert.Null(offer.Offer());
+        // Settings can still make the offer, so Not now can be taken back.
+        Assert.NotNull(offer.Offer(ignoreDeclined: true));
         Assert.Null(new InstallOffer(local, layout, unpacked + Path.DirectorySeparatorChar, "0.2.0+abc").Offer());
         // Another unpacked copy is asked again.
         Assert.NotNull(new InstallOffer(local, layout, Package(sandbox, "elsewhere", "0.2.0"), "0.2.0+abc").Offer());

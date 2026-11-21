@@ -136,6 +136,23 @@ internal sealed class App : Application
         ShutDown("the installed copy was started");
     }
 
+    /// <summary>After Settings installed this copy: starts the installed one and quits, as accepting the offer at start does.</summary>
+    public void StartInstalledCopyAndQuit(InstallOffer installer)
+    {
+        Log.Write($"installed {installer.Version} in {installer.Layout.AppFolder} from Settings; starting it");
+        Program.ReleaseClaim();
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(installer.Layout.AppPath) { UseShellExecute = false });
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException)
+        {
+            Log.Write($"the installed copy could not be started: {e.Message}");
+        }
+
+        _desktop.Shutdown();
+    }
+
     private void FinishWithoutInstalling()
     {
         if (Options.UpdateOnly)
