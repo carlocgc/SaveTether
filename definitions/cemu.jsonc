@@ -1,5 +1,6 @@
-// Cemu (Wii U emulator). Shipped with SaveTether: its paths were used on both of the owner's
-// devices in the M7 trial, 2026-11-12. Design 5.2 explains the format.
+// Cemu (Wii U emulator). Shipped with SaveTether: win-portable and linux-native were used on both of the
+// owner's devices in the M7 trial, 2026-11-12; win-documents and linux-flatpak come from the Ludusavi manifest
+// and are not yet tested on hardware. Design 5.2 explains the format.
 {
   "schema": 1,
   "id": "cemu",
@@ -11,6 +12,18 @@
       "os": "windows",
       "detect": { "dir": "{install_dir}/mlc01" },
       "base": "{install_dir}/mlc01"
+    },
+    {
+      "id": "win-documents",
+      "os": "windows",
+      "detect": { "dir": "{documents}/mlc01" },
+      "base": "{documents}/mlc01"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:info.cemu.Cemu}/data/Cemu/mlc01" },
+      "base": "{flatpak:info.cemu.Cemu}/data/Cemu/mlc01"
     },
     {
       "id": "linux-native",
@@ -32,6 +45,7 @@
   ],
   "quirks": [
     "Link usr/save, not mlc01: game updates and DLC install into mlc01/usr/title and can run to many gigabytes.",
-    "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it."
+    "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it.",
+    "The older default on Windows is the mlc01 folder in Documents (win-documents). A portable copy may sit beside it; when both are found, Add app asks which to share."
   ]
 }

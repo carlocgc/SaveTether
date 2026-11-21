@@ -417,6 +417,21 @@ public partial class DefinitionLoaderTests
     }
 
     /// <summary>
+    /// The shipped Cemu definition names the portable, Documents, Flatpak and native installs; the Documents and
+    /// Flatpak ones come from the Ludusavi manifest.
+    /// </summary>
+    [Fact]
+    public void The_shipped_cemu_definition_has_its_four_installs()
+    {
+        var definition = DefinitionLoader.LoadFile(Path.Combine(FindRepositoryRoot(), "definitions", "cemu.jsonc")).Definition!;
+
+        Assert.Equal(["win-portable", "win-documents", "linux-flatpak", "linux-native"], definition.Installs.Select(i => i.Id));
+        Assert.Equal("{documents}/mlc01", definition.Installs.Single(i => i.Id == "win-documents").Base.Path);
+        Assert.Equal("{flatpak:info.cemu.Cemu}/data/Cemu/mlc01", definition.Installs.Single(i => i.Id == "linux-flatpak").Base.Path);
+        Assert.All(definition.Roles, r => Assert.True(definition.Installs.All(i => r.Paths.ContainsKey(i.Id))));
+    }
+
+    /// <summary>
     /// definitions/definition.schema.json is for editors, and is written by hand beside the loader.
     /// This keeps the two from drifting apart on what fields and values exist.
     /// </summary>
