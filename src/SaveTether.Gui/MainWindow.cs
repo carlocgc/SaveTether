@@ -123,6 +123,8 @@ internal sealed class MainWindow : Window
         footer.Children.Add(_stripText);
         footer.Children.Add(folder);
 
+        // The rows' button columns are one width across the list (see Row), so no row's sentence is moved by another row's buttons.
+        Grid.SetIsSharedSizeScope(_rows, true);
         _body = new ScrollViewer { Content = _rows };
         // The box is the scrollable area's frame: always drawn, outside what scrolls.
         var bodyBox = new Border
@@ -289,7 +291,7 @@ internal sealed class MainWindow : Window
             // Rebuilt at every check, so whether it is open is kept here: a check must not close it under the owner.
             var expander = new Expander
             {
-                Header = $"Not on this device ({page.NotOnThisDevice.Count})",
+                Header = $"Sync folders ignored by this device ({page.NotOnThisDevice.Count})",
                 Content = list,
                 IsExpanded = _notHereOpen,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -352,7 +354,17 @@ internal sealed class MainWindow : Window
         var name = withApp ? $"{mapping.AppName} {mapping.Role}" : mapping.Role;
         // In "Not on this device" every row has the same state, which the section's name already says, so that column is dropped
         // and its room goes to the name, which there carries the app as well.
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,3*,0,2*,Auto,Auto" : "Auto,150,170,*,Auto,Auto"), Margin = new Thickness(0, 4) };
+        // The two button columns share their width across every row (the rows' parent is a shared size scope), so a row with an
+        // extra button, such as Delete, does not move the sentence of the rows without one.
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,3*,0,2*" : "Auto,150,170,*")
+            {
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowAction" },
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowMore" },
+            },
+            Margin = new Thickness(0, 4),
+        };
         Add(grid, 0, new Ellipse { Width = 10, Height = 10, Fill = new SolidColorBrush(Icons.ColourOf(mapping.Word.Shade)), Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
         Add(grid, 1, new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) });
         if (!withApp)
