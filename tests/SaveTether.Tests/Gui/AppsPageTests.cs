@@ -283,17 +283,11 @@ public class AppsPageTests
     }
 
     [Fact]
-    public void The_Delete_confirmation_says_what_goes_for_every_device_and_that_a_backup_is_taken()
+    public void The_Delete_confirmation_is_short_and_says_the_deletion_syncs_to_all_devices()
     {
-        var text = AppsPage.DeleteText("PPSSPP savedata", 3, 5 * 1024 * 1024);
-
-        Assert.Contains("3 files, 5 MiB", text, StringComparison.Ordinal);
-        Assert.Contains("every device's sync folder", text, StringComparison.Ordinal);
-        Assert.Contains("not touched", text, StringComparison.Ordinal);
-        Assert.Contains("would be lost", text, StringComparison.Ordinal);
-        Assert.Contains("backed up on this device first", text, StringComparison.Ordinal);
-        Assert.Contains("1 file,", AppsPage.DeleteText("PPSSPP savedata", 1, 10), StringComparison.Ordinal);
-        Assert.DoesNotContain("backed up", AppsPage.DeleteText("PPSSPP savedata", 0, 0), StringComparison.Ordinal);
+        Assert.Equal("Delete PPSSPP savedata, orphaned in the shared folder?", AppsPage.DeleteTitle("PPSSPP savedata"));
+        Assert.Equal("This deletion will sync to all devices.", AppsPage.DeleteText);
+        Assert.Equal("PPSSPP savedata was deleted from the shared folder. Its shared saves are backed up on this device; Backups shows them.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: true));
         Assert.Equal("PPSSPP savedata was deleted from the shared folder.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: false));
         Assert.Equal("before deleting", BackupsPage.Reason(Core.Backup.BackupReason.PreDelete));
     }
@@ -353,7 +347,7 @@ public class AppsPageTests
 
         var row = Assert.Single(AppsPage.From(StatusCheck.Run(local)).NotOnThisDevice);
         Assert.Equal(HealthReason.NoSaveFolder, row.Mapping.Health.Reason);
-        Assert.Equal("No device has a folder set for it.", row.Sentence);
+        Assert.Equal("No device links this role.", row.Sentence);
         Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
         sandbox.AssertCanaryIntact();
     }

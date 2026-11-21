@@ -109,7 +109,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
             (HealthState.Ok, _) => (mapping.LinkKind ?? "Link", (RowAction?)null,
                 new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert }),
             (HealthState.NotApplied, HealthReason.NoSaveFolder) => (
-                mapping.SetUpOn.Count == 0 ? "No device has a folder set for it." : $"Set up on {string.Join(", ", mapping.SetUpOn)}, not here.",
+                mapping.SetUpOn.Count == 0 ? "No device links this role." : $"Set up on {string.Join(", ", mapping.SetUpOn)}, not here.",
                 RowAction.AddHere, []),
             (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => (
                 $"This device's file has '{mapping.Health.Source}' as the folder.", null, new[] { RowAction.Details }),
@@ -137,7 +137,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
             _ => throw new ArgumentOutOfRangeException(nameof(mapping), mapping.Health.State, "A state with no row in section 5.1."),
         };
 
-        // No device has a folder set for it: nothing links to it, so it can be deleted from the shared folder.
+        // No device links this role (none has a folder set for it): nothing links to it, so it can be deleted from the shared folder.
         var unused = mapping is { Health.Reason: HealthReason.NoSaveFolder, SetUpOn.Count: 0 };
         return new AppRow(mapping, sentence, main, others, unused ? RowAction.Delete : null);
     }
@@ -162,40 +162,13 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no label."),
     };
 
-    public static string DeleteTitle(string role) => $"Delete {role} from the shared folder?";
+    public static string DeleteTitle(string role) => $"Delete {role}, orphaned in the shared folder?";
 
     /// <summary>
-    /// Delete's confirmation: what goes (the shared copy and the record, from the sync folder on every device), what stays (each device's
-    /// own save folder and backups), the backup taken first, and the one case that can still lose saves.
+    /// Delete's confirmation, kept short (the owner's wording): the title says what, this says the one thing to know. The shared copy
+    /// is backed up on this device first without being asked about, and the result says where.
     /// </summary>
-    public static string DeleteText(string role, int files, long bytes) =>
-        $"No device has a folder set for {role}, so nothing is linked to it, and a device that used it keeps its own save folder. " +
-        "Deleting removes its record and " +
-        (files == 0
-            ? "its shared folder (it holds no files)"
-            : $"its shared copy ({files:N0} file{(files == 1 ? string.Empty : "s")}, {FormatBytes(bytes)})") +
-        " from the sync folder, and the sync tool carries that deletion to every device's sync folder. " +
-        "The save folders on your devices, and their backups, are not touched.\n\n" +
-        (files == 0 ? string.Empty : "The shared copy is backed up on this device first: Backups shows it as \"before deleting\".\n\n") +
-        "If a device linked it recently and its file has not synced here yet, that device's saves are the shared copy and would be lost: " +
-        "wait for the sync tool to catch up before you go on.";
-
-    /// <summary>A size as people read it: 3.4 MiB.</summary>
-    public static string FormatBytes(long bytes)
-    {
-        string[] units = ["bytes", "KiB", "MiB", "GiB"];
-        var value = (double)bytes;
-        var unit = 0;
-        while (value >= 1024 && unit < units.Length - 1)
-        {
-            value /= 1024;
-            unit++;
-        }
-
-        return unit == 0
-            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes:N0} bytes")
-            : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value:0.#} {units[unit]}");
-    }
+    public const string DeleteText = "This deletion will sync to all devices.";
 
     public static string DeletedText(string role, bool hadBackup) =>
         $"{role} was deleted from the shared folder." + (hadBackup ? " Its shared saves are backed up on this device; Backups shows them." : string.Empty);

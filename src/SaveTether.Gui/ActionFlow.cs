@@ -323,7 +323,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             {
                 var described = await Work("Checking what the shared folder holds…", () => session.DescribeMappingDeletion(mapping.MappingId));
                 if (!await overlay.ConfirmAsync(
-                        AppsPage.DeleteTitle(role), AppsPage.DeleteText(role, described.Files, described.Bytes), "Delete", Overlay.OperationDialogTimeout, danger: true))
+                        AppsPage.DeleteTitle(role), AppsPage.DeleteText, "Delete", Overlay.OperationDialogTimeout, danger: true))
                 {
                     return;
                 }
