@@ -320,21 +320,31 @@ public class AddAppFlowTests
     }
 
     [Fact]
-    public void A_ticked_folder_that_is_not_there_and_not_shared_yet_is_warned_about_before_Add()
+    public void A_ticked_folder_whose_parent_is_missing_is_warned_about_before_Add()
     {
         using var sandbox = new Sandbox();
         var (deck, flow) = NewDevice(sandbox);
-        var data = Path.Combine(deck.Home, "native", "data");
-        CliDevice.Write(data, "saves/slot1.sav", "12345");
+        AppAddCliTests.ShareDefinition(deck, "testemu", """
+            {
+              "schema": 1, "id": "testemu", "name": "Test Emu", "kind": "emulator",
+              "installs": [{ "id": "portable", "os": "linux", "detect": { "dir": "{install_dir}/mlc01" }, "base": "{install_dir}/mlc01" }],
+              "roles": [{ "id": "save", "class": "save", "default": true, "path": "usr/save", "target": "save" }],
+            }
+            """);
+        var install = Path.Combine(deck.Home, "portable");
+        Directory.CreateDirectory(Path.Combine(install, "mlc01"));
 
-        // saves is there; states is not, and no device has shared it: Apply would have nothing to link.
-        var view = StartAt(flow, "testapp", "native");
-        Assert.Equal("The folder for states is not there yet, and no other device has shared one, so Apply will have nothing to link. Check the folder you chose.", view.MissingFolderWarning);
+        // mlc01 is there but usr is not: Apply would refuse the folder, whatever the shared copy holds.
+        flow.Start("testemu");
+        var view = flow.SetLocation(LocationField.InstallFolder, install);
+        Assert.Equal(AddAppPage.Plan, view.Page);
+        Assert.Equal(
+            $"The folder {Path.Combine(install, "mlc01", "usr")} does not exist, so Apply will refuse to link save. Check the folder you chose, and that the app is installed.",
+            view.MissingFolderWarning);
 
-        // Unticked, it is not warned about; with the folder made, there is nothing to say.
-        Assert.Null(flow.SetRole("states", ticked: false).MissingFolderWarning);
-        Directory.CreateDirectory(Path.Combine(data, "states"));
-        Assert.Null(StartAt(flow, "testapp", "native").MissingFolderWarning);
+        // usr is there but the save folder is not: Apply creates it, so there is nothing to warn about.
+        Directory.CreateDirectory(Path.Combine(install, "mlc01", "usr"));
+        Assert.Null(flow.SetLocation(LocationField.InstallFolder, install).MissingFolderWarning);
         sandbox.AssertCanaryIntact();
     }
 

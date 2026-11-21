@@ -101,22 +101,11 @@ public sealed record AddAppView(
     public string? CloudNote { get; init; }
 
     /// <summary>
-    /// For a plan: a ticked folder that is not there and that no device has shared yet, so Apply would have nothing to link
-    /// (a second device is fine: Apply starts its folder from the shared copy). Null when there is no such folder.
+    /// For a plan: a ticked save folder whose parent folder does not exist, so Apply would refuse it ("The folder that should
+    /// contain ... does not exist"). Null when every ticked folder can be linked. A folder that is missing but has a parent is
+    /// fine: Apply creates it from the shared copy.
     /// </summary>
-    public string? MissingFolderWarning
-    {
-        get
-        {
-            var missing = Roles
-                .Where(r => r.Ticked && !r.AlreadyAdded && r.Planned is { Exists: false, IsLink: false, CreatesMapping: true })
-                .Select(r => r.RoleId)
-                .ToList();
-            return missing.Count == 0
-                ? null
-                : $"{(missing.Count == 1 ? $"The folder for {missing[0]} is" : $"The folders for {string.Join(", ", missing)} are")} not there yet, and no other device has shared one, so Apply will have nothing to link. Check the folder you chose.";
-        }
-    }
+    public string? MissingFolderWarning { get; init; }
 
     /// <summary>Add is offered for a plan with at least one role ticked that is not added yet.</summary>
     public bool CanAdd => Plan is not null && Roles.Any(r => r.Ticked && !r.AlreadyAdded);
@@ -649,8 +638,19 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 })
                 .ToList();
             var found = outcome.Candidates.FirstOrDefault(c => c.Id == plan.Install)?.Found;
+
+            // Apply refuses a folder whose parent is missing, whatever the shared copy holds: say so before Add, not at Apply.
+            var noParent = roles
+                .Where(r => r.Ticked && !r.AlreadyAdded && r.Planned is { Exists: false, IsLink: false })
+                .Select(r => (r.RoleId, Parent: Path.GetDirectoryName(PathRules.Normalize(r.Planned!.Source))))
+                .Where(x => x.Parent is not null && SafeFs.Probe(x.Parent) != EntryKind.Directory)
+                .ToList();
+            var warning = noParent.Count == 0
+                ? null
+                : $"{string.Join(" ", noParent.Select(x => $"The folder {x.Parent} does not exist, so Apply will refuse to link {x.RoleId}."))} Check the folder you chose, and that the app is installed.";
             return empty with
             {
+                MissingFolderWarning = warning,
                 Page = AddAppPage.Plan,
                 Title = $"Add {name}",
                 Found = found is null ? $"Install: {plan.Install}." : $"Install: {plan.Install}, found at {found}.",
