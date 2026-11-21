@@ -11,12 +11,7 @@ namespace SaveTether.Core.Operations;
 /// <param name="Files">Files in the shared folder.</param>
 /// <param name="Bytes">Their total size.</param>
 /// <param name="Backup">Set once the deletion ran: the verified backup taken first, or null when the folder held no files.</param>
-/// <param name="StagingInShare">
-/// True when there is no place beside the sync folder on the same drive to set files aside, so they are set aside inside the share's
-/// own metadata folder, where a sync tool can see them for a moment. Said before anything is changed.
-/// </param>
-public sealed record MappingDeletion(
-    string MappingId, string TargetFolder, bool TargetExists, int Files, long Bytes, BackupInfo? Backup = null, bool StagingInShare = false);
+public sealed record MappingDeletion(string MappingId, string TargetFolder, bool TargetExists, int Files, long Bytes, BackupInfo? Backup = null);
 
 /// <summary>
 /// A <c>map delete</c> that stopped after it had started removing the shared copy, so part of it is gone: the files the backup
@@ -61,8 +56,8 @@ public sealed partial class Workspace
     /// <summary>Test seam: called with the stage the deletion is at, so a test can change the share the way a sync tool would.</summary>
     internal Action<string>? DeletionSeam { get; set; }
 
-    /// <summary>Test seam: false makes the delete set files aside inside the share's metadata, as it must when there is no place beside it.</summary>
-    internal bool StageOutsideShare { get; set; } = true;
+    /// <summary>Test seam: true behaves as if there were no usable place beside the sync folder to set files aside.</summary>
+    internal bool StagingUnavailable { get; set; }
 
     /// <summary>
     /// What <see cref="DeleteMapping"/> would remove, after the same checks. Reads only. Refuses (a <see cref="StoreException"/>,
@@ -71,21 +66,27 @@ public sealed partial class Workspace
     public MappingDeletion DescribeMappingDeletion(string mappingId)
     {
         var target = CheckMappingUnused(mappingId);
-        var inShare = OutsideStagingBase() is null;
         if (SafeFs.Probe(target) == EntryKind.Missing)
         {
-            return new MappingDeletion(mappingId, target, TargetExists: false, Files: 0, Bytes: 0, StagingInShare: inShare);
+            return new MappingDeletion(mappingId, target, TargetExists: false, Files: 0, Bytes: 0);
         }
 
+        // Saves are never set aside inside the share, where a sync tool could change one between the check and the delete: with no
+        // usable place outside it, nothing is deleted, and this says why before the owner is asked.
         var files = SafeFs.EnumerateTree(target).Where(e => e.Kind == EntryKind.File).ToList();
-        return new MappingDeletion(mappingId, target, TargetExists: true, files.Count, files.Sum(f => f.Length), StagingInShare: inShare);
+        if (files.Count > 0 && StagingProblem(probeWrite: false) is { } problem)
+        {
+            throw new StoreException(StoreProblem.Invalid, problem);
+        }
+
+        return new MappingDeletion(mappingId, target, TargetExists: true, files.Count, files.Sum(f => f.Length));
     }
 
     /// <summary>
     /// "map delete" (design 5.3, invariant 2's third exception): removes a mapping no device uses, from the shared folder, for every
     /// device. The shared folder is backed up on this device first and the backup verified. Then, for each file the backup holds, the
-    /// file is moved aside in one rename (to a folder beside the sync folder, outside what a sync tool watches, when that is on the
-    /// same drive), checked against the backup's size and hash, and deleted only if it matches; a file that changed in the meantime
+    /// file is moved aside in one rename to a folder beside the sync folder (outside what a sync tool watches, on the same drive; with
+    /// no such place nothing is deleted and the owner is told what to do), checked against the backup's size and hash, and deleted only if it matches; a file that changed in the meantime
     /// is put back (or, if a sync tool has already put another file at its path, kept aside for recovery), and a file that arrived
     /// after the backup is not touched. Then the folders left empty, the app's own folder if it is empty, the seed markers and the
     /// mapping file. Anything left stays, and the record with it: the run says so (<see cref="MappingDeletionIncompleteException"/>)
@@ -97,14 +98,6 @@ public sealed partial class Workspace
         var described = DescribeMappingDeletion(mappingId);
         var below = Shared.DataRoot;
         var outside = OutsideStagingBase();
-        if (outside is not null && !SafeFs.CanWriteIn(outside))
-        {
-            outside = null;
-        }
-
-        var stageFolder = outside is not null
-            ? Path.Combine(outside, mappingId)
-            : Path.Combine(Shared.MetaRoot, SharedStore.DeletingFolder, mappingId);
         BackupInfo? backup = null;
         var started = false;
         try
@@ -127,6 +120,12 @@ public sealed partial class Workspace
                 DeletionSeam?.Invoke("before-backup");
                 if (SafeFs.EnumerateTree(described.TargetFolder).Any(e => e.Kind == EntryKind.File))
                 {
+                    // Before any save is backed up, moved or deleted: refuse when there is nowhere safe to set them aside.
+                    if (StagingProblem(probeWrite: true) is { } problem)
+                    {
+                        throw new StoreException(StoreProblem.Invalid, problem);
+                    }
+
                     backup = OpenBackups(ReadOwnDevice()).Create(mappingId, described.TargetFolder, BackupReason.PreDelete);
                 }
 
@@ -138,7 +137,8 @@ public sealed partial class Workspace
                 }
 
                 started = true;
-                var operation = Path.Combine(stageFolder, DateTime.UtcNow.ToString("yyyyMMddTHHmmssfff", System.Globalization.CultureInfo.InvariantCulture));
+                // Nothing is set aside when the backup holds no files, so then there may be no place for it, and none is needed.
+                var operation = outside is null ? string.Empty : Path.Combine(outside, mappingId, DateTime.UtcNow.ToString("yyyyMMddTHHmmssfff", System.Globalization.CultureInfo.InvariantCulture));
                 var (remaining, kept) = RemoveBackedUp(described.TargetFolder, manifest, below, operation, backup?.Id);
                 if (remaining + kept > 0)
                 {
@@ -209,7 +209,7 @@ public sealed partial class Workspace
     /// </summary>
     private string? OutsideStagingBase()
     {
-        if (!StageOutsideShare)
+        if (StagingUnavailable)
         {
             return null;
         }
@@ -221,7 +221,33 @@ public sealed partial class Workspace
             return null;
         }
 
-        return Path.Combine(beside, ".savetether-deleting", Path.GetFileName(syncRoot));
+        // Something that is not a folder at that name (a file, a link) leaves no place to set files aside.
+        var top = Path.Combine(beside, ".savetether-deleting");
+        if (SafeFs.Probe(top) is not (EntryKind.Missing or EntryKind.Directory))
+        {
+            return null;
+        }
+
+        return Path.Combine(top, Path.GetFileName(syncRoot));
+    }
+
+    /// <summary>
+    /// Why files cannot be set aside outside the sync folder on the same drive, in words for the owner, or null when they can.
+    /// <paramref name="probeWrite"/> also makes the folder and a small file in it, which is removed again.
+    /// </summary>
+    private string? StagingProblem(bool probeWrite)
+    {
+        var folder = OutsideStagingBase();
+        if (folder is not null && (!probeWrite || SafeFs.CanWriteIn(folder)))
+        {
+            return null;
+        }
+
+        var beside = Path.GetDirectoryName(PathRules.Normalize(Shared.SyncRoot)) ?? Shared.SyncRoot;
+        return "Nothing was deleted. Before it deletes a shared save, SaveTether sets it aside in a folder beside the sync folder, on the same drive, " +
+            "so that a sync tool cannot change it in between, and it has no such place here: " +
+            $"'{Path.Combine(beside, ".savetether-deleting")}' is not on the same drive as the shared folder, or cannot be made or written. " +
+            "Make that folder writable, or move the sync folder to where its parent folder is on the same drive, then delete again.";
     }
 
     /// <summary>
@@ -263,7 +289,7 @@ public sealed partial class Workspace
             }
         }
 
-        if (kept == 0)
+        if (kept == 0 && operation.Length > 0)
         {
             ClearStaging(operation, below);
         }

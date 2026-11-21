@@ -306,12 +306,11 @@ public class MappingDeletionTests
     }
 
     [Fact]
-    public void Files_are_set_aside_outside_the_share_by_default_and_the_limit_is_said_when_that_is_not_possible()
+    public void Files_are_set_aside_beside_the_sync_folder_and_never_inside_the_share()
     {
         using var sandbox = new Sandbox();
         var pc = Unused(sandbox);
         var workspace = Open(pc);
-        Assert.False(workspace.DescribeMappingDeletion(Id).StagingInShare);
         var seen = new List<string>();
         workspace.DeletionSeam = stage =>
         {
@@ -326,40 +325,94 @@ public class MappingDeletionTests
 
         Assert.Contains(seen, f => f.EndsWith("save.bin", StringComparison.Ordinal));
         Assert.False(Directory.Exists(Path.Combine(Path.GetDirectoryName(pc.SyncRoot)!, ".savetether-deleting")), "the folder beside the sync folder is tidied away");
-
-        // No place beside the sync folder: said before anything is changed, and the files are set aside inside the share's metadata.
-        var other = Unused(sandbox, "pc2");
-        var inShare = Open(other);
-        inShare.StageOutsideShare = false;
-        Assert.True(inShare.DescribeMappingDeletion(Id).StagingInShare);
-        var inside = new List<string>();
-        inShare.DeletionSeam = stage =>
-        {
-            if (stage == "after-stage:GAME1/save.bin")
-            {
-                inside.AddRange(Directory.GetFiles(DeletingFolderInShare(other), "*", SearchOption.AllDirectories));
-            }
-        };
-
-        inShare.DeleteMapping(Id);
-
-        Assert.Contains(inside, f => f.EndsWith("save.bin", StringComparison.Ordinal));
-        Assert.False(Directory.Exists(DeletingFolderInShare(other)));
         sandbox.AssertCanaryIntact();
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void A_save_named_like_the_note_is_set_aside_deleted_and_recovered_like_any_other(bool outsideTheShare)
+    [Fact]
+    public void With_no_usable_place_to_set_files_aside_nothing_is_deleted_and_the_app_and_the_command_line_say_why()
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+
+        // A file where the staging folder would go: nothing can be set aside beside the sync folder.
+        var blocker = Path.Combine(Path.GetDirectoryName(pc.SyncRoot)!, ".savetether-deleting");
+        File.WriteAllText(blocker, "in the way");
+        var workspace = Open(pc);
+        var save = Path.Combine(pc.Target, "GAME1", "save.bin");
+
+        var described = Assert.Throws<StoreException>(() => workspace.DescribeMappingDeletion(Id));
+        var refused = Assert.Throws<StoreException>(() => workspace.DeleteMapping(Id));
+
+        Assert.Equal(described.Message, refused.Message);
+        Assert.Contains("Nothing was deleted", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("same drive", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(".savetether-deleting", refused.Message, StringComparison.Ordinal);
+        AssertUntouched(pc, workspace, save);
+
+        // The command line says the same, with the flag that skips the question.
+        var cli = pc.Expect(CliApp.ExitRefused, "map", "delete", Id, "--confirm-delete");
+        Assert.Contains("Nothing was deleted", cli.Err, StringComparison.Ordinal);
+        Assert.DoesNotContain("Deleted '", cli.Out, StringComparison.Ordinal);
+        AssertUntouched(pc, workspace, save);
+
+        // And with the seam that stands for a drive or permission that cannot be used.
+        File.Delete(blocker);
+        workspace.StagingUnavailable = true;
+        Assert.Equal(refused.Message, Assert.Throws<StoreException>(() => workspace.DeleteMapping(Id)).Message);
+        AssertUntouched(pc, workspace, save);
+        sandbox.AssertCanaryIntact();
+    }
+
+    private static void AssertUntouched(CliDevice pc, Workspace workspace, string save)
+    {
+        Assert.Equal("one", File.ReadAllText(save));
+        Assert.True(Directory.Exists(SeedFolder(pc)));
+        Assert.True(File.Exists(MappingFile(pc)));
+        Assert.False(Directory.Exists(DeletingFolderInShare(pc)), "no staging inside the share");
+        Assert.False(Directory.Exists(DeletingFolder(pc)), "none beside it either");
+        Assert.DoesNotContain(workspace.ListBackups(Id), b => b.Reason == BackupReason.PreDelete);
+    }
+
+    [Fact]
+    public void Files_an_earlier_run_set_aside_are_still_settled_when_no_place_is_usable_for_new_ones()
+    {
+        using var sandbox = new Sandbox();
+        var pc = Unused(sandbox);
+        var workspace = Open(pc);
+        workspace.DeletionSeam = stage =>
+        {
+            if (stage == "after-stage:GAME1/save.bin")
+            {
+                throw new IOException("the process was stopped here");
+            }
+        };
+        var stopped = Assert.Throws<MappingDeletionIncompleteException>(() => workspace.DeleteMapping(Id));
+
+        // What an earlier version left below the share's metadata is still there to settle: put it where such a run would have.
+        var legacy = DeletingFolderInShare(pc);
+        Directory.CreateDirectory(Path.GetDirectoryName(legacy)!);
+        Directory.Move(DeletingFolder(pc), legacy);
+        workspace.DeletionSeam = null;
+        workspace.StagingUnavailable = true;
+
+        workspace.DeleteMapping(Id);
+
+        Assert.False(Directory.Exists(legacy));
+        Assert.False(Directory.Exists(pc.Target));
+        Assert.False(File.Exists(MappingFile(pc)));
+        Assert.Equal("one", File.ReadAllText(Path.Combine(stopped.Backup!.Location, "data", "GAME1", "save.bin")));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_save_named_like_the_note_is_set_aside_deleted_and_recovered_like_any_other()
     {
         using var sandbox = new Sandbox();
         var pc = Unused(sandbox);
         CliDevice.Write(pc.Target, "backup.json", "a save that happens to be called backup.json");
         CliDevice.Write(pc.Target, "files/inner.bin", "and a folder called files");
         var workspace = Open(pc);
-        workspace.StageOutsideShare = outsideTheShare;
-        var folder = outsideTheShare ? DeletingFolder(pc) : DeletingFolderInShare(pc);
+        var folder = DeletingFolder(pc);
         workspace.DeletionSeam = stage =>
         {
             if (stage == "after-stage:backup.json")

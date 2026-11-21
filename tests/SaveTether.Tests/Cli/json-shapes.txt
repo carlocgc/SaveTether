@@ -451,7 +451,6 @@ $.mapping_deleted.backup: object
 $.mapping_deleted.bytes: number
 $.mapping_deleted.files: number
 $.mapping_deleted.mapping_id: string
-$.mapping_deleted.staging_in_share: boolean
 $.mapping_deleted.target_exists: boolean
 $.mapping_deleted.target_folder: string
 $.mapping_deleted: object

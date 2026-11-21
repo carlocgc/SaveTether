@@ -344,14 +344,11 @@ internal static class CliApp
                     : "its record (the shared folder is already gone)";
                 if (!CanAsk)
                 {
-                    return Failed(ExitRefused, $"Deleting '{id}' removes {what} from the sync folder, on every device. Each device's own save folders and backups are not touched. Add --confirm-delete to go ahead." + (described.StagingInShare ? " (No place beside the sync folder on the same drive to set files aside: they are set aside inside the share's metadata folder while they are deleted.)" : string.Empty));
+                    return Failed(ExitRefused, $"Deleting '{id}' removes {what} from the sync folder, on every device. Each device's own save folders and backups are not touched. Add --confirm-delete to go ahead.");
                 }
 
-                var staging = described.StagingInShare
-                    ? "\nThere is no place beside the sync folder, on the same drive, to set files aside, so while they are deleted they are set aside inside the share's metadata folder, where a sync tool can see them for a moment."
-                    : string.Empty;
                 var question =
-                    $"Delete '{id}' from the shared folder? This removes {what}, and the sync tool carries the deletion to every device's sync folder. Each device's own save folders and backups are not touched." + staging +
+                    $"Delete '{id}' from the shared folder? This removes {what}, and the sync tool carries the deletion to every device's sync folder. Each device's own save folders and backups are not touched." +
                     "\nThe shared copy is backed up on this device first.";
                 if (!Confirm(question))
                 {
