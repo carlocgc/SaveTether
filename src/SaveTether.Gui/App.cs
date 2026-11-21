@@ -98,7 +98,7 @@ internal sealed class App : Application
                     "SaveTether is still running",
                     "The running SaveTether did not close, perhaps because it is in the middle of something. Quit it from its tray menu, then start this copy again.");
                 window.Close();
-                _desktop.Shutdown();
+                ShutDown();
                 return;
             }
 
@@ -133,7 +133,7 @@ internal sealed class App : Application
         }
 
         window.Close();
-        _desktop.Shutdown();
+        ShutDown();
     }
 
     private void FinishWithoutInstalling()
@@ -142,7 +142,7 @@ internal sealed class App : Application
         {
             // The installed copy is running: it shows its window, as for any second start.
             SingleInstance.SignalExisting(Options.LocalFolder);
-            _desktop.Shutdown();
+            ShutDown();
             return;
         }
 
@@ -262,6 +262,13 @@ internal sealed class App : Application
         }
     }
 
+    /// <summary>Every way the app ends goes through here, which notes when, for the log's "exited" line (Program.RunApp).</summary>
+    private void ShutDown()
+    {
+        Program.ShutdownRequestedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        _desktop.Shutdown();
+    }
+
     public void Quit()
     {
         // An operation is a journalled transaction: stopping one half way is what recover is for, not something to offer.
@@ -273,7 +280,7 @@ internal sealed class App : Application
         }
 
         _tray?.Dispose();
-        _desktop.Shutdown();
+        ShutDown();
     }
 
     private void Apply(CheckResult result)
@@ -364,7 +371,7 @@ internal sealed class App : Application
                     Log.Write(_busy ? "session ending during an operation: Recover finishes it at the next start" : "session ending: quitting");
                     _tray?.Dispose();
                     _tray = null;
-                    _desktop.Shutdown();
+                    ShutDown();
                 }
 
                 return;
