@@ -1,0 +1,94 @@
+name: Update imported definitions
+
+# Plan phase 3.5, T7. Converts the latest Ludusavi manifest and opens a pull request against development
+# when the definitions change. Run monthly, and by hand from the Actions tab.
+#
+# A pull request opened with the workflow's own token does not start CI. Close and reopen it, or push an
+# empty commit to its branch, to start the checks before merging.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-definitions
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Convert and open a pull request
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Fetch the latest manifest
+        id: manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha=$(gh api repos/mtkennerly/ludusavi-manifest/commits/master --jq .sha)
+          mkdir -p "$RUNNER_TEMP/manifest"
+          curl -fsSL "https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/$sha/data/manifest.yaml" \
+            -o "$RUNNER_TEMP/manifest/manifest.yaml"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Convert
+        run: |
+          set -euo pipefail
+          dotnet run build/convert-ludusavi.cs -- "$RUNNER_TEMP/manifest/manifest.yaml" \
+            "$RUNNER_TEMP/ludusavi.jsonl.gz" --report "$RUNNER_TEMP/report.txt" \
+            --commit "${{ steps.manifest.outputs.sha }}" --verified definitions
+
+      - name: Compare with the committed bundle
+        id: compare
+        run: |
+          set -euo pipefail
+          # Compare the decompressed lines: zlib versions can change the compressed bytes alone.
+          if diff -q <(gzip -dc definitions/imported/ludusavi.jsonl.gz) <(gzip -dc "$RUNNER_TEMP/ludusavi.jsonl.gz") > /dev/null; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "The definitions are unchanged."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a pull request
+        if: steps.compare.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.manifest.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # --commit wrote ludusavi.source.txt beside the output, in the runner's temp folder.
+          cp "$RUNNER_TEMP/ludusavi.jsonl.gz" definitions/imported/ludusavi.jsonl.gz
+          cp "$RUNNER_TEMP/ludusavi.source.txt" definitions/imported/ludusavi.source.txt
+          branch="update-definitions-${SHA:0:7}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add definitions/imported/ludusavi.jsonl.gz definitions/imported/ludusavi.source.txt
+          git commit -m "Definitions: update from the Ludusavi manifest (${SHA:0:7})"
+          git push origin "$branch"
+          {
+            echo "Converted the Ludusavi manifest at commit \`$SHA\` with \`build/convert-ludusavi.cs\`."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/report.txt"
+            echo '```'
+            echo
+            echo "Check the counts against the previous run before merging. CI does not start for a pull request opened by a workflow: close and reopen this one to run it."
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --base development --head "$branch" \
+            --title "Definitions: update from the Ludusavi manifest (${SHA:0:7})" \
+            --body-file "$RUNNER_TEMP/body.md"
