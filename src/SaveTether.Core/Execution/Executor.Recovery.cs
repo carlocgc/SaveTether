@@ -62,6 +62,7 @@ public sealed partial class Executor
     private ExecutionResult HandleFailure(Transaction tx, Exception failure)
     {
         var what = Describe(tx.Plan);
+        var diagnostic = Diagnose(tx, failure);
         try
         {
             if (PastPointOfNoReturn(tx.Entry))
@@ -70,7 +71,8 @@ public sealed partial class Executor
                     ExecutionStatus.RecoveryNeeded, tx,
                     new Note(
                         $"The {what} could not be finished: {failure.Message} Fix the cause first; recovering then completes it.",
-                        new NextStep(NextStepKind.Recover)));
+                        new NextStep(NextStepKind.Recover)),
+                    diagnostic);
             }
 
             RollBack(tx);
@@ -79,7 +81,8 @@ public sealed partial class Executor
                 ExecutionStatus.RolledBack, tx,
                 tx.LeftInSharedFolder
                     ? $"The {what} failed and was undone, except in the shared folder (see below): {failure.Message}"
-                    : $"The {what} failed and was undone: {failure.Message}");
+                    : $"The {what} failed and was undone: {failure.Message}",
+                diagnostic: diagnostic);
         }
         catch (Exception e) when (IsFailure(e))
         {
@@ -87,7 +90,8 @@ public sealed partial class Executor
                 ExecutionStatus.RecoveryNeeded, tx,
                 new Note(
                     $"The {what} failed ({failure.Message}) and could not be undone ({e.Message}).",
-                    new NextStep(NextStepKind.Recover)));
+                    new NextStep(NextStepKind.Recover)),
+                $"{diagnostic}; and then the undo failed: {e}");
         }
     }
 
