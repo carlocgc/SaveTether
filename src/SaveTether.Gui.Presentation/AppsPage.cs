@@ -59,7 +59,7 @@ public enum RowAction
 /// <param name="Main">The row's main action, shown as its button; null when the state has none, or none built yet.</param>
 /// <param name="Others">The actions under "More", in the spec's order.</param>
 /// <param name="Destructive">An action that removes something for good, shown apart as a red button; null when the row has none.</param>
-/// <param name="Devices">For a row set up on more devices than the sentence names: all of them, for the Devices button's list; null otherwise.</param>
+/// <param name="Devices">For a row some other device has a folder for: their names, shown when the sentence is hovered; null when none has.</param>
 public sealed record AppRow(MappingState Mapping, string Sentence, RowAction? Main, IReadOnlyList<RowAction> Others, RowAction? Destructive = null, IReadOnlyList<string>? Devices = null);
 
 /// <summary>An app with its rows (section 5): mappings grouped by the part of the ID before the dot.</summary>
@@ -140,34 +140,30 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
 
         // No device links this role (none has a folder set for it): nothing links to it, so it can be deleted from the shared folder.
         var unused = mapping is { Health.Reason: HealthReason.NoSaveFolder, SetUpOn.Count: 0 };
-        var devices = mapping.Health.Reason == HealthReason.NoSaveFolder && mapping.SetUpOn.Count > MaxDevicesNamed ? mapping.SetUpOn : null;
+        var devices = mapping.Health.Reason == HealthReason.NoSaveFolder && mapping.SetUpOn.Count > 0 ? mapping.SetUpOn : null;
         return new AppRow(mapping, sentence, main, others, unused ? RowAction.Delete : null, devices);
     }
 
-    /// <summary>How many devices a "Set up on" sentence names before it counts the rest, so a row stays one line however many there are.</summary>
-    public const int MaxDevicesNamed = 3;
-
     /// <summary>
-    /// "Set up on pc, deck." for a few devices; for more, the first few and a count ("Set up on a, b, c and 9 more."), with the Devices button listing them all. Nothing at all when no device has it.
+    /// What a row says when other devices have a folder for the role: only how many ("3 devices have a link."), so the row stays
+    /// one short line however many there are; the names are in <see cref="DevicesTip"/>, shown when the sentence is hovered.
     /// </summary>
     public static string SetUpOnSentence(IReadOnlyList<string> devices)
     {
         ArgumentNullException.ThrowIfNull(devices);
-        if (devices.Count == 0)
+        return devices.Count switch
         {
-            return "No device links this role.";
-        }
-
-        return devices.Count <= MaxDevicesNamed
-            ? $"Set up on {string.Join(", ", devices)}."
-            : $"Set up on {string.Join(", ", devices.Take(MaxDevicesNamed))} and {devices.Count - MaxDevicesNamed} more.";
+            0 => "No device links this role.",
+            1 => "1 device has a link.",
+            _ => $"{devices.Count} devices have a link.",
+        };
     }
 
-    /// <summary>The Devices button's list: the title and one device per line.</summary>
-    public static (string Title, string Text) DevicesList(string role, IReadOnlyList<string> devices)
+    /// <summary>The hover text of that sentence: every device, one per line.</summary>
+    public static string DevicesTip(IReadOnlyList<string> devices)
     {
         ArgumentNullException.ThrowIfNull(devices);
-        return ($"{role} is set up on {devices.Count} devices", string.Join("\n", devices));
+        return string.Join("\n", devices);
     }
 
     public static string Label(RowAction action) => action switch

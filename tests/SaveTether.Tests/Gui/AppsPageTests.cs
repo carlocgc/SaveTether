@@ -90,7 +90,7 @@ public class AppsPageTests
         pc.DeliverTo(deck, metadataOnly: true);
 
         var notHere = AppsPage.From(StatusCheck.Run(new LocalStore(deck.LocalFolder))).NotOnThisDevice;
-        Assert.Equal("Set up on pc.", Assert.Single(notHere).Sentence);
+        Assert.Equal("1 device has a link.", Assert.Single(notHere).Sentence);
 
         // A link SaveTether did not make, at pc's save folder.
         var elsewhere = sandbox.Dir("elsewhere");
@@ -283,26 +283,29 @@ public class AppsPageTests
     }
 
     [Fact]
-    public void A_row_set_up_on_many_devices_names_a_few_and_counts_the_rest_with_a_Devices_list()
+    public void A_row_other_devices_have_says_how_many_and_the_names_are_the_hover_text()
     {
-        Assert.Equal("Set up on a, b, c.", AppsPage.SetUpOnSentence(["a", "b", "c"]));
-        Assert.Equal("Set up on a, b, c and 9 more.", AppsPage.SetUpOnSentence(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]));
         Assert.Equal("No device links this role.", AppsPage.SetUpOnSentence([]));
+        Assert.Equal("1 device has a link.", AppsPage.SetUpOnSentence(["pc"]));
+        Assert.Equal("12 devices have a link.", AppsPage.SetUpOnSentence(Enumerable.Range(1, 12).Select(i => $"device-{i:00}").ToList()));
 
         var many = Enumerable.Range(1, 12).Select(i => $"device-{i:00}").ToList();
         var row = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { SetUpOn = many });
-        Assert.Equal("Set up on device-01, device-02, device-03 and 9 more.", row.Sentence);
+        Assert.Equal("12 devices have a link.", row.Sentence);
         Assert.Equal(many, row.Devices);
+        Assert.Equal(12, AppsPage.DevicesTip(many).Split('\n').Length);
+        Assert.Equal("device-01\ndevice-02", AppsPage.DevicesTip(["device-01", "device-02"]));
         Assert.Null(row.Destructive);
-        Assert.False(row.Sentence.Contains('\n', StringComparison.Ordinal));
 
+        // A few devices work the same way: how many, with the names on hover.
         var few = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { SetUpOn = ["pc", "deck"] });
-        Assert.Null(few.Devices);
-        Assert.Null(AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder)).Devices);
+        Assert.Equal("2 devices have a link.", few.Sentence);
+        Assert.Equal(["pc", "deck"], few.Devices);
 
-        var (title, text) = AppsPage.DevicesList("PPSSPP savedata", many);
-        Assert.Equal("PPSSPP savedata is set up on 12 devices", title);
-        Assert.Equal(12, text.Split('\n').Length);
+        // No device has it: no list, and it can be deleted.
+        var none = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder));
+        Assert.Null(none.Devices);
+        Assert.Equal((RowAction?)RowAction.Delete, none.Destructive);
     }
 
     [Fact]

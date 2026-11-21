@@ -383,6 +383,13 @@ internal sealed class MainWindow : Window
             text.Children.Add(new TextBlock { Text = mapping.Health.Source, Opacity = 0.65, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis });
         }
 
+        // The devices that have a link are in the sentence's hover text, for any number, with no styling to suggest it: the row
+        // says how many, and hovering shows who.
+        if (row.Devices is { Count: > 0 } devices)
+        {
+            ToolTip.SetTip(text, AppsPage.DevicesTip(devices));
+        }
+
         Add(grid, 3, text);
 
         var role = $"{mapping.AppName} {mapping.Role}";
@@ -391,20 +398,9 @@ internal sealed class MainWindow : Window
             var button = new Button { Content = AppsPage.Label(main), IsEnabled = Allowed(main, actionsAllowed), Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             AutomationProperties.SetName(button, $"{AppsPage.Label(main)}: {role}");
             button.Click += (_, _) => Do(main, row);
-            Add(grid, 4, button);
-        }
-
-        // A row set up on many devices names the first few in its sentence; the Devices button lists them all, one per line.
-        if (row.Devices is { Count: > 0 } devices)
-        {
-            var list = new Button { Content = "Devices", Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            AutomationProperties.SetName(list, $"Devices that have {role}");
-            list.Click += (_, _) =>
-            {
-                var (title, text) = AppsPage.DevicesList(role, devices);
-                _ = _overlay.InformAsync(title, text);
-            };
-            Add(grid, 5, list);
+            // In the not-here list the main action (Add) is the right-most button and Delete sits to its left, so the buttons end
+            // at the same edge as the rows above.
+            Add(grid, withApp ? 5 : 4, button);
         }
 
         // An action that deletes for good is its own red button, apart from More (the owner asked for red). Such a row has no More.
@@ -414,7 +410,7 @@ internal sealed class MainWindow : Window
             Danger.Style(delete);
             AutomationProperties.SetName(delete, $"{AppsPage.Label(destructive)} from the shared folder: {role}");
             delete.Click += (_, _) => Do(destructive, row);
-            Add(grid, 5, delete);
+            Add(grid, 4, delete);
         }
 
         if (row.Others.Count > 0)
