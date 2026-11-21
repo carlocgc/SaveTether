@@ -30,8 +30,8 @@ public enum RowAction
     /// <summary>Open the shared folder's parent: the shared folder itself is missing.</summary>
     OpenSharedFolderParent,
 
-    /// <summary>"map remove": forget this device's folder for the mapping. Only offered when Ready to link.</summary>
-    StopUsingHere,
+    /// <summary>"map remove": forget this device's folder for the mapping, which moves to "Not on this device". Only offered when Ready to link.</summary>
+    Remove,
 
     /// <summary>Show the core's own sentence for the state.</summary>
     Details,
@@ -99,14 +99,14 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         var link = mapping.LinkTarget ?? "another folder";
         var (sentence, main, others) = (mapping.Health.State, mapping.Health.Reason) switch
         {
-            (HealthState.Ok, _) => ("Saves here are the shared copy.", (RowAction?)null,
+            (HealthState.Ok, _) => ("This folder is a link to the shared folder.", (RowAction?)null,
                 new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert }),
             (HealthState.NotApplied, HealthReason.NoSaveFolder) => (
                 mapping.SetUpOn.Count == 0 ? "No device has a folder set for it." : $"Set up on {string.Join(", ", mapping.SetUpOn)}, not here.",
                 RowAction.AddHere, []),
             (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => (
                 $"This device's file has '{mapping.Health.Source}' as the folder.", null, new[] { RowAction.Details }),
-            (HealthState.NotApplied, _) => ("Not linked yet.", RowAction.Apply, new[] { RowAction.OpenFolder, RowAction.StopUsingHere }),
+            (HealthState.NotApplied, _) => ("Not linked yet.", RowAction.Apply, new[] { RowAction.OpenFolder, RowAction.Remove }),
             (HealthState.Replaced, HealthReason.FolderEmpty) => ("The link is gone and the folder is empty.", RowAction.Apply, new[] { RowAction.OpenFolder }),
             (HealthState.Replaced, HealthReason.FolderMissing) => (
                 $"Nothing is at {source}. If the app has moved, find it again.",
@@ -142,7 +142,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         RowAction.OpenFolderParent => "Open folder's parent",
         RowAction.OpenSharedFolder => "Open shared folder",
         RowAction.OpenSharedFolderParent => "Open shared folder's parent",
-        RowAction.StopUsingHere => "Stop using here",
+        RowAction.Remove => "Remove",
         RowAction.Details => "Details",
         RowAction.FindAppAgain => "Find the app again",
         RowAction.ChooseFolderAgain => "Choose the folder again",
@@ -151,8 +151,8 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no label."),
     };
 
-    /// <summary>"Stop using here"'s confirmation (section 5).</summary>
-    public static string StopUsingWarning(string role) =>
+    /// <summary>Remove's confirmation (section 5).</summary>
+    public static string RemoveWarning(string role) =>
         $"Forget this device's folder for {role}? Nothing is deleted; the shared copy and other devices are not affected.";
 
     /// <summary>

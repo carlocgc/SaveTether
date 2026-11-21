@@ -19,7 +19,7 @@ public class AppsPageTests
         AppRow For(HealthState state, HealthReason? reason = null) => AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", state, reason));
 
         var ok = For(HealthState.Ok);
-        Assert.Equal("Saves here are the shared copy.", ok.Sentence);
+        Assert.Equal("This folder is a link to the shared folder.", ok.Sentence);
         Assert.Null(ok.Main);
         Assert.Equal([RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert], ok.Others);
 
@@ -29,12 +29,12 @@ public class AppsPageTests
 
         var ready = For(HealthState.NotApplied, HealthReason.NotLinkedYet);
         Assert.Equal((RowAction?)RowAction.Apply, ready.Main);
-        Assert.Contains(RowAction.StopUsingHere, ready.Others);
+        Assert.Equal([RowAction.OpenFolder, RowAction.Remove], ready.Others);
 
-        // Stop using here is offered only when Ready to link: the core refuses it while applied.
+        // Remove is offered only when Ready to link: the core refuses it while applied.
         Assert.All(
             Enum.GetValues<HealthState>().Where(s => s != HealthState.NotApplied),
-            s => Assert.DoesNotContain(RowAction.StopUsingHere, For(s).Others));
+            s => Assert.DoesNotContain(RowAction.Remove, For(s).Others));
 
         Assert.Equal((RowAction?)RowAction.Apply, For(HealthState.Replaced, HealthReason.FolderHoldsFiles).Main);
         Assert.Equal((RowAction?)RowAction.Apply, For(HealthState.Replaced, HealthReason.FolderEmpty).Main);
@@ -236,7 +236,12 @@ public class AppsPageTests
         var (shown, defined) = AppNames.Resolve(catalog, id);
 
         Assert.Equal(name, shown);
-        Assert.False(defined);
+        Assert.True(defined);
+
+        // A role the imported definition has is defined; one it lacks (a mapping made by hand) is not.
+        var role = catalog.Find(id)!.Definition!.Roles[0].Id;
+        Assert.True(AppNames.Resolve(catalog, id, role).Defined);
+        Assert.False(AppNames.Resolve(catalog, id, "no-such-role-by-hand").Defined);
         Assert.True(AppNames.Resolve(catalog, "cemu").Defined);
         Assert.Equal(("no-such-game", false), AppNames.Resolve(catalog, "no-such-game"));
     }
@@ -251,7 +256,7 @@ public class AppsPageTests
     }
 
     [Fact]
-    public void Stop_using_here_forgets_this_devices_folder_and_is_refused_while_linked()
+    public void Remove_forgets_this_devices_folder_and_is_refused_while_linked()
     {
         using var sandbox = new Sandbox();
         var pc = new CliDevice(sandbox, "pc");
@@ -260,17 +265,17 @@ public class AppsPageTests
         pc.Ok("apply", Id, "--copy");
         var local = new LocalStore(pc.LocalFolder);
 
-        var (linked, _) = OperationSession.Begin(local, "stop using", new NoProcesses(), null);
+        var (linked, _) = OperationSession.Begin(local, "remove", new NoProcesses(), null);
         using (linked)
         {
-            Assert.Equal(StoreProblem.Conflict, Assert.Throws<StoreException>(() => linked!.StopUsing(Id)).Problem);
+            Assert.Equal(StoreProblem.Conflict, Assert.Throws<StoreException>(() => linked!.Remove(Id)).Problem);
         }
 
         pc.Ok("revert", Id);
-        var (ready, _) = OperationSession.Begin(local, "stop using", new NoProcesses(), null);
+        var (ready, _) = OperationSession.Begin(local, "remove", new NoProcesses(), null);
         using (ready)
         {
-            ready!.StopUsing(Id);
+            ready!.Remove(Id);
         }
 
         var row = Assert.Single(AppsPage.From(StatusCheck.Run(local)).NotOnThisDevice);

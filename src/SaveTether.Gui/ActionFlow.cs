@@ -272,11 +272,11 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
     }
 
-    /// <summary>"Stop using here" (section 5): <c>map remove</c> after its confirmation. Nothing is deleted.</summary>
-    public async Task StopUsingAsync(MappingState mapping)
+    /// <summary>"Remove" (section 5): <c>map remove</c> after its confirmation. Nothing is deleted.</summary>
+    public async Task RemoveAsync(MappingState mapping)
     {
         var role = $"{mapping.AppName} {mapping.Role}";
-        if (!await overlay.ConfirmAsync($"Stop using {role} here?", AppsPage.StopUsingWarning(role), "Stop using here"))
+        if (!await overlay.ConfirmAsync($"Remove {role} from this device?", AppsPage.RemoveWarning(role), "Remove"))
         {
             return;
         }
@@ -291,7 +291,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         {
             try
             {
-                await Work("Updating the mapping…", () => session.StopUsing(mapping.MappingId));
+                await Work("Updating the mapping…", () => session.Remove(mapping.MappingId));
                 log.Write($"map remove {mapping.MappingId}: done");
             }
             catch (StoreException e)

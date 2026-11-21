@@ -82,8 +82,8 @@ public sealed class OperationSession : IDisposable
 
     public ExecutionResult Run(Plan plan, IProgress<StepProgress>? progress) => Workspace.Run(plan, progress);
 
-    /// <summary>"Stop using here": the core's <c>map remove</c>. Its refusal (the folder is linked) is a <see cref="StoreException"/>.</summary>
-    public void StopUsing(string mappingId) => Workspace.MapRemove(mappingId);
+    /// <summary>"Remove": the core's <c>map remove</c>. Its refusal (the folder is linked) is a <see cref="StoreException"/>.</summary>
+    public void Remove(string mappingId) => Workspace.MapRemove(mappingId);
 
     /// <summary>
     /// Apply all's first half (section 9.4): each mapping planned with no choice, in the order given. Those

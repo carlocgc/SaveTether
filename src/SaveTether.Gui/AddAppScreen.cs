@@ -43,6 +43,9 @@ internal sealed class AddAppScreen : UserControl, IScreen
     private Action? _unsubscribe;
     private readonly ScanSession _scans;
 
+    // The scan's optional kinds some definition has (none, with the definitions that ship): read once per screen.
+    private IReadOnlySet<Core.Definitions.RoleClass>? _extraClasses;
+
     /// <param name="startAt">Page 1; page 2 for an app, from a row's "Find the app again" or "Add"; or the hand form for a mapping.</param>
     public AddAppScreen(string localFolder, Overlay overlay, Func<Func<ActionFlow, Task>, Task> operate, Action close, AddAppStart startAt, ScanSession scans)
     {
@@ -97,6 +100,12 @@ internal sealed class AddAppScreen : UserControl, IScreen
         _page.Content = null;
         var added = await Guard(() => _flow.AddedApps());
         if (added is null)
+        {
+            return;
+        }
+
+        _extraClasses ??= await Guard(() => _flow.ExtraScanClasses());
+        if (_extraClasses is null)
         {
             return;
         }
@@ -325,20 +334,35 @@ internal sealed class AddAppScreen : UserControl, IScreen
         ToolTip.SetTip(scan, "Also lists saves left by apps that are no longer installed");
         // Everything but the list is pinned above the scrolling area, so it stays in reach however long the list is:
         // the title and what the page is for, then one row (the way back, Add folder, the scan), then the search and how many were found.
-        // The scan and its two choices share a frame to show that the choices belong to the scan.
-        var scanGroup = new Border
+        // The scan and its choices share a frame to show that the choices belong to the scan. A choice is shown only
+        // when some definition has that kind of folder, since it would change nothing otherwise; with none, the scan is just its button.
+        var scanChoices = new List<Control> { scan };
+        if (_extraClasses.Contains(Core.Definitions.RoleClass.System))
         {
-            Child = new StackPanel
+            scanChoices.Add(system);
+        }
+
+        if (_extraClasses.Contains(Core.Definitions.RoleClass.State))
+        {
+            scanChoices.Add(states);
+        }
+
+        var scanRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        foreach (var choice in scanChoices)
+        {
+            scanRow.Children.Add(choice);
+        }
+
+        Control scanGroup = scanChoices.Count == 1
+            ? scan
+            : new Border
             {
-                Orientation = Orientation.Horizontal,
-                Spacing = 12,
-                Children = { scan, system, states },
-            },
-            BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(6, 4),
-        };
+                Child = scanRow,
+                BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(6, 4),
+            };
         var actions = new StackPanel
         {
             Orientation = Orientation.Horizontal,

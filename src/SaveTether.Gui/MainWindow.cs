@@ -259,8 +259,13 @@ internal sealed class MainWindow : Window
         var settings = new Button { Content = "Settings" };
         settings.Click += (_, _) => OpenScreen(new SettingsScreen(_localFolder, App.Session, _overlay, CloseScreen));
         pageActions.Children.Add(settings);
-        _pageActions = pageActions;
-        _bar.Content = _screen is IScreen open ? open.Bar : pageActions;
+        // The page's title above its buttons, as on the other pages.
+        _pageActions = new StackPanel
+        {
+            Spacing = 8,
+            Children = { new TextBlock { Text = "Manage links", FontSize = 22, FontWeight = FontWeight.SemiBold }, pageActions },
+        };
+        _bar.Content = _screen is IScreen open ? open.Bar : _pageActions;
 
         foreach (var group in page.Groups)
         {
@@ -345,19 +350,28 @@ internal sealed class MainWindow : Window
     {
         var mapping = row.Mapping;
         var name = withApp ? $"{mapping.AppName} {mapping.Role}" : mapping.Role;
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,150,170,*,Auto,Auto"), Margin = new Thickness(0, 4) };
+        // In "Not on this device" every row has the same state, which the section's name already says, so that column is dropped
+        // and its room goes to the name, which there carries the app as well.
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,300,0,*,Auto,Auto" : "Auto,150,170,*,Auto,Auto"), Margin = new Thickness(0, 4) };
         Add(grid, 0, new Ellipse { Width = 10, Height = 10, Fill = new SolidColorBrush(Icons.ColourOf(mapping.Word.Shade)), Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
         Add(grid, 1, new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 2, new TextBlock { Text = mapping.Word.Word, VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 3, new StackPanel
+        if (!withApp)
+        {
+            Add(grid, 2, new TextBlock { Text = mapping.Word.Word, VerticalAlignment = VerticalAlignment.Center });
+        }
+
+        // The folder's line only when there is one: an empty line still takes its height and pushed the sentence up.
+        var text = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
-            Children =
-            {
-                new TextBlock { Text = row.Sentence, TextWrapping = TextWrapping.Wrap },
-                new TextBlock { Text = mapping.Health.Source ?? string.Empty, Opacity = 0.65, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis },
-            },
-        });
+            Children = { new TextBlock { Text = row.Sentence, TextWrapping = TextWrapping.Wrap } },
+        };
+        if (!string.IsNullOrEmpty(mapping.Health.Source))
+        {
+            text.Children.Add(new TextBlock { Text = mapping.Health.Source, Opacity = 0.65, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis });
+        }
+
+        Add(grid, 3, text);
 
         var role = $"{mapping.AppName} {mapping.Role}";
         if (row.Main is { } main)
@@ -388,7 +402,7 @@ internal sealed class MainWindow : Window
 
     /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
-        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.StopUsingHere
+        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.Remove
             or RowAction.FindAppAgain or RowAction.ChooseFolderAgain or RowAction.AddHere);
 
     /// <summary>Banner B5's Fix it (write the entry with this app's path) or Turn it off (remove it); then a check redraws.</summary>
@@ -436,8 +450,8 @@ internal sealed class MainWindow : Window
             case RowAction.Revert:
                 _ = _operate(flow => flow.RevertAsync(mapping));
                 break;
-            case RowAction.StopUsingHere:
-                _ = _operate(flow => flow.StopUsingAsync(mapping));
+            case RowAction.Remove:
+                _ = _operate(flow => flow.RemoveAsync(mapping));
                 break;
             case RowAction.CheckAgain:
                 _checkNow();
