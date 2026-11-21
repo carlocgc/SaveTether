@@ -14,8 +14,9 @@
       "base": "{install_dir}/mlc01"
     },
     {
-      // The default for an installed (not portable) Cemu on Windows, per PCGamingWiki and the Ludusavi
-      // manifest (commit 2fbcf8f): %USERPROFILE%\Documents\mlc01. Not yet run on a real machine.
+      // The older default for Cemu on Windows, per PCGamingWiki and the Ludusavi manifest (commit 2fbcf8f):
+      // %USERPROFILE%\Documents\mlc01. A portable copy (win-portable) may sit beside it; when both are found,
+      // Add app asks which to share. Not yet run on a real machine.
       "id": "win-documents",
       "os": "windows",
       "detect": { "dir": "{documents}/mlc01" },
