@@ -1,6 +1,6 @@
 ; SaveTether's Windows installer (desktop-app-spec.md, section 11, "Installing"; decided by the owner on 2026-11-19).
 ; Per user, no administrator: everything in %LOCALAPPDATA%\Programs\SaveTether, a Start menu entry, an entry in
-; Settings > Apps that uninstalls it, and an opt-in, unticked task that adds the folder to the user's Path
+; Settings > Apps that uninstalls it, an opt-in, unticked task for a desktop shortcut, and an opt-in, unticked task that adds the folder to the user's Path
 ; (decision 10). Built from an unpacked release package by build/build-installer.ps1:
 ;
 ;   ISCC.exe /DAppVersion=<version> /DSourceDir=<unpacked package> /DOutputDir=<dir> /DOutputName=<name> build\windows\savetether.iss
@@ -60,6 +60,7 @@ ChangesEnvironment=yes
 
 [Tasks]
 Name: "addtopath"; Description: "Make the savetether command available in terminals (adds the install folder to your Path)"; Flags: unchecked
+Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 
 [Files]
 Source: "{#SourceDir}\savetether-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -73,6 +74,7 @@ Source: "{#SourceDir}\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreve
 
 [Icons]
 Name: "{autoprograms}\SaveTether"; Filename: "{app}\savetether-gui.exe"; Comment: "Keeps game save folders linked to one synced folder"
+Name: "{autodesktop}\SaveTether"; Filename: "{app}\savetether-gui.exe"; Comment: "Keeps game save folders linked to one synced folder"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\savetether-gui.exe"; Description: "Start SaveTether"; Flags: nowait postinstall skipifsilent
