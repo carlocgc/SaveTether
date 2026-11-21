@@ -16,6 +16,7 @@ $ErrorActionPreference = 'Stop'
 
 $app = [IO.Path]::GetFullPath($Dir)
 $shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\SaveTether.lnk'
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'SaveTether.lnk'
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6E3C9B52-8F1D-4A7E-9C41-2B5D7E0A9F13}_is1'
 $files = 'savetether-gui.exe', 'savetether.exe', 'libSkiaSharp.dll', 'libHarfBuzzSharp.dll', 'av_libglesv2.dll', 'LICENSE', 'README.md', 'THIRD-PARTY-NOTICES.md'
 
@@ -45,9 +46,10 @@ function Assert-That([bool] $condition, [string] $what) {
 }
 
 function Install-AndCheck {
-    Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=addtopath', "/DIR=`"$app`"" -Wait
+    Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=addtopath,desktopicon', "/DIR=`"$app`"" -Wait
     foreach ($file in $files) { Assert-That (Test-Path (Join-Path $app $file)) "installed $file" }
     Assert-That (Test-Path $shortcut) 'Start menu entry'
+    Assert-That (Test-Path $desktopShortcut) 'desktop shortcut'
     Assert-That (Test-Path $uninstallKey) 'Settings > Apps entry'
     Assert-That ((Get-ItemProperty $uninstallKey).DisplayVersion -eq $Version) "registered as version $Version"
     Assert-That ((Read-UserPath).Value.Split(';') -contains $app) 'install folder on the user Path'
@@ -62,6 +64,7 @@ function Uninstall-AndCheck {
     while ((Test-Path $app) -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 500 }
     Assert-That (-not (Test-Path $app)) 'install folder removed'
     Assert-That (-not (Test-Path $shortcut)) 'Start menu entry removed'
+    Assert-That (-not (Test-Path $desktopShortcut)) 'desktop shortcut removed'
     Assert-That (-not (Test-Path $uninstallKey)) 'Settings > Apps entry removed'
 }
 
