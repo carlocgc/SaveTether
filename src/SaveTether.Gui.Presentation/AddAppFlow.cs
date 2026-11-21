@@ -1,5 +1,6 @@
 using SaveTether.Core.Definitions;
 using SaveTether.Core.Detection;
+using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
@@ -25,7 +26,8 @@ public enum CatalogStatus
 }
 
 /// <summary>One app of the catalog, as page 1 lists it.</summary>
-public sealed record CatalogApp(string Id, string Name, DefinitionSource Source, bool IsValid);
+/// <param name="MoreToAdd">For an added app: it has a folder (role) for this device that is not added yet.</param>
+public sealed record CatalogApp(string Id, string Name, DefinitionSource Source, bool IsValid, bool MoreToAdd = false);
 
 /// <summary>An app the scan found on this device, with where and when it was last used.</summary>
 public sealed record FoundApp(CatalogApp App, string InstallId, string SaveFolder, DateTime? NewestWrite, bool Installed = true);
@@ -64,7 +66,8 @@ public enum AddAppPage
 /// <param name="Unticked">Why a role is off by default, for the label beside its checkbox. Null for a default role.</param>
 /// <param name="Planned">The plan's measurements, when the role is in the plan.</param>
 /// <param name="Notes">The definition's note for the role.</param>
-public sealed record RoleChoice(string RoleId, RoleClass Class, bool Ticked, string? Unticked, AppRolePlan? Planned, string? Notes);
+/// <param name="AlreadyAdded">This device already has a folder set for the role: it shows ticked and cannot be changed here (Remove on the Apps page undoes it).</param>
+public sealed record RoleChoice(string RoleId, RoleClass Class, bool Ticked, string? Unticked, AppRolePlan? Planned, string? Notes, bool AlreadyAdded = false);
 
 /// <summary>Page 2 as the window shows it.</summary>
 /// <param name="Found">For a plan: the install used and what showed it is there.</param>
@@ -91,8 +94,8 @@ public sealed record AddAppView(
     /// <summary>For a plan: a note that some store's copy of the app keeps saves in the cloud too; null when none does.</summary>
     public string? CloudNote { get; init; }
 
-    /// <summary>Add is offered for a plan with at least one role ticked.</summary>
-    public bool CanAdd => Plan is not null && Roles.Any(r => r.Ticked);
+    /// <summary>Add is offered for a plan with at least one role ticked that is not added yet.</summary>
+    public bool CanAdd => Plan is not null && Roles.Any(r => r.Ticked && !r.AlreadyAdded);
 }
 
 /// <summary>What Add did: added, refused before anything was written, or found that the plan changed meanwhile.</summary>
@@ -133,29 +136,6 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             .ToList();
     }
 
-    /// <summary>
-    /// Which of the scan's optional folder kinds (system files, save states) some definition has. A box for a kind no
-    /// definition has would change nothing, so the page shows only the boxes this returns. Reads only.
-    /// </summary>
-    public IReadOnlySet<RoleClass> ExtraScanClasses()
-    {
-        try
-        {
-            var catalog = Open().Definitions;
-            return catalog.FindAll(catalog.AvailableIds())
-                .Select(e => e.Entry.Definition)
-                .OfType<AppDefinition>()
-                .SelectMany(d => d.Roles)
-                .Select(r => r.Class)
-                .Where(c => c is RoleClass.System or RoleClass.State)
-                .ToHashSet();
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or StoreException)
-        {
-            return new HashSet<RoleClass>();
-        }
-    }
-
     /// <summary>Page 1's "already added" rows: apps with a folder set on this device, in name order. Reads only.</summary>
     public IReadOnlyList<CatalogApp> AddedApps()
     {
@@ -172,9 +152,25 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             .Distinct(StringComparer.Ordinal)
             .ToList();
         return workspace.Definitions.FindAll(ids.Where(id => workspace.Definitions.Find(id) is not null).ToList())
-            .Select(e => new CatalogApp(e.Id, e.Entry.Definition?.Name ?? e.Id, e.Entry.Source, e.Entry.IsValid))
+            .Select(e => new CatalogApp(e.Id, e.Entry.Definition?.Name ?? e.Id, e.Entry.Source, e.Entry.IsValid, MoreToAdd: HasRoleLeft(e.Entry.Definition, e.Id, device.Paths.Keys)))
             .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>
+    /// Whether the app has a folder for this OS that this device has not added: a role with a path for an install on
+    /// this OS and no folder set. An added app with none left has nothing more to choose, so page 1 does not open it.
+    /// </summary>
+    private bool HasRoleLeft(AppDefinition? definition, string appId, IEnumerable<string> addedMappingIds)
+    {
+        if (definition is null)
+        {
+            return false;
+        }
+
+        var added = addedMappingIds.ToHashSet(StringComparer.Ordinal);
+        var installs = definition.Installs.Where(i => i.Os.Contains(environment.Os)).Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
+        return definition.Roles.Any(r => r.Paths.Keys.Any(installs.Contains) && !added.Contains(r.MappingIdFor(appId)));
     }
 
     /// <summary>A found row's "last played": the newest save's date (local), or why there is none.</summary>
@@ -300,6 +296,12 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     public AddAppView SetRole(string roleId, bool ticked)
     {
         var shown = _lastPlan ?? throw new InvalidOperationException("Roles are chosen on a plan.");
+        if (shown.Roles.Any(r => r.RoleId == roleId && r.AlreadyAdded))
+        {
+            // Added before: Add never removes a folder, so the box does not change here.
+            return shown;
+        }
+
         var keep = shown.Roles.Where(r => r.RoleId == roleId ? ticked : r.Ticked).Select(r => r.RoleId).ToList();
         if (keep.Count == 0)
         {
@@ -342,6 +344,15 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             try
             {
                 var outcome = session.Workspace.PlanAppAdd(Request, environment);
+
+                // The folders locked as "added" were told from this device's paths when the page was made. If one was removed
+                // (or moved) since, the plan can still match, and Add would write it back unseen: show the page again instead.
+                if (outcome.Plan is { } checkedPlan && Same(checkedPlan, shown.Plan!) && !SameAdded(View(outcome).Roles, shown.Roles))
+                {
+                    var changedView = View(outcome);
+                    return new AddAppResult([], null, changedView with { Sentences = [DifferentNow, .. changedView.Sentences] });
+                }
+
                 if (outcome.Plan is not { } plan || !Same(plan, shown.Plan!))
                 {
                     var again = View(outcome);
@@ -349,9 +360,13 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 }
 
                 session.Workspace.AddApp(plan);
-                return new AddAppResult(plan.Roles.Select(r => r.MappingId).ToList(), null, null)
+
+                // Roles added before are written again unchanged; only the new ones are reported, for "Apply it now?".
+                var before = shown.Roles.Where(r => r.AlreadyAdded).Select(r => r.RoleId).ToHashSet(StringComparer.Ordinal);
+                var added = plan.Roles.Where(r => !before.Contains(r.RoleId)).ToList();
+                return new AddAppResult(added.Select(r => r.MappingId).ToList(), null, null)
                 {
-                    AlreadyLinked = plan.Roles.Where(r => r.IsLink).Select(r => r.MappingId).ToList(),
+                    AlreadyLinked = added.Where(r => r.IsLink).Select(r => r.MappingId).ToList(),
                 };
             }
             catch (StoreException e)
@@ -435,6 +450,24 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         return view;
     }
 
+    /// <summary>
+    /// Whether an added role's folder is somewhere else now than this device has it. The place is worked out for the role
+    /// whether or not it is in the plan (a default-off role is not), so a moved optional folder can still be added again.
+    /// When the place cannot be worked out the role stays locked: there is nothing to record.
+    /// </summary>
+    private bool HasMoved(InstallDefinition install, RoleDefinition role, AppAddPlan plan, AppRolePlan? planned, DevicePath had)
+    {
+        string? now = planned?.Source;
+        if (now is null)
+        {
+            var values = new DeviceValues(plan.Values.InstallDir, plan.Values.SdCard, plan.Values.WinePrefix);
+            var resolved = new PathResolver(environment).ResolveRole(install, role, values);
+            now = resolved.IsResolved ? resolved.Path : null;
+        }
+
+        return now is not null && !string.Equals(PathRules.Normalize(now), PathRules.Normalize(had.Source), StringComparison.Ordinal);
+    }
+
     /// <summary>Page 2's unverified note, for an imported definition.</summary>
     public const string UnverifiedNote =
         "Unverified: this definition was converted from the Ludusavi manifest and has not been tried by hand. Check the folders below before you add.";
@@ -476,12 +509,19 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         if (outcome.Plan is { } plan)
         {
             var install = definition!.Installs.First(i => i.Id == plan.Install);
+            var device = workspace.Shared.TryReadDevice(workspace.DeviceName);
+            var addedHere = device?.Paths ?? new Dictionary<string, DevicePath>();
             var roles = definition.Roles
                 .Where(r => r.Paths.ContainsKey(install.Id))
                 .Select(r =>
                 {
                     var planned = plan.Roles.FirstOrDefault(p => p.RoleId == r.Id);
-                    return new RoleChoice(r.Id, r.Class, planned is not null, r.Default ? null : WhyOff(r.Class), planned, r.Notes);
+                    // Added already: this device has the folder set, and the plan would set the same one. A folder that moved (the
+                    // plan finds the role somewhere else now) is not "already": adding it again records where it is now.
+                    var mappingId = r.MappingIdFor(request.AppId);
+                    var already = addedHere.TryGetValue(mappingId, out var had)
+                        && !HasMoved(install, r, plan, planned, had);
+                    return new RoleChoice(r.Id, r.Class, planned is not null || already, r.Default || already ? null : WhyOff(r.Class), planned, r.Notes, already);
                 })
                 .ToList();
             var found = outcome.Candidates.FirstOrDefault(c => c.Id == plan.Install)?.Found;
@@ -632,6 +672,9 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     }
 
     /// <summary>Whether the plan made under the lock writes what the owner saw.</summary>
+    private static bool SameAdded(IReadOnlyList<RoleChoice> now, IReadOnlyList<RoleChoice> shown) =>
+        now.Count == shown.Count && now.Zip(shown).All(p => p.First.RoleId == p.Second.RoleId && p.First.AlreadyAdded == p.Second.AlreadyAdded);
+
     private static bool Same(AppAddPlan now, AppAddPlan shown) =>
         now.Install == shown.Install
         && now.Values == shown.Values

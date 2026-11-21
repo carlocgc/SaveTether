@@ -51,6 +51,9 @@ public sealed record MappingState(string MappingId, string AppName, string Role,
     /// <summary>For a save folder that is a link elsewhere (Retargeted, Foreign link): where it points.</summary>
     public string? LinkTarget { get; init; }
 
+    /// <summary>What a linked folder is: "Symlink" or "Junction". Null when it is not linked, or the kind could not be told.</summary>
+    public string? LinkKind { get; init; }
+
     /// <summary>True when the catalog has a usable definition for the app, so Add app can find it (section 8).</summary>
     public bool HasDefinition { get; init; }
 
@@ -133,6 +136,7 @@ public static class StatusCheck
                             ? others.Where(d => d.Value.Contains(m.MappingId)).Select(d => d.Key).Order(StringComparer.Ordinal).ToList()
                             : [],
                         LinkTarget = m.State is HealthState.Retargeted or HealthState.ForeignLink ? LinkTargetOf(m.Source) : null,
+                        LinkKind = m.State == HealthState.Ok && m.Source is { } linked ? LinkKindOf(linked) : null,
                     };
                 })
                 .OrderBy(m => m.Word.NeedsAttention ? 0 : 1)
@@ -168,6 +172,13 @@ public static class StatusCheck
         var parts = mappingId.Split('.', 2);
         return AppNames.Resolve(workspace.Definitions, parts[0], parts.Length == 2 ? parts[1] : null, () => workspace.Shared.TryReadMapping(mappingId)?.Target);
     }
+
+    private static string? LinkKindOf(string folder) => SafeFs.Probe(folder) switch
+    {
+        EntryKind.Symlink => "Symlink",
+        EntryKind.Junction => "Junction",
+        _ => null,
+    };
 
     /// <summary>Each other device's mappings with a folder set. A device file that cannot be read is left out.</summary>
     private static Dictionary<string, HashSet<string>> OtherDevicesPaths(Workspace workspace)

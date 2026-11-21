@@ -43,9 +43,6 @@ internal sealed class AddAppScreen : UserControl, IScreen
     private Action? _unsubscribe;
     private readonly ScanSession _scans;
 
-    // The scan's optional kinds some definition has (none, with the definitions that ship): read once per screen.
-    private IReadOnlySet<Core.Definitions.RoleClass>? _extraClasses;
-
     /// <param name="startAt">Page 1; page 2 for an app, from a row's "Find the app again" or "Add"; or the hand form for a mapping.</param>
     public AddAppScreen(string localFolder, Overlay overlay, Func<Func<ActionFlow, Task>, Task> operate, Action close, AddAppStart startAt, ScanSession scans)
     {
@@ -114,20 +111,13 @@ internal sealed class AddAppScreen : UserControl, IScreen
             return;
         }
 
-        _extraClasses ??= await Guard(() => _flow.ExtraScanClasses(), Stale);
-        if (_extraClasses is null || Stale())
-        {
-            return;
-        }
 
         var search = new TextBox { PlaceholderText = "Search all known apps", Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
         AutomationProperties.SetName(search, "Search apps");
         var list = new StackPanel { Spacing = 2 };
         var scanNote = new TextBlock { Opacity = 0.75, FontSize = 13, TextWrapping = TextWrapping.Wrap };
-        var scan = new Button { Content = "Scan for games" };
-        AutomationProperties.SetName(scan, "Scan for games, including apps that are no longer installed");
-        var system = new CheckBox { Content = "System files" };
-        var states = new CheckBox { Content = "Save states" };
+        var scan = new Button { Content = "Scan for saves" };
+        AutomationProperties.SetName(scan, "Scan for saves, including apps that are no longer installed");
         var searchVersion = 0;
         StackPanel? page = null;
         // Found and added rows are kept by app, so a refresh adds or updates them and never replaces a focused one.
@@ -160,8 +150,8 @@ internal sealed class AddAppScreen : UserControl, IScreen
             // The footer lags behind a scan so it can be read. The button stays Cancel for as long as the scan runs
             // or the footer is still catching up, so the two agree; a click ends whichever is still going.
             showsCancel = running || !_scans.Tasks.Status.CaughtUp;
-            scan.Content = showsCancel ? "Cancel scan" : "Scan for games";
-            AutomationProperties.SetName(scan, showsCancel ? "Cancel the scan" : "Scan for games, including apps that are no longer installed");
+            scan.Content = showsCancel ? "Cancel scan" : "Scan for saves";
+            AutomationProperties.SetName(scan, showsCancel ? "Cancel the scan" : "Scan for saves, including apps that are no longer installed");
             if (!string.IsNullOrWhiteSpace(search.Text))
             {
                 return;
@@ -174,7 +164,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             if (!showsCancel)
             {
                 countNote = found.Count == 0
-                    ? "No apps were found on this device. Search for one by name, or scan for games."
+                    ? "No apps were found on this device. Search for one by name, or scan for saves."
                     : $"{found.Count:N0} found on this device";
             }
 
@@ -196,7 +186,9 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 {
                     var id = app.Id;
                     var parts = RowFor("added:" + id, app.Name, () => _ = PlanAsync(() => _flow.Start(id)));
-                    ((TextBlock)parts.Trailing).Text = "Added";
+                    // An added app opens only to add a folder it does not have yet; with none left there is nothing to choose.
+                    parts.Button.IsEnabled = app.MoreToAdd;
+                    ((TextBlock)parts.Trailing).Text = app.MoreToAdd ? "Added, more folders to add" : "Added";
                     desired.Add(parts.Button);
                 }
             }
@@ -300,18 +292,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 return;
             }
 
-            var classes = new HashSet<Core.Definitions.RoleClass> { Core.Definitions.RoleClass.Save };
-            if (system.IsChecked == true)
-            {
-                classes.Add(Core.Definitions.RoleClass.System);
-            }
-
-            if (states.IsChecked == true)
-            {
-                classes.Add(Core.Definitions.RoleClass.State);
-            }
-
-            _scans.Start(_flow, Core.Detection.ScanOptions.Deep(classes), "Scanning for games");
+            _scans.Start(_flow, Core.Detection.ScanOptions.Deep(), "Scanning for saves");
             Refresh();
         };
 
@@ -344,35 +325,12 @@ internal sealed class AddAppScreen : UserControl, IScreen
         ToolTip.SetTip(scan, "Also lists saves left by apps that are no longer installed");
         // Everything but the list is pinned above the scrolling area, so it stays in reach however long the list is:
         // the title and what the page is for, then one row (the way back, Add folder, the scan), then the search and how many were found.
-        // The scan and its choices share a frame to show that the choices belong to the scan. A choice is shown only
-        // when some definition has that kind of folder, since it would change nothing otherwise; with none, the scan is just its button.
-        var scanChoices = new List<Control> { scan };
-        if (_extraClasses.Contains(Core.Definitions.RoleClass.System))
-        {
-            scanChoices.Add(system);
-        }
-
-        if (_extraClasses.Contains(Core.Definitions.RoleClass.State))
-        {
-            scanChoices.Add(states);
-        }
-
-        Control scanGroup = scanChoices.Count == 1
-            ? scan
-            : new Border
-            {
-                Child = ScanRow(scanChoices),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(6, 4),
-            };
         var actions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { Navigation.BackRow("Back to apps", Leave), byHand, scanGroup },
+            Children = { Navigation.BackRow("Back to apps", Leave), byHand, scan },
         };
         scanNote.Margin = new Thickness(0, 0, 0, 2);
         Bar.Content = new StackPanel
@@ -416,18 +374,6 @@ internal sealed class AddAppScreen : UserControl, IScreen
             _scans.Start(_flow, Core.Detection.ScanOptions.Default);
             Refresh();
         }
-    }
-
-    // Built only for the framed group: the button must have one parent, so with no choices it goes in the bar on its own.
-    private static StackPanel ScanRow(IEnumerable<Control> choices)
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        foreach (var choice in choices)
-        {
-            row.Children.Add(choice);
-        }
-
-        return row;
     }
 
     /// <summary>"Unverified" for an imported definition, "Not installed" for a deep-scan row with no install; else nothing.</summary>
@@ -540,11 +486,12 @@ internal sealed class AddAppScreen : UserControl, IScreen
         switch (view.Page)
         {
             case AddAppPage.Plan:
-                content.AddRange(PlanContent(view));
+                // The title, where the app was found, and the controls (the way back and Add) stay above the scrolling
+                // area; the folders to share and the notes scroll under them.
                 var add = new Button { Content = "Add", IsDefault = true, IsEnabled = view.CanAdd };
                 add.Click += (_, _) => _ = AddAsync(view);
-                content.Add(Buttons(add));
-                break;
+                _page.Content = PlanPage(back, add, view, [.. PlanContent(view)]);
+                return;
 
             case AddAppPage.ChooseInstall:
                 foreach (var candidate in view.Candidates)
@@ -614,11 +561,6 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
     private IEnumerable<Control> PlanContent(AddAppView view)
     {
-        if (view.Found is { } found)
-        {
-            yield return new TextBlock { Text = found, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 };
-        }
-
         if (view.Unverified)
         {
             yield return new TextBlock { Text = AddAppFlow.UnverifiedNote, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Icons.Amber) };
@@ -649,7 +591,12 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 lines.Children.Add(new TextBlock { Text = notes, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 });
             }
 
-            var box = new CheckBox { IsChecked = role.Ticked, Content = lines };
+            if (role.AlreadyAdded)
+            {
+                lines.Children.Add(new TextBlock { Text = "Added already. Remove it from the Apps page to take it away.", Opacity = 0.75, FontSize = 13 });
+            }
+
+            var box = new CheckBox { IsChecked = role.Ticked, Content = lines, IsEnabled = !role.AlreadyAdded };
             AutomationProperties.SetName(box, $"Share {role.RoleId}");
             var roleId = role.RoleId;
             box.IsCheckedChanged += (_, _) =>
@@ -662,7 +609,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
         if (!view.CanAdd)
         {
-            yield return new TextBlock { Text = "Tick at least one folder to add.", Foreground = new SolidColorBrush(Icons.Amber) };
+            yield return new TextBlock { Text = "Tick at least one folder that is not added yet.", Foreground = new SolidColorBrush(Icons.Amber) };
         }
 
         if (view.Quirks.Count > 0)
@@ -1070,6 +1017,38 @@ internal sealed class AddAppScreen : UserControl, IScreen
         };
 
         return (field, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { field, choose } });
+    }
+
+    /// <summary>
+    /// The plan page: the bar above the scrolling area holds the title, the line saying where the app was found, and
+    /// the way back beside Add; the role notes and the folders to share are the scrolling page.
+    /// </summary>
+    private StackPanel PlanPage(Control back, Button add, AddAppView view, params Control[] content)
+    {
+        ReleaseCatalog();
+        var bar = new StackPanel { Spacing = 8 };
+        bar.Children.Add(new TextBlock { Text = view.Title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
+        if (view.Found is { } found)
+        {
+            bar.Children.Add(new TextBlock { Text = found, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+        }
+
+        bar.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { back, add } });
+        Bar.Content = bar;
+        _content.MaxWidth = 820;
+        _content.HorizontalAlignment = HorizontalAlignment.Left;
+        var page = new StackPanel { Spacing = 10 };
+        foreach (var sentence in view.Sentences)
+        {
+            page.Children.Add(new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap });
+        }
+
+        foreach (var control in content)
+        {
+            page.Children.Add(control);
+        }
+
+        return page;
     }
 
     /// <summary>A page: its title, sentences and content; its way back goes to the bar above it.</summary>

@@ -352,9 +352,9 @@ internal sealed class MainWindow : Window
         var name = withApp ? $"{mapping.AppName} {mapping.Role}" : mapping.Role;
         // In "Not on this device" every row has the same state, which the section's name already says, so that column is dropped
         // and its room goes to the name, which there carries the app as well.
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,300,0,*,Auto,Auto" : "Auto,150,170,*,Auto,Auto"), Margin = new Thickness(0, 4) };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,3*,0,2*,Auto,Auto" : "Auto,150,170,*,Auto,Auto"), Margin = new Thickness(0, 4) };
         Add(grid, 0, new Ellipse { Width = 10, Height = 10, Fill = new SolidColorBrush(Icons.ColourOf(mapping.Word.Shade)), Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 1, new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+        Add(grid, 1, new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) });
         if (!withApp)
         {
             Add(grid, 2, new TextBlock { Text = mapping.Word.Word, VerticalAlignment = VerticalAlignment.Center });

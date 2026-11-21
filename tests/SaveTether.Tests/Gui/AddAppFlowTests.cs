@@ -60,6 +60,44 @@ public class AddAppFlowTests
     }
 
     [Fact]
+    public void An_added_app_opens_only_for_a_folder_it_has_not_added_and_Add_writes_only_the_new_one()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var data = Path.Combine(deck.Home, "native", "data");
+        CliDevice.Write(data, "saves/slot1.sav", "12345");
+        deck.Ok("app", "add", "testapp");
+
+        // Page 1: shots was not added (it is off by default), so the app still has a folder to add.
+        var row = Assert.Single(flow.AddedApps());
+        Assert.True(row.MoreToAdd);
+
+        // Page 2: the added folders show ticked and locked; Add is off until a new folder is ticked.
+        var view = flow.Start("testapp");
+        Assert.True(view.Roles.Single(r => r.RoleId == "saves").AlreadyAdded);
+        Assert.True(view.Roles.Single(r => r.RoleId == "states").AlreadyAdded);
+        var shots = view.Roles.Single(r => r.RoleId == "shots");
+        Assert.False(shots.AlreadyAdded);
+        Assert.False(shots.Ticked);
+        Assert.False(view.CanAdd);
+
+        // Unticking an added folder changes nothing: Add never removes one.
+        Assert.Equal(view, flow.SetRole("saves", ticked: false));
+
+        var ticked = flow.SetRole("shots", ticked: true);
+        Assert.True(ticked.CanAdd);
+        var result = flow.Add(ticked);
+
+        Assert.Equal(["testapp.shots"], result.Added);
+        Assert.True(MappingExists(deck, "testapp.saves"));
+        Assert.True(MappingExists(deck, "testapp.shots"));
+
+        // Now every folder is added: the app is listed but has nothing left to open.
+        Assert.False(Assert.Single(flow.AddedApps()).MoreToAdd);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void A_plan_shows_the_install_and_each_role_and_Add_writes_only_the_roles_ticked()
     {
         using var sandbox = new Sandbox();
@@ -106,8 +144,65 @@ public class AddAppFlowTests
         sandbox.AssertCanaryIntact();
     }
 
+    private static string DeviceFileText(CliDevice device) =>
+        File.ReadAllText(Path.Combine(device.SyncRoot, "savetether", ".savetether", "devices", "deck.json")).Replace(@"\\", @"\", StringComparison.Ordinal);
+
     [Fact]
-    public void Adding_an_app_again_whose_folders_are_linked_does_not_say_nothing_is_linked()
+    public void A_default_off_folder_that_moved_can_be_ticked_and_added_again()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var first = Path.Combine(deck.Home, "first");
+        CliDevice.Write(first, "app.cfg", "config");
+        CliDevice.Write(first, "saves/slot1.sav", "1");
+        CliDevice.Write(first, "shots/a.png", "2");
+        deck.Ok("app", "add", "testapp", "--install-dir", first, "--role", "saves", "--role", "shots");
+        Directory.Delete(first, recursive: true);
+
+        var second = Path.Combine(deck.Home, "second");
+        CliDevice.Write(second, "app.cfg", "config");
+        CliDevice.Write(second, "shots/a.png", "2");
+        flow.Start("testapp");
+        var view = flow.SetLocation(LocationField.InstallFolder, second);
+
+        // shots is off by default, so the plan leaves it out; it moved, so it is not "already added" and can be ticked.
+        var shots = view.Roles.Single(r => r.RoleId == "shots");
+        Assert.False(shots.AlreadyAdded);
+        Assert.False(shots.Ticked);
+        view = flow.SetRole("shots", ticked: true);
+        Assert.True(view.CanAdd);
+
+        Assert.True(flow.Add(view).Succeeded);
+        Assert.Contains(Path.Combine(second, "shots"), DeviceFileText(deck), StringComparison.Ordinal);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void Add_shows_the_page_again_when_a_locked_folder_was_removed_while_it_was_open()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        CliDevice.Write(Path.Combine(deck.Home, "native", "data"), "saves/slot1.sav", "12345");
+        deck.Ok("app", "add", "testapp");
+
+        var view = flow.Start("testapp");
+        view = flow.SetRole("shots", ticked: true);
+        Assert.True(view.CanAdd);
+        Assert.True(view.Roles.Single(r => r.RoleId == "saves").AlreadyAdded);
+
+        // The folder it locked is removed on this device (its shared mapping stays) before Add is pressed.
+        deck.Ok("map", "remove", "testapp.saves");
+        var result = flow.Add(view);
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.Changed);
+        Assert.False(result.Changed!.Roles.Single(r => r.RoleId == "saves").AlreadyAdded);
+        Assert.DoesNotContain("testapp.saves", DeviceFileText(deck), StringComparison.Ordinal);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void The_added_text_does_not_say_nothing_is_linked_when_some_folders_already_are()
     {
         // Found by the owner with Cemu: adding an app already added and applied said "Nothing is linked yet".
         using var sandbox = new Sandbox();
@@ -116,27 +211,21 @@ public class AddAppFlowTests
         deck.Ok("app", "add", "testapp");
         deck.Ok("apply", "testapp.saves", "--copy");
 
+        // Every folder of the app is added now, so the page has nothing new to add; a linked folder says so.
         var view = flow.Start("testapp");
-        Assert.Equal("already a link", AddAppFlow.SizeOf(view.Roles[0].Planned!));
-        var result = flow.Add(view);
+        Assert.Equal("already a link", AddAppFlow.SizeOf(view.Roles.Single(r => r.RoleId == "saves").Planned!));
+        Assert.False(view.CanAdd);
+        Assert.Throws<InvalidOperationException>(() => flow.Add(view));
 
-        Assert.True(result.Succeeded);
-        Assert.Equal(["testapp.saves"], result.AlreadyLinked);
-        Assert.Equal(["testapp.states"], result.ToApply);
-        var text = AddAppFlow.AddedText(result.Added, result.AlreadyLinked);
+        var text = AddAppFlow.AddedText(["testapp.saves", "testapp.states"], ["testapp.saves"]);
         Assert.DoesNotContain("Nothing is linked", text, StringComparison.Ordinal);
         Assert.Contains("Already linked here: testapp.saves.", text, StringComparison.Ordinal);
         Assert.Contains("Apply links testapp.states", text, StringComparison.Ordinal);
 
         // With every folder linked, there is nothing to apply.
-        deck.Ok("apply", "testapp.states", "--copy");
-        result = flow.Add(flow.Start("testapp"));
-        Assert.Equal(["testapp.saves", "testapp.states"], result.AlreadyLinked);
-        Assert.Empty(result.ToApply);
         Assert.Equal(
             "Added testapp.saves, testapp.states. Already linked here: testapp.saves, testapp.states. There is nothing to apply; the Apps page shows whether each link is healthy.",
-            AddAppFlow.AddedText(result.Added, result.AlreadyLinked));
-        Assert.All(StatusCheck.Run(new LocalStore(deck.LocalFolder)).Mappings, m => Assert.Equal(HealthState.Ok, m.Health.State));
+            AddAppFlow.AddedText(["testapp.saves", "testapp.states"], ["testapp.saves", "testapp.states"]));
         sandbox.AssertCanaryIntact();
     }
 

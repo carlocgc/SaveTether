@@ -31,23 +31,6 @@ public class FoundListTests
     }
 
     [Fact]
-    public void The_scans_optional_choices_are_offered_only_for_kinds_some_definition_has()
-    {
-        using var sandbox = new Sandbox();
-        var deck = new CliDevice(sandbox, "deck");
-        deck.Ok("init", "--sync-root", deck.SyncRoot, "--device", "deck", "--create-root");
-        var environment = new ResolverEnvironment { Os = TargetOs.Linux, Home = deck.Home, UserName = "deck" };
-        var flow = new AddAppFlow(new LocalStore(deck.LocalFolder), environment);
-
-        // The shipped definitions have no system or state folders, so the boxes would change nothing.
-        Assert.Empty(flow.ExtraScanClasses());
-
-        // A shared definition with a save-state folder (and a media folder, which the scan has no box for).
-        AppAddCliTests.ShareDefinition(deck, "testapp", AppAddCliTests.TestApp);
-        Assert.Equal([RoleClass.State], flow.ExtraScanClasses());
-    }
-
-    [Fact]
     public void Last_played_names_the_newest_save_or_says_there_is_none()
     {
         Assert.Equal("No save files yet", AddAppFlow.LastPlayed(null));
