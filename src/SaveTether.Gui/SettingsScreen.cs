@@ -115,7 +115,10 @@ internal sealed class SettingsScreen : UserControl, IScreen
                     return;
                 }
 
-                App.Instance?.StartInstalledCopyAndQuit(installer);
+                if (App.Instance is { } app)
+                {
+                    await app.LaunchInstalledAsync(installer, (title, text) => overlay.InformAsync(title, text));
+                }
             };
             page.Children.Add(install);
         }
