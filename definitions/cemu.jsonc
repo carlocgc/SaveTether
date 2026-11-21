@@ -46,6 +46,6 @@
   "quirks": [
     "Link usr/save, not mlc01: game updates and DLC install into mlc01/usr/title and can run to many gigabytes.",
     "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it.",
-    "The older default on Windows is Documents\mlc01 (win-documents). A portable copy may sit beside it; when both are found, Add app asks which to share."
+    "The older default on Windows is the mlc01 folder in Documents (win-documents). A portable copy may sit beside it; when both are found, Add app asks which to share."
   ]
 }
