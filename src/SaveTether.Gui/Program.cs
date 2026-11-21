@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -42,7 +44,7 @@ internal static class Program
                 if (offer?.Offer() is { IsUpdate: true })
                 {
                     App.Options = App.Options with { UpdateOnly = true };
-                    return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+                    return RunApp(args, log);
                 }
 
                 if (!SingleInstance.SignalExisting(folder))
@@ -61,12 +63,31 @@ internal static class Program
 
         try
         {
-            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+            return RunApp(args, log);
         }
         finally
         {
             ReleaseClaim();
         }
+    }
+
+    /// <summary>When the app asked itself to shut down (<see cref="Stopwatch.GetTimestamp"/>); 0 until it has.</summary>
+    public static long ShutdownRequestedAt { get; set; }
+
+    /// <summary>
+    /// Runs the app, and logs when it returns: how long after the shutdown was requested, so a quit that hangs (found on the
+    /// Deck, where KDE said SaveTether did not close at a restart) shows as a request with no exit after it. A signal that
+    /// asks the process to end is logged too, and then handled as usual.
+    /// </summary>
+    private static int RunApp(string[] args, GuiLog log)
+    {
+        using var terminate = PosixSignalRegistration.Create(PosixSignal.SIGTERM, context => log.Write($"signal received: {context.Signal}"));
+        using var hangUp = PosixSignalRegistration.Create(PosixSignal.SIGHUP, context => log.Write($"signal received: {context.Signal}"));
+        var code = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+        log.Write(ShutdownRequestedAt == 0
+            ? $"exited ({code}) without a shutdown request"
+            : $"exited ({code}) {Stopwatch.GetElapsedTime(ShutdownRequestedAt).TotalMilliseconds:0} ms after shutdown was requested");
+        return code;
     }
 
     /// <summary>Lets the installed copy, about to be started, become the one copy.</summary>

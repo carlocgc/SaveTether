@@ -98,7 +98,7 @@ internal sealed class App : Application
                     "SaveTether is still running",
                     "The running SaveTether did not close, perhaps because it is in the middle of something. Quit it from its tray menu, then start this copy again.");
                 window.Close();
-                _desktop.Shutdown();
+                ShutDown("the running copy did not quit, so no update");
                 return;
             }
 
@@ -133,7 +133,7 @@ internal sealed class App : Application
         }
 
         window.Close();
-        _desktop.Shutdown();
+        ShutDown("the installed copy was started");
     }
 
     private void FinishWithoutInstalling()
@@ -142,7 +142,7 @@ internal sealed class App : Application
         {
             // The installed copy is running: it shows its window, as for any second start.
             SingleInstance.SignalExisting(Options.LocalFolder);
-            _desktop.Shutdown();
+            ShutDown("nothing installed, the installed copy is showing");
             return;
         }
 
@@ -262,6 +262,28 @@ internal sealed class App : Application
         }
     }
 
+    /// <summary>
+    /// Every way the app ends goes through here. The first request is logged with its reason before anything is torn
+    /// down, so a hang in the tray's teardown or the lifetime leaves a line to find, and its time is kept for the
+    /// "exited" line Program.RunApp writes when the lifetime returns.
+    /// </summary>
+    private void ShutDown(string reason, bool disposeTray = false)
+    {
+        if (Program.ShutdownRequestedAt == 0)
+        {
+            Program.ShutdownRequestedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+            Log.Write($"shutdown requested: {reason}");
+        }
+
+        if (disposeTray)
+        {
+            _tray?.Dispose();
+            _tray = null;
+        }
+
+        _desktop.Shutdown();
+    }
+
     public void Quit()
     {
         // An operation is a journalled transaction: stopping one half way is what recover is for, not something to offer.
@@ -272,8 +294,7 @@ internal sealed class App : Application
             return;
         }
 
-        _tray?.Dispose();
-        _desktop.Shutdown();
+        ShutDown("quit", disposeTray: true);
     }
 
     private void Apply(CheckResult result)
@@ -362,9 +383,7 @@ internal sealed class App : Application
                 if (cause == CloseCause.SessionEnding)
                 {
                     Log.Write(_busy ? "session ending during an operation: Recover finishes it at the next start" : "session ending: quitting");
-                    _tray?.Dispose();
-                    _tray = null;
-                    _desktop.Shutdown();
+                    ShutDown("session ending", disposeTray: true);
                 }
 
                 return;
