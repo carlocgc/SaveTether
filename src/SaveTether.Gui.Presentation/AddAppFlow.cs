@@ -287,12 +287,35 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             return view with { Sentences = [.. view.Sentences, $"'{path}' is not a full path. Give the whole path, or choose the folder."] };
         }
 
-        return Plan(field switch
+        var planned = Plan(field switch
         {
             LocationField.InstallFolder => Request with { InstallDir = value },
             LocationField.SdCard => Request with { SdCard = value },
             _ => Request with { WinePrefix = value },
         });
+
+        // The core goes on with the install used last time when several are found, which suits a plain add. A folder given
+        // here says the owner is choosing where the app is, so with several found the window asks (found on the owner's Cemu,
+        // whose stored install was the portable one: the Documents one was never offered).
+        if (value is not null && planned.Page == AddAppPage.Plan && Request.Install is null)
+        {
+            var found = planned.Candidates.Where(c => c.IsDetected).ToList();
+            if (found.Count > 1)
+            {
+                return planned with
+                {
+                    Page = AddAppPage.ChooseInstall,
+                    Title = $"More than one install of {planned.AppName} was found.",
+                    Sentences = ["Choose the one whose saves this device should share."],
+                    Candidates = found,
+                    Roles = [],
+                    Quirks = [],
+                    Plan = null,
+                };
+            }
+        }
+
+        return planned;
     }
 
     /// <summary>A role ticked or unticked. With none ticked the page stays, and Add is off.</summary>

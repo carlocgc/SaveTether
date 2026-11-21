@@ -293,6 +293,29 @@ public class AddAppFlowTests
     }
 
     [Fact]
+    public void A_folder_given_now_asks_which_install_even_when_one_was_used_last_time()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var portable = Path.Combine(deck.Home, "portable");
+        CliDevice.Write(portable, "app.cfg", "config");
+        Directory.CreateDirectory(Path.Combine(deck.Home, "native", "data"));
+
+        // The portable install was used last time, and both are found: a plain add goes on with it.
+        flow.Start("testapp");
+        var view = flow.ChooseInstall("portable");
+        view = flow.SetLocation(LocationField.InstallFolder, portable);
+        Assert.True(flow.Add(view).Succeeded);
+        Assert.Equal(AddAppPage.Plan, flow.Start("testapp").Page);
+
+        // Giving the folder again asks, so the owner can choose the other one (found on the owner's Cemu).
+        view = flow.SetLocation(LocationField.InstallFolder, portable);
+        Assert.Equal(AddAppPage.ChooseInstall, view.Page);
+        Assert.Equal(["native", "portable"], view.Candidates.Select(c => c.Id));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void A_plan_at_the_default_install_still_offers_the_install_folder_for_a_portable_copy()
     {
         using var sandbox = new Sandbox();
