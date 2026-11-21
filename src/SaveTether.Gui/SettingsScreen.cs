@@ -94,6 +94,35 @@ internal sealed class SettingsScreen : UserControl, IScreen
             page.Children.Add(uninstall);
         }
 
+        // Linux, in an unpacked copy: the offer made at start, for someone who chose Not now (or the update, when a newer copy is unpacked).
+        if (InstallOffer.ForSystem(localFolder, AppContext.BaseDirectory, Program.Version) is { } installer && installer.Offer(ignoreDeclined: true) is { } offer)
+        {
+            page.Children.Add(Heading(offer.IsUpdate ? "Update" : "Install"));
+            page.Children.Add(Note(offer.Text));
+            var install = new Button { Content = offer.Confirm + " SaveTether" };
+            install.Click += async (_, _) =>
+            {
+                if (!await overlay.ConfirmAsync(offer.Title, offer.Text, offer.Confirm))
+                {
+                    return;
+                }
+
+                var (installed, problem) = await overlay.WorkAsync(offer.Confirm, offer.IsUpdate ? "Updating SaveTether…" : "Installing SaveTether…", installer.Install);
+                if (!installed)
+                {
+                    App.Options.Log.Write(problem ?? "install failed");
+                    await overlay.InformAsync("Nothing was installed", problem ?? "SaveTether could not be installed.");
+                    return;
+                }
+
+                if (App.Instance is { } app)
+                {
+                    await app.LaunchInstalledAsync(installer, (title, text) => overlay.InformAsync(title, text));
+                }
+            };
+            page.Children.Add(install);
+        }
+
         page.Children.Add(Heading("About"));
         // The build stamps "<version>+<commit>"; the commit is shortened as git shows it.
         var stamped = Program.Version;

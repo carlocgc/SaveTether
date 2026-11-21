@@ -120,6 +120,18 @@ internal sealed class App : Application
             return;
         }
 
+        await LaunchInstalledAsync(installer, window.InformAsync, window.Close);
+    }
+
+    /// <summary>
+    /// After an install or update, from the offer at start or from Settings: lets go of the single-instance claim, starts
+    /// the installed copy, and quits this one. When the installed copy cannot be started, says where it was installed and
+    /// why, and waits for that to be read before this copy ends.
+    /// </summary>
+    /// <param name="inform">Shows a message in the window or overlay that is open, and returns when it is dismissed.</param>
+    /// <param name="beforeShutdown">Closes that window, once the message has been read.</param>
+    public async Task LaunchInstalledAsync(InstallOffer installer, Func<string, string, Task> inform, Action? beforeShutdown = null)
+    {
         Log.Write($"installed {installer.Version} in {installer.Layout.AppFolder}; starting it");
         Program.ReleaseClaim();
         try
@@ -129,10 +141,10 @@ internal sealed class App : Application
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException)
         {
             Log.Write($"the installed copy could not be started: {e.Message}");
-            await window.InformAsync("Installed", $"SaveTether was installed in {installer.Layout.AppFolder}, but could not be started from there: {e.Message}");
+            await inform("Installed", $"SaveTether was installed in {installer.Layout.AppFolder}, but could not be started from there: {e.Message}");
         }
 
-        window.Close();
+        beforeShutdown?.Invoke();
         ShutDown("the installed copy was started");
     }
 
