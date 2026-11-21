@@ -344,6 +344,15 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             try
             {
                 var outcome = session.Workspace.PlanAppAdd(Request, environment);
+
+                // The folders locked as "added" were told from this device's paths when the page was made. If one was removed
+                // (or moved) since, the plan can still match, and Add would write it back unseen: show the page again instead.
+                if (outcome.Plan is { } checkedPlan && Same(checkedPlan, shown.Plan!) && !SameAdded(View(outcome).Roles, shown.Roles))
+                {
+                    var changedView = View(outcome);
+                    return new AddAppResult([], null, changedView with { Sentences = [DifferentNow, .. changedView.Sentences] });
+                }
+
                 if (outcome.Plan is not { } plan || !Same(plan, shown.Plan!))
                 {
                     var again = View(outcome);
@@ -441,6 +450,24 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         return view;
     }
 
+    /// <summary>
+    /// Whether an added role's folder is somewhere else now than this device has it. The place is worked out for the role
+    /// whether or not it is in the plan (a default-off role is not), so a moved optional folder can still be added again.
+    /// When the place cannot be worked out the role stays locked: there is nothing to record.
+    /// </summary>
+    private bool HasMoved(InstallDefinition install, RoleDefinition role, AppAddPlan plan, AppRolePlan? planned, DevicePath had)
+    {
+        string? now = planned?.Source;
+        if (now is null)
+        {
+            var values = new DeviceValues(plan.Values.InstallDir, plan.Values.SdCard, plan.Values.WinePrefix);
+            var resolved = new PathResolver(environment).ResolveRole(install, role, values);
+            now = resolved.IsResolved ? resolved.Path : null;
+        }
+
+        return now is not null && !string.Equals(PathRules.Normalize(now), PathRules.Normalize(had.Source), StringComparison.Ordinal);
+    }
+
     /// <summary>Page 2's unverified note, for an imported definition.</summary>
     public const string UnverifiedNote =
         "Unverified: this definition was converted from the Ludusavi manifest and has not been tried by hand. Check the folders below before you add.";
@@ -493,7 +520,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                     // plan finds the role somewhere else now) is not "already": adding it again records where it is now.
                     var mappingId = r.MappingIdFor(request.AppId);
                     var already = addedHere.TryGetValue(mappingId, out var had)
-                        && (planned is null || string.Equals(PathRules.Normalize(planned.Source), PathRules.Normalize(had.Source), StringComparison.Ordinal));
+                        && !HasMoved(install, r, plan, planned, had);
                     return new RoleChoice(r.Id, r.Class, planned is not null || already, r.Default || already ? null : WhyOff(r.Class), planned, r.Notes, already);
                 })
                 .ToList();
@@ -645,6 +672,9 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     }
 
     /// <summary>Whether the plan made under the lock writes what the owner saw.</summary>
+    private static bool SameAdded(IReadOnlyList<RoleChoice> now, IReadOnlyList<RoleChoice> shown) =>
+        now.Count == shown.Count && now.Zip(shown).All(p => p.First.RoleId == p.Second.RoleId && p.First.AlreadyAdded == p.Second.AlreadyAdded);
+
     private static bool Same(AppAddPlan now, AppAddPlan shown) =>
         now.Install == shown.Install
         && now.Values == shown.Values

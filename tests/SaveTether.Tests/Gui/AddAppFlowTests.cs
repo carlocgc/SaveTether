@@ -144,6 +144,63 @@ public class AddAppFlowTests
         sandbox.AssertCanaryIntact();
     }
 
+    private static string DeviceFileText(CliDevice device) =>
+        File.ReadAllText(Path.Combine(device.SyncRoot, "savetether", ".savetether", "devices", "deck.json")).Replace(@"\\", @"\", StringComparison.Ordinal);
+
+    [Fact]
+    public void A_default_off_folder_that_moved_can_be_ticked_and_added_again()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var first = Path.Combine(deck.Home, "first");
+        CliDevice.Write(first, "app.cfg", "config");
+        CliDevice.Write(first, "saves/slot1.sav", "1");
+        CliDevice.Write(first, "shots/a.png", "2");
+        deck.Ok("app", "add", "testapp", "--install-dir", first, "--role", "saves", "--role", "shots");
+        Directory.Delete(first, recursive: true);
+
+        var second = Path.Combine(deck.Home, "second");
+        CliDevice.Write(second, "app.cfg", "config");
+        CliDevice.Write(second, "shots/a.png", "2");
+        flow.Start("testapp");
+        var view = flow.SetLocation(LocationField.InstallFolder, second);
+
+        // shots is off by default, so the plan leaves it out; it moved, so it is not "already added" and can be ticked.
+        var shots = view.Roles.Single(r => r.RoleId == "shots");
+        Assert.False(shots.AlreadyAdded);
+        Assert.False(shots.Ticked);
+        view = flow.SetRole("shots", ticked: true);
+        Assert.True(view.CanAdd);
+
+        Assert.True(flow.Add(view).Succeeded);
+        Assert.Contains(Path.Combine(second, "shots"), DeviceFileText(deck), StringComparison.Ordinal);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void Add_shows_the_page_again_when_a_locked_folder_was_removed_while_it_was_open()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        CliDevice.Write(Path.Combine(deck.Home, "native", "data"), "saves/slot1.sav", "12345");
+        deck.Ok("app", "add", "testapp");
+
+        var view = flow.Start("testapp");
+        view = flow.SetRole("shots", ticked: true);
+        Assert.True(view.CanAdd);
+        Assert.True(view.Roles.Single(r => r.RoleId == "saves").AlreadyAdded);
+
+        // The folder it locked is removed on this device (its shared mapping stays) before Add is pressed.
+        deck.Ok("map", "remove", "testapp.saves");
+        var result = flow.Add(view);
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.Changed);
+        Assert.False(result.Changed!.Roles.Single(r => r.RoleId == "saves").AlreadyAdded);
+        Assert.DoesNotContain("testapp.saves", DeviceFileText(deck), StringComparison.Ordinal);
+        sandbox.AssertCanaryIntact();
+    }
+
     [Fact]
     public void The_added_text_does_not_say_nothing_is_linked_when_some_folders_already_are()
     {
