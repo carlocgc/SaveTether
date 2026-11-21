@@ -166,7 +166,7 @@ public static class StatusCheck
     private static (string Name, bool Defined) AppOf(Workspace workspace, string mappingId)
     {
         var parts = mappingId.Split('.', 2);
-        return AppNames.Resolve(workspace.Definitions, parts[0], parts.Length == 2 ? parts[1] : null);
+        return AppNames.Resolve(workspace.Definitions, parts[0], parts.Length == 2 ? parts[1] : null, () => workspace.Shared.TryReadMapping(mappingId)?.Target);
     }
 
     /// <summary>Each other device's mappings with a folder set. A device file that cannot be read is left out.</summary>

@@ -242,6 +242,12 @@ public class AppsPageTests
         var role = catalog.Find(id)!.Definition!.Roles[0].Id;
         Assert.True(AppNames.Resolve(catalog, id, role).Defined);
         Assert.False(AppNames.Resolve(catalog, id, "no-such-role-by-hand").Defined);
+
+        // The same role with the shared target the definition gives is defined; one whose target a hand-made mapping set
+        // differently is not (Add app would refuse it with a different target).
+        var roleDefinition = catalog.Find(id)!.Definition!.Roles[0];
+        Assert.True(AppNames.Resolve(catalog, id, role, () => roleDefinition.MappingTargetFor(id)).Defined);
+        Assert.False(AppNames.Resolve(catalog, id, role, () => "custom/other-target").Defined);
         Assert.True(AppNames.Resolve(catalog, "cemu").Defined);
         Assert.Equal(("no-such-game", false), AppNames.Resolve(catalog, "no-such-game"));
     }

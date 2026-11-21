@@ -90,22 +90,30 @@ internal sealed class AddAppScreen : UserControl, IScreen
     /// <summary>Detaches page 1 from the scan session and the strip, so a page that is no longer shown is not kept alive or refreshed.</summary>
     private void ReleaseCatalog()
     {
+        // Also ends any load of page 1 still reading: it finds the number changed and stops (see ShowCatalogAsync).
+        _catalogLoad++;
         _unsubscribe?.Invoke();
         _unsubscribe = null;
     }
 
+    private int _catalogLoad;
+
     private async Task ShowCatalogAsync()
     {
         ReleaseCatalog();
+        var load = _catalogLoad;
         _page.Content = null;
+
+        // Each await below can finish after the screen was left or another load began: the number then differs and this
+        // load stops before it changes a control, subscribes to the scan or starts one.
         var added = await Guard(() => _flow.AddedApps());
-        if (added is null)
+        if (added is null || _closed || load != _catalogLoad)
         {
             return;
         }
 
         _extraClasses ??= await Guard(() => _flow.ExtraScanClasses());
-        if (_extraClasses is null)
+        if (_extraClasses is null || _closed || load != _catalogLoad)
         {
             return;
         }
@@ -347,17 +355,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
             scanChoices.Add(states);
         }
 
-        var scanRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        foreach (var choice in scanChoices)
-        {
-            scanRow.Children.Add(choice);
-        }
-
         Control scanGroup = scanChoices.Count == 1
             ? scan
             : new Border
             {
-                Child = scanRow,
+                Child = ScanRow(scanChoices),
                 BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(6),
@@ -412,6 +414,18 @@ internal sealed class AddAppScreen : UserControl, IScreen
             _scans.Start(_flow, Core.Detection.ScanOptions.Default);
             Refresh();
         }
+    }
+
+    // Built only for the framed group: the button must have one parent, so with no choices it goes in the bar on its own.
+    private static StackPanel ScanRow(IEnumerable<Control> choices)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        foreach (var choice in choices)
+        {
+            row.Children.Add(choice);
+        }
+
+        return row;
     }
 
     /// <summary>"Unverified" for an imported definition, "Not installed" for a deep-scan row with no install; else nothing.</summary>
