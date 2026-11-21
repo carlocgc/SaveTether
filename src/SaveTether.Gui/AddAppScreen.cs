@@ -576,6 +576,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
             yield return new TextBlock { Text = cloud, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 };
         }
 
+        if (view.MissingFolderWarning is { } missing)
+        {
+            yield return new TextBlock { Text = missing, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Icons.Amber) };
+        }
+
         yield return new TextBlock { Text = "Folders to share", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
         foreach (var role in view.Roles)
         {

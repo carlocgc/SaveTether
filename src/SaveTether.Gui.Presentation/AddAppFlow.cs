@@ -100,6 +100,24 @@ public sealed record AddAppView(
     /// <summary>For a plan: a note that some store's copy of the app keeps saves in the cloud too; null when none does.</summary>
     public string? CloudNote { get; init; }
 
+    /// <summary>
+    /// For a plan: a ticked folder that is not there and that no device has shared yet, so Apply would have nothing to link
+    /// (a second device is fine: Apply starts its folder from the shared copy). Null when there is no such folder.
+    /// </summary>
+    public string? MissingFolderWarning
+    {
+        get
+        {
+            var missing = Roles
+                .Where(r => r.Ticked && !r.AlreadyAdded && r.Planned is { Exists: false, IsLink: false, CreatesMapping: true })
+                .Select(r => r.RoleId)
+                .ToList();
+            return missing.Count == 0
+                ? null
+                : $"{(missing.Count == 1 ? $"The folder for {missing[0]} is" : $"The folders for {string.Join(", ", missing)} are")} not there yet, and no other device has shared one, so Apply will have nothing to link. Check the folder you chose.";
+        }
+    }
+
     /// <summary>Add is offered for a plan with at least one role ticked that is not added yet.</summary>
     public bool CanAdd => Plan is not null && Roles.Any(r => r.Ticked && !r.AlreadyAdded);
 }

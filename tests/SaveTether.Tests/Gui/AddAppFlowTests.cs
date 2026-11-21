@@ -320,6 +320,25 @@ public class AddAppFlowTests
     }
 
     [Fact]
+    public void A_ticked_folder_that_is_not_there_and_not_shared_yet_is_warned_about_before_Add()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var data = Path.Combine(deck.Home, "native", "data");
+        CliDevice.Write(data, "saves/slot1.sav", "12345");
+
+        // saves is there; states is not, and no device has shared it: Apply would have nothing to link.
+        var view = StartAt(flow, "testapp", "native");
+        Assert.Equal("The folder for states is not there yet, and no other device has shared one, so Apply will have nothing to link. Check the folder you chose.", view.MissingFolderWarning);
+
+        // Unticked, it is not warned about; with the folder made, there is nothing to say.
+        Assert.Null(flow.SetRole("states", ticked: false).MissingFolderWarning);
+        Directory.CreateDirectory(Path.Combine(data, "states"));
+        Assert.Null(StartAt(flow, "testapp", "native").MissingFolderWarning);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void Not_found_offers_only_the_fields_that_would_help_and_a_relative_path_is_refused()
     {
         using var sandbox = new Sandbox();
