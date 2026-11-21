@@ -108,7 +108,14 @@ internal sealed class SettingsScreen : UserControl, IScreen
             Spacing = 10,
             Children = { new TextBlock { Text = $"Local folder: {localFolder}", VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap }, open },
         });
-        page.Children.Add(Note("MIT licence."));
+        page.Children.Add(Note("MIT licence. Game definitions marked unverified come from the Ludusavi manifest, compiled from PCGamingWiki."));
+        var notices = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.md");
+        if (File.Exists(notices))
+        {
+            var openNotices = new Button { Content = "Open third-party notices", HorizontalAlignment = HorizontalAlignment.Left };
+            openNotices.Click += (_, _) => FolderOpener.Open(notices, App.Options.Log);
+            page.Children.Add(openNotices);
+        }
 
         Content = page;
     }

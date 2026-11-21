@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 $app = [IO.Path]::GetFullPath($Dir)
 $shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\SaveTether.lnk'
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6E3C9B52-8F1D-4A7E-9C41-2B5D7E0A9F13}_is1'
-$files = 'savetether-gui.exe', 'savetether.exe', 'libSkiaSharp.dll', 'libHarfBuzzSharp.dll', 'av_libglesv2.dll', 'LICENSE', 'README.md'
+$files = 'savetether-gui.exe', 'savetether.exe', 'libSkiaSharp.dll', 'libHarfBuzzSharp.dll', 'av_libglesv2.dll', 'LICENSE', 'README.md', 'THIRD-PARTY-NOTICES.md'
 
 function Read-UserPath {
     $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
