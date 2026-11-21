@@ -472,7 +472,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
     {
         var back = Navigation.BackRow("Back", () =>
         {
-            if (view.Page != AddAppPage.Plan && _flow.Back() is { } last)
+            if (_flow.Back(view.Page) is { } last)
             {
                 Show(last);
             }
@@ -502,7 +502,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
                     {
                         Orientation = Orientation.Horizontal,
                         Spacing = 12,
-                        Children = { use, new TextBlock { Text = candidate.Found ?? string.Empty, Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center } },
+                        Children = { use, new TextBlock { Text = view.InstallPaths.GetValueOrDefault(candidate.Id) ?? candidate.Found ?? string.Empty, Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center } },
                     });
                 }
 
@@ -574,27 +574,6 @@ internal sealed class AddAppScreen : UserControl, IScreen
         if (view.CloudNote is { } cloud)
         {
             yield return new TextBlock { Text = cloud, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 };
-        }
-
-        foreach (var (field, value) in view.Fields)
-        {
-            var (locationBox, locationRow) = PathField(value ?? string.Empty, AddAppFlow.FieldLabel(field));
-            yield return new TextBlock { Text = AddAppFlow.FieldLabel(field), FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
-            if (field == LocationField.InstallFolder && view.InstallFolderHint is { } hint)
-            {
-                yield return new TextBlock { Text = hint, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 };
-            }
-
-            yield return locationRow;
-            var change = new Button { Content = "Use this folder" };
-            var locationField = field;
-            change.Click += (_, _) =>
-            {
-                // Read here, on the UI thread: a control cannot be read from the planning thread.
-                var typed = locationBox.Text;
-                _ = PlanAsync(() => _flow.SetLocation(locationField, typed));
-            };
-            yield return change;
         }
 
         yield return new TextBlock { Text = "Folders to share", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
