@@ -19,6 +19,10 @@ public enum BackupReason
 
     [JsonStringEnumMemberName("pre-restore")]
     PreRestore,
+
+    /// <summary>The shared folder of a mapping, before the mapping was deleted from the shared folder.</summary>
+    [JsonStringEnumMemberName("pre-delete")]
+    PreDelete,
 }
 
 /// <summary>One file in a backup.</summary>

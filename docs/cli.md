@@ -6,7 +6,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 - [Concepts](#concepts)
 - [Options every command takes](#options-every-command-takes)
-- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
+- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
 - [Workflows](#workflows)
 - [Files and environment](#files-and-environment)
 - [Exit codes](#exit-codes)
@@ -103,6 +103,20 @@ Forgets this device's save folder for a mapping. Nothing is deleted: the folder,
 
 ```bash
 savetether map remove eden.saves
+```
+
+## map delete
+
+```
+savetether map delete <id> [--confirm-delete]
+```
+
+Deletes a mapping no device uses from the sync folder, **on every device's sync folder**: its shared copy, its record and its seed markers. Each device's own save folders and backups are not touched: a device that reverted the mapping keeps its own copy. It is the way to clean up a mapping that every device has reverted and removed, which otherwise stays in `status` as "Not applied" with its saves still in the sync folder. The shared saves are backed up on this device first and the backup is verified (`backup list` shows it as `pre-delete`); only then is anything deleted. It cannot be undone from the share, so it asks first, or needs `--confirm-delete`.
+
+Before you confirm, make sure all writes to the role's shared folder are complete and your sync tool has finished syncing it on every device: nothing here can tell, and `--confirm-delete` says so on your behalf. The command deletes only the files the verified backup holds, and only while each still matches the backup; a save that arrived or changed after the backup is left, with the mapping record, and the command says so (run it again once the sync tool has finished). Refused while any device, this one included, has a folder set for the mapping: `revert` and `map remove` it there first. Refused too when the shared folder, or the shared data folder above it, is reached through a link (an app folder that is a symlink or junction). The check of the device files reads the files in the sync folder, so a device that has not yet synced its own file cannot be seen. Safe to run again if it stopped part way.
+
+```bash
+savetether map delete eden.saves --confirm-delete
 ```
 
 ## app add

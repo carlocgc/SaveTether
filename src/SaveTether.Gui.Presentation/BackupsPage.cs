@@ -104,6 +104,7 @@ public static class BackupsPage
         BackupReason.PreApply => "before linking",
         BackupReason.PreRevert => "before reverting",
         BackupReason.PreRestore => "before restoring",
+        BackupReason.PreDelete => "before deleting",
         BackupReason.Baseline => "first backup",
         BackupReason.Snapshot => "snapshot",
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "A reason with no text."),

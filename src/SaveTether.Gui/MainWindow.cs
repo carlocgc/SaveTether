@@ -123,6 +123,8 @@ internal sealed class MainWindow : Window
         footer.Children.Add(_stripText);
         footer.Children.Add(folder);
 
+        // The rows' button columns are one width across the list (see Row), so no row's sentence is moved by another row's buttons.
+        Grid.SetIsSharedSizeScope(_rows, true);
         _body = new ScrollViewer { Content = _rows };
         // The box is the scrollable area's frame: always drawn, outside what scrolls.
         var bodyBox = new Border
@@ -289,7 +291,7 @@ internal sealed class MainWindow : Window
             // Rebuilt at every check, so whether it is open is kept here: a check must not close it under the owner.
             var expander = new Expander
             {
-                Header = $"Not on this device ({page.NotOnThisDevice.Count})",
+                Header = $"Sync folders ignored by this device ({page.NotOnThisDevice.Count})",
                 Content = list,
                 IsExpanded = _notHereOpen,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -352,7 +354,17 @@ internal sealed class MainWindow : Window
         var name = withApp ? $"{mapping.AppName} {mapping.Role}" : mapping.Role;
         // In "Not on this device" every row has the same state, which the section's name already says, so that column is dropped
         // and its room goes to the name, which there carries the app as well.
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,3*,0,2*,Auto,Auto" : "Auto,150,170,*,Auto,Auto"), Margin = new Thickness(0, 4) };
+        // The two button columns share their width across every row (the rows' parent is a shared size scope), so a row with an
+        // extra button, such as Delete, does not move the sentence of the rows without one.
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,2*,0,3*" : "Auto,150,170,*")
+            {
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowAction" },
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowMore" },
+            },
+            Margin = new Thickness(0, 4),
+        };
         Add(grid, 0, new Ellipse { Width = 10, Height = 10, Fill = new SolidColorBrush(Icons.ColourOf(mapping.Word.Shade)), Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
         Add(grid, 1, new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) });
         if (!withApp)
@@ -371,6 +383,13 @@ internal sealed class MainWindow : Window
             text.Children.Add(new TextBlock { Text = mapping.Health.Source, Opacity = 0.65, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis });
         }
 
+        // The devices that have a link are in the sentence's hover text, for any number, with no styling to suggest it: the row
+        // says how many, and hovering shows who.
+        if (row.Devices is { Count: > 0 } devices)
+        {
+            ToolTip.SetTip(text, AppsPage.DevicesTip(devices));
+        }
+
         Add(grid, 3, text);
 
         var role = $"{mapping.AppName} {mapping.Role}";
@@ -379,7 +398,19 @@ internal sealed class MainWindow : Window
             var button = new Button { Content = AppsPage.Label(main), IsEnabled = Allowed(main, actionsAllowed), Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             AutomationProperties.SetName(button, $"{AppsPage.Label(main)}: {role}");
             button.Click += (_, _) => Do(main, row);
-            Add(grid, 4, button);
+            // In the not-here list the main action (Add) is the right-most button and Delete sits to its left, so the buttons end
+            // at the same edge as the rows above.
+            Add(grid, withApp ? 5 : 4, button);
+        }
+
+        // An action that deletes for good is its own red button, apart from More (the owner asked for red). Such a row has no More.
+        if (row.Destructive is { } destructive)
+        {
+            var delete = new Button { Content = AppsPage.Label(destructive), IsEnabled = Allowed(destructive, actionsAllowed), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            Danger.Style(delete);
+            AutomationProperties.SetName(delete, $"{AppsPage.Label(destructive)} from the shared folder: {role}");
+            delete.Click += (_, _) => Do(destructive, row);
+            Add(grid, 4, delete);
         }
 
         if (row.Others.Count > 0)
@@ -402,7 +433,7 @@ internal sealed class MainWindow : Window
 
     /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
-        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.Remove
+        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.Remove or RowAction.Delete
             or RowAction.FindAppAgain or RowAction.ChooseFolderAgain or RowAction.AddHere);
 
     /// <summary>Banner B5's Fix it (write the entry with this app's path) or Turn it off (remove it); then a check redraws.</summary>
@@ -452,6 +483,9 @@ internal sealed class MainWindow : Window
                 break;
             case RowAction.Remove:
                 _ = _operate(flow => flow.RemoveAsync(mapping));
+                break;
+            case RowAction.Delete:
+                _ = _operate(flow => flow.DeleteMappingAsync(mapping));
                 break;
             case RowAction.CheckAgain:
                 _checkNow();

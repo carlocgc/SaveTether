@@ -93,6 +93,21 @@ Store problems specific to `init`: `not-initialized` (the sync folder has no Sav
 
 A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `not-found`.
 
+### `map delete`
+
+`map delete <id>`, with `--confirm-delete`, which says that every write to the role's shared folder is complete and the sync tool has finished with it on every device. With `--json` nothing is asked, so without `--confirm-delete` it is refused (exit 1) and nothing is deleted. Refused (exit 1, `problem` `conflict`, `conflict.kind` `in-use-on-devices`) while any device, this one included, has a folder set for the mapping, and (exit 3) while an operation is unfinished. A deletion that stops part way (a file arrived after the backup, or a delete failed) is a refusal (exit 1) whose message says what was removed and names the backup; running it again finishes. Added 2026-11-21.
+
+`mapping_deleted` object, present when the mapping was deleted from the shared folder:
+
+| Field | Type | |
+|---|---|---|
+| `mapping_id` | string | The mapping that was deleted. |
+| `target_folder` | string | The shared folder that held its saves. |
+| `target_exists` | boolean | False when the shared folder was already gone, which a `map delete` that stopped part way leaves; there is then no backup. |
+| `files` | number | Files the shared folder held. |
+| `bytes` | number | Their total size. |
+| `backup` | object or null | The verified backup of the shared folder taken on this device first, with the fields of `backups[]` above (`reason` is `pre-delete`); null when the folder held no files. |
+
 ### `app add` and `app list`
 
 `app add <app>` flags: `--install <id>`, `--role <id>` (repeatable), `--install-dir <path>`, `--sd-card <path>`, `--wine-prefix <path>`, `--dry-run`.
@@ -267,13 +282,13 @@ Every value `--json` can print, by field. A test checks that each value in the c
 
 **Store problem** (top-level `problem`): `not-found`, `invalid`, `schema-too-new` (a file was written by a newer SaveTether; it is left as it is), `not-initialized`, `conflict`, `name-in-use`, `operation-running` (another SaveTether process holds the operation lock), `mappings-applied`.
 
-**Conflict kind** (`conflict.kind`): `target-differs`, `applied-elsewhere`, `folder-in-use`, `target-in-use`.
+**Conflict kind** (`conflict.kind`): `target-differs`, `applied-elsewhere`, `folder-in-use`, `target-in-use`, `in-use-on-devices` (`map delete`: a device still has a folder set for the mapping; `conflict.mapping_id` is that mapping).
 
 **Health state** (`status.mappings[].state`, design 5.5): `ok`, `not-applied`, `replaced`, `broken`, `retargeted`, `double-seed`, `foreign-link`.
 
 **Health reason** (`status.mappings[].reason`): for `not-applied`, `no-save-folder`, `save-folder-not-absolute`, `not-linked-yet`; for `replaced`, `folder-holds-files`, `folder-empty`, `folder-missing`, `not-a-folder`; for `broken`, `shared-folder-missing`, `sync-root-unavailable`.
 
-**Backup reason** (`backups[].reason`): `pre-apply`, `pre-revert`, `pre-restore`, `baseline`, `snapshot` (this version never takes one; it is listed because a backup folder may hold one made by a test build).
+**Backup reason** (`backups[].reason`): `pre-apply`, `pre-revert`, `pre-restore`, `pre-delete` (the shared folder, before `map delete` removed it), `baseline`, `snapshot` (this version never takes one; it is listed because a backup folder may hold one made by a test build).
 
 **App add problem** (`app.problem`): `unknown-app`, `invalid-definition`, `unknown-install`, `not-installed`, `install-choice-needed`, `unknown-role`, `unresolved`, `conflict`, `not-local` (a role's folder is on a network drive, on Windows).
 

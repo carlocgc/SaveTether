@@ -130,6 +130,9 @@ internal sealed record CliOutput
     /// <summary>"backup delete": the backup removed, whether it was its mapping's first, and how many are left.</summary>
     public BackupDeletion? BackupDeleted { get; init; }
 
+    /// <summary>"map delete": the shared folder and record removed, and the backup taken first.</summary>
+    public MappingDeletion? MappingDeleted { get; init; }
+
     /// <summary>"uninstall": what was removed, and what was left and why.</summary>
     public UninstallOutput? Uninstalled { get; init; }
 }
@@ -217,6 +220,15 @@ internal static class OutputWriter
         if (output.BackupDeleted is { } deleted)
         {
             stdout.WriteLine($"Deleted backup {deleted.Backup.Id}. {deleted.Remaining} backup(s) of {deleted.Backup.MappingId} left.");
+        }
+
+        if (output.MappingDeleted is { } mappingDeleted)
+        {
+            stdout.WriteLine($"Deleted '{mappingDeleted.MappingId}' from the shared folder.");
+            if (mappingDeleted.Backup is { } backup)
+            {
+                stdout.WriteLine($"  The shared saves ({backup.FileCount} file(s), {FormatBytes(backup.TotalBytes)}) are backed up as {backup.Id}.");
+            }
         }
 
         if (output.Uninstalled is { } uninstalled)
@@ -500,6 +512,7 @@ internal static class OutputWriter
         BackupReason.PreApply => "pre-apply",
         BackupReason.PreRevert => "pre-revert",
         BackupReason.PreRestore => "pre-restore",
+        BackupReason.PreDelete => "pre-delete",
         BackupReason.Baseline => "baseline",
         _ => "snapshot",
     };

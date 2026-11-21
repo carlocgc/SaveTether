@@ -271,6 +271,34 @@ public sealed class SharedStore
         return superseded;
     }
 
+    /// <summary>
+    /// Deletes a mapping's seed markers and then its mapping file (design 5.3, invariant 2: the tool's own metadata may be retired).
+    /// The caller has checked the mapping is unused and dealt with its shared folder. Each delete refuses a link in the way
+    /// (<see cref="SafeFs.RemoveSharedFile"/>), and a markers folder that has gained anything is left.
+    /// </summary>
+    public void RetireMapping(string mappingId)
+    {
+        RequireInitialized();
+        RequireMappingId(mappingId);
+        var seed = SeedFolderOf(mappingId);
+        if (SafeFs.Probe(seed) == EntryKind.Directory)
+        {
+            foreach (var marker in Directory.EnumerateFiles(seed))
+            {
+                SafeFs.RemoveSharedFile(DataRoot, marker);
+            }
+
+            SafeFs.RemoveEmptySharedFolder(DataRoot, seed);
+        }
+
+        // The folder a delete that stopped part way used for what it had set aside, once it holds nothing.
+        SafeFs.RemoveEmptySharedFolder(DataRoot, Path.Combine(MetaRoot, DeletingFolder, mappingId));
+        SafeFs.RemoveSharedFile(DataRoot, MappingPath(mappingId));
+    }
+
+    /// <summary>Where <c>map delete</c> sets a file aside, in one rename, before it checks the file and deletes it: below <see cref="MetaRoot"/>.</summary>
+    public const string DeletingFolder = "deleting";
+
     private string MappingPath(string mappingId) => Path.Combine(MetaRoot, MappingsFolder, mappingId + ".json");
 
     private string DevicePathOf(string deviceName) => Path.Combine(MetaRoot, DevicesFolder, deviceName + ".json");

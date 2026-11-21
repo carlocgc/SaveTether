@@ -33,10 +33,15 @@ internal sealed class Overlay : Panel
     }
 
     /// <summary>Asks, and answers true only for the confirming button.</summary>
-    public async Task<bool> ConfirmAsync(string title, string text, string confirmLabel, TimeSpan? timeout = null, Control? details = null)
+    public async Task<bool> ConfirmAsync(string title, string text, string confirmLabel, TimeSpan? timeout = null, Control? details = null, bool danger = false)
     {
         var cancel = new Button { Content = "Cancel" };
         var confirm = new Button { Content = confirmLabel };
+        if (danger)
+        {
+            Danger.Style(confirm);
+        }
+
         return await ShowAsync(title, Body(text, details), [cancel, confirm], cancel, timeout) == confirm;
     }
 

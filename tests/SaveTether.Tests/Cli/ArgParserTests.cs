@@ -31,7 +31,7 @@ public class ArgParserTests
     public void The_command_table_is_what_the_design_lists()
     {
         Assert.Equal(
-            ["init", "map add", "map remove", "app add", "app list", "status", "apply", "revert", "backup list", "backup restore", "backup delete", "recover", "uninstall"],
+            ["init", "map add", "map remove", "map delete", "app add", "app list", "status", "apply", "revert", "backup list", "backup restore", "backup delete", "recover", "uninstall"],
             ArgParser.Commands.Select(c => c.Name));
     }
 
@@ -94,9 +94,9 @@ public class ArgParserTests
     [InlineData("unknown command or option 'frobnicate'", "frobnicate")]
     [InlineData("unknown command or option '--bogus'", "--bogus")]
     [InlineData("unknown command or option '--version'", "--version", "extra")]
-    [InlineData("'map' needs a subcommand: add, remove", "map")]
-    [InlineData("'map' needs a subcommand: add, remove", "map", "--json")]
-    [InlineData("unknown command 'map rename'; 'map' takes: add, remove", "map", "rename")]
+    [InlineData("'map' needs a subcommand: add, remove, delete", "map")]
+    [InlineData("'map' needs a subcommand: add, remove, delete", "map", "--json")]
+    [InlineData("unknown command 'map rename'; 'map' takes: add, remove, delete", "map", "rename")]
     [InlineData("'backup' needs a subcommand: list, restore, delete", "backup")]
     [InlineData("unknown option '--force' for 'apply'", "apply", "x.y", "--force")]
     [InlineData("unknown option '--copy' for 'revert'", "revert", "x.y", "--copy")]

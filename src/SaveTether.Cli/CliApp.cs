@@ -104,6 +104,13 @@ internal static class CliApp
               the unit --add-missing copies in. Give it again later to change it.
           savetether map remove <id>
               Remove this device's save folder for a mapping. Other devices keep theirs.
+          savetether map delete <id> [--confirm-delete]
+              Delete a mapping no device uses from the sync folder: its shared copy, its record and its seed
+              markers, on every device's sync folder. Each device's own save folders and backups are not
+              touched. The shared copy is backed up on this device first. It cannot be undone from the share,
+              so it asks first, or needs --confirm-delete, which says that every write to the role's shared
+              folder is complete and the sync tool has finished with it on every device. Refused while any
+              device has a folder set for it.
 
           savetether app add <app> [--install <id>] [--role <id>]... [--install-dir <path>]
                                    [--sd-card <path>] [--wine-prefix <path>] [--dry-run]
@@ -197,6 +204,7 @@ internal static class CliApp
                     "init" => Init(),
                     "map add" => MapAdd(),
                     "map remove" => MapRemove(),
+                    "map delete" => MapDelete(),
                     "app add" => AppAdd(),
                     "app list" => AppList(),
                     "status" => Status(),
@@ -320,6 +328,38 @@ internal static class CliApp
                     id, mapping?.Target ?? string.Empty, removed.Source, removed.ProcessNames, mapping?.Depth ?? 1,
                     CreatedMapping: false, EntryDepthChanged: false, Removed: true),
             };
+        }
+
+        /// <summary>
+        /// "map delete": a mapping no device uses, after a confirmation at a terminal or with --confirm-delete. The
+        /// deletion reaches every device through the sync tool, so what goes is said before it is asked.
+        /// </summary>
+        private CliOutput MapDelete()
+        {
+            var id = command.Positionals[0];
+            var workspace = Open();
+            var described = workspace.DescribeMappingDeletion(id);
+            if (!command.Has("--confirm-delete"))
+            {
+                var what = described.TargetExists
+                    ? $"its shared folder '{described.TargetFolder}' ({described.Files} file(s), {OutputWriter.FormatBytes(described.Bytes)})"
+                    : "its record (the shared folder is already gone)";
+                if (!CanAsk)
+                {
+                    return Failed(ExitRefused, $"Deleting '{id}' removes {what} from the sync folder, on every device. Each device's own save folders and backups are not touched. Add --confirm-delete to go ahead, once all writes to its shared folder are complete and your sync tool has finished syncing it on every device.");
+                }
+
+                var question =
+                    $"Delete '{id}' from the shared folder? This removes {what}, and the sync tool carries the deletion to every device's sync folder. Each device's own save folders and backups are not touched." +
+                    "\nBefore confirming, make sure all writes to this role's shared folder are complete and your sync tool has finished syncing it on every device." +
+                    "\nThe shared copy is backed up on this device first.";
+                if (!Confirm(question))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was deleted.");
+                }
+            }
+
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, MappingDeleted = workspace.DeleteMapping(id) };
         }
 
         private CliOutput AppAdd()

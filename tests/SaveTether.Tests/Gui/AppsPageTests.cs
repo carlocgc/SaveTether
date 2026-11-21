@@ -90,7 +90,7 @@ public class AppsPageTests
         pc.DeliverTo(deck, metadataOnly: true);
 
         var notHere = AppsPage.From(StatusCheck.Run(new LocalStore(deck.LocalFolder))).NotOnThisDevice;
-        Assert.Equal("Set up on pc, not here.", Assert.Single(notHere).Sentence);
+        Assert.Equal("1 device has a link.", Assert.Single(notHere).Sentence);
 
         // A link SaveTether did not make, at pc's save folder.
         var elsewhere = sandbox.Dir("elsewhere");
@@ -266,6 +266,90 @@ public class AppsPageTests
     }
 
     [Fact]
+    public void A_row_no_device_has_a_folder_for_offers_a_red_Delete_and_one_another_device_has_does_not()
+    {
+        var unused = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder));
+        Assert.Equal((RowAction?)RowAction.Delete, unused.Destructive);
+        Assert.Equal((RowAction?)RowAction.AddHere, unused.Main);
+        Assert.Equal("Delete", AppsPage.Label(RowAction.Delete));
+
+        var elsewhere = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { SetUpOn = ["pc"] });
+        Assert.Null(elsewhere.Destructive);
+
+        Assert.All(
+            Enum.GetValues<HealthState>().Where(s => s != HealthState.NotApplied),
+            s => Assert.Null(AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", s)).Destructive));
+        Assert.Null(AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NotLinkedYet)).Destructive);
+    }
+
+    [Fact]
+    public void A_row_other_devices_have_says_how_many_and_the_names_are_the_hover_text()
+    {
+        Assert.Equal("No device links this role.", AppsPage.SetUpOnSentence([]));
+        Assert.Equal("1 device has a link.", AppsPage.SetUpOnSentence(["pc"]));
+        Assert.Equal("12 devices have a link.", AppsPage.SetUpOnSentence(Enumerable.Range(1, 12).Select(i => $"device-{i:00}").ToList()));
+
+        var many = Enumerable.Range(1, 12).Select(i => $"device-{i:00}").ToList();
+        var row = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { SetUpOn = many });
+        Assert.Equal("12 devices have a link.", row.Sentence);
+        Assert.Equal(many, row.Devices);
+        Assert.Equal(12, AppsPage.DevicesTip(many).Split('\n').Length);
+        Assert.Equal("device-01\ndevice-02", AppsPage.DevicesTip(["device-01", "device-02"]));
+        Assert.Null(row.Destructive);
+
+        // A few devices work the same way: how many, with the names on hover.
+        var few = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { SetUpOn = ["pc", "deck"] });
+        Assert.Equal("2 devices have a link.", few.Sentence);
+        Assert.Equal(["pc", "deck"], few.Devices);
+
+        // No device has it: no list, and it can be deleted.
+        var none = AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder));
+        Assert.Null(none.Devices);
+        Assert.Equal((RowAction?)RowAction.Delete, none.Destructive);
+    }
+
+    [Fact]
+    public void The_Delete_confirmation_is_short_and_asks_the_owner_to_make_sure_writes_and_syncing_are_done()
+    {
+        Assert.Equal("Delete PPSSPP savedata, orphaned in the shared folder?", AppsPage.DeleteTitle("PPSSPP savedata"));
+        Assert.StartsWith("This deletion will sync to all devices.", AppsPage.DeleteText, StringComparison.Ordinal);
+        Assert.Contains("make sure all writes to this role's shared folder are complete and your sync tool has finished syncing it on every device", AppsPage.DeleteText, StringComparison.Ordinal);
+        Assert.Equal("PPSSPP savedata was deleted from the shared folder. Its shared saves are backed up on this device; Backups shows them.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: true));
+        Assert.Equal("PPSSPP savedata was deleted from the shared folder.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: false));
+        Assert.Equal("before deleting", BackupsPage.Reason(Core.Backup.BackupReason.PreDelete));
+    }
+
+    [Fact]
+    public void Delete_removes_a_mapping_nobody_uses_and_the_row_goes()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        pc.Ok("apply", Id, "--copy");
+        pc.Ok("revert", Id);
+        pc.Ok("map", "remove", Id);
+        var local = new LocalStore(pc.LocalFolder);
+        var row = Assert.Single(AppsPage.From(StatusCheck.Run(local)).NotOnThisDevice);
+        Assert.Equal((RowAction?)RowAction.Delete, row.Destructive);
+
+        var (session, _) = OperationSession.Begin(local, "map delete", new NoProcesses(), null);
+        using (session)
+        {
+            var described = session!.DescribeMappingDeletion(Id);
+            Assert.Equal(1, described.Files);
+            var done = session.DeleteMapping(Id);
+            Assert.NotNull(done.Backup);
+        }
+
+        var status = StatusCheck.Run(local);
+        Assert.Empty(AppsPage.From(status).NotOnThisDevice);
+        Assert.Empty(status.Mappings);
+        Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
     public void Remove_forgets_this_devices_folder_and_is_refused_while_linked()
     {
         using var sandbox = new Sandbox();
@@ -290,7 +374,7 @@ public class AppsPageTests
 
         var row = Assert.Single(AppsPage.From(StatusCheck.Run(local)).NotOnThisDevice);
         Assert.Equal(HealthReason.NoSaveFolder, row.Mapping.Health.Reason);
-        Assert.Equal("No device has a folder set for it.", row.Sentence);
+        Assert.Equal("No device links this role.", row.Sentence);
         Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
         sandbox.AssertCanaryIntact();
     }

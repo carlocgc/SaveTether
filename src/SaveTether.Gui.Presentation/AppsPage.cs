@@ -33,6 +33,12 @@ public enum RowAction
     /// <summary>"map remove": forget this device's folder for the mapping, which moves to "Not on this device". Only offered when Ready to link.</summary>
     Remove,
 
+    /// <summary>
+    /// "map delete": a mapping no device uses is deleted from the shared folder (its shared copy and its record, on every device's sync folder). Shown as its own
+    /// red button, on a "Not on this device" row that says no device has a folder set for it.
+    /// </summary>
+    Delete,
+
     /// <summary>Show the core's own sentence for the state.</summary>
     Details,
 
@@ -52,7 +58,9 @@ public enum RowAction
 /// <summary>One row of the Apps page: a mapping, its sentence and its actions.</summary>
 /// <param name="Main">The row's main action, shown as its button; null when the state has none, or none built yet.</param>
 /// <param name="Others">The actions under "More", in the spec's order.</param>
-public sealed record AppRow(MappingState Mapping, string Sentence, RowAction? Main, IReadOnlyList<RowAction> Others);
+/// <param name="Destructive">An action that removes something for good, shown apart as a red button; null when the row has none.</param>
+/// <param name="Devices">For a row some other device has a folder for: their names, shown when the sentence is hovered; null when none has.</param>
+public sealed record AppRow(MappingState Mapping, string Sentence, RowAction? Main, IReadOnlyList<RowAction> Others, RowAction? Destructive = null, IReadOnlyList<string>? Devices = null);
 
 /// <summary>An app with its rows (section 5): mappings grouped by the part of the ID before the dot.</summary>
 public sealed record AppGroup(string AppName, IReadOnlyList<AppRow> Rows)
@@ -102,7 +110,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
             (HealthState.Ok, _) => (mapping.LinkKind ?? "Link", (RowAction?)null,
                 new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert }),
             (HealthState.NotApplied, HealthReason.NoSaveFolder) => (
-                mapping.SetUpOn.Count == 0 ? "No device has a folder set for it." : $"Set up on {string.Join(", ", mapping.SetUpOn)}, not here.",
+                SetUpOnSentence(mapping.SetUpOn),
                 RowAction.AddHere, []),
             (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => (
                 $"This device's file has '{mapping.Health.Source}' as the folder.", null, new[] { RowAction.Details }),
@@ -129,7 +137,33 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
                 new[] { RowAction.Details }),
             _ => throw new ArgumentOutOfRangeException(nameof(mapping), mapping.Health.State, "A state with no row in section 5.1."),
         };
-        return new AppRow(mapping, sentence, main, others);
+
+        // No device links this role (none has a folder set for it): nothing links to it, so it can be deleted from the shared folder.
+        var unused = mapping is { Health.Reason: HealthReason.NoSaveFolder, SetUpOn.Count: 0 };
+        var devices = mapping.Health.Reason == HealthReason.NoSaveFolder && mapping.SetUpOn.Count > 0 ? mapping.SetUpOn : null;
+        return new AppRow(mapping, sentence, main, others, unused ? RowAction.Delete : null, devices);
+    }
+
+    /// <summary>
+    /// What a row says when other devices have a folder for the role: only how many ("3 devices have a link."), so the row stays
+    /// one short line however many there are; the names are in <see cref="DevicesTip"/>, shown when the sentence is hovered.
+    /// </summary>
+    public static string SetUpOnSentence(IReadOnlyList<string> devices)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+        return devices.Count switch
+        {
+            0 => "No device links this role.",
+            1 => "1 device has a link.",
+            _ => $"{devices.Count} devices have a link.",
+        };
+    }
+
+    /// <summary>The hover text of that sentence: every device, one per line.</summary>
+    public static string DevicesTip(IReadOnlyList<string> devices)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+        return string.Join("\n", devices);
     }
 
     public static string Label(RowAction action) => action switch
@@ -143,6 +177,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         RowAction.OpenSharedFolder => "Open shared folder",
         RowAction.OpenSharedFolderParent => "Open shared folder's parent",
         RowAction.Remove => "Remove",
+        RowAction.Delete => "Delete",
         RowAction.Details => "Details",
         RowAction.FindAppAgain => "Find the app again",
         RowAction.ChooseFolderAgain => "Choose the folder again",
@@ -150,6 +185,21 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         RowAction.Backups => "Backups",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no label."),
     };
+
+    public static string DeleteTitle(string role) => $"Delete {role}, orphaned in the shared folder?";
+
+    /// <summary>
+    /// Delete's confirmation, kept short (the owner's wording): the title says what, and this says the two things to know. The
+    /// owner confirms the condition nothing here can check: every write to the role's shared folder is complete and the sync tool has
+    /// finished with it on every device. The shared copy is backed up on this device first without being asked about, and the result
+    /// says where.
+    /// </summary>
+    public const string DeleteText =
+        "This deletion will sync to all devices. Before confirming, make sure all writes to this role's shared folder are complete " +
+        "and your sync tool has finished syncing it on every device.";
+
+    public static string DeletedText(string role, bool hadBackup) =>
+        $"{role} was deleted from the shared folder." + (hadBackup ? " Its shared saves are backed up on this device; Backups shows them." : string.Empty);
 
     /// <summary>Remove's confirmation (section 5).</summary>
     public static string RemoveWarning(string role) =>

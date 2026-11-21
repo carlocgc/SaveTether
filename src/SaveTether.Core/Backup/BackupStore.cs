@@ -123,6 +123,9 @@ public sealed class BackupStore
         }
     }
 
+    /// <summary>What a backup holds, from its manifest: the files with their sizes and hashes, and the folders. Null when it cannot be read.</summary>
+    public BackupManifest? ReadManifest(string backupId) => TryReadManifest(FolderOf(backupId));
+
     /// <summary>Re-reads a backup and compares every file with the hash recorded when it was taken.</summary>
     public BackupVerification Verify(string backupId) => VerifyFolder(FolderOf(backupId));
 

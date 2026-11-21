@@ -436,6 +436,27 @@ $.problem: string
 $.schema: number
 $: object
 
+## map-delete
+$.command: string
+$.exit_code: number
+$.mapping_deleted.backup.created_utc: string
+$.mapping_deleted.backup.file_count: number
+$.mapping_deleted.backup.id: string
+$.mapping_deleted.backup.location: string
+$.mapping_deleted.backup.mapping_id: string
+$.mapping_deleted.backup.reason: string
+$.mapping_deleted.backup.source_path: string
+$.mapping_deleted.backup.total_bytes: number
+$.mapping_deleted.backup: object
+$.mapping_deleted.bytes: number
+$.mapping_deleted.files: number
+$.mapping_deleted.mapping_id: string
+$.mapping_deleted.target_exists: boolean
+$.mapping_deleted.target_folder: string
+$.mapping_deleted: object
+$.schema: number
+$: object
+
 ## map-remove
 $.command: string
 $.exit_code: number
