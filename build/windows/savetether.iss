@@ -69,7 +69,7 @@ Source: "{#SourceDir}\libHarfBuzzSharp.dll"; DestDir: "{app}"; Flags: ignorevers
 Source: "{#SourceDir}\av_libglesv2.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\ludusavi.LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\SaveTether"; Filename: "{app}\savetether-gui.exe"; Comment: "Keeps game save folders linked to one synced folder"

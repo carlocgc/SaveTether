@@ -74,7 +74,7 @@ public static class Installer
     public static IReadOnlyList<string> PackageFiles { get; } = ["savetether-gui", "savetether", "libSkiaSharp.so", "libHarfBuzzSharp.so"];
 
     /// <summary>Copied when the package has them: the licence, the readme, and the icon the menu entry shows.</summary>
-    private static readonly string[] Extras = ["LICENSE", "README.md", "ludusavi.LICENSE.txt", IconFile];
+    private static readonly string[] Extras = ["LICENSE", "README.md", "THIRD-PARTY-NOTICES.md", IconFile];
 
     private const string IconFile = "savetether.png";
 
