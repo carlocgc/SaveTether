@@ -256,6 +256,19 @@ public class AddAppFlowTests
     }
 
     [Fact]
+    public void The_install_folder_hint_names_the_path_to_the_shared_folder_inside_it()
+    {
+        var cemu = DefinitionLoader.LoadFile(Path.Combine(SaveTether.Tests.Definitions.DefinitionLoaderTests.FindRepositoryRoot(), "definitions", "cemu.jsonc")).Definition!;
+
+        Assert.Equal(
+            "Select the folder containing \"mlc01/usr/save\".",
+            AddAppFlow.InstallFolderHintFor(cemu, cemu.Installs.Where(i => i.Id == "win-portable")));
+
+        // An install that does not use the install folder has no hint.
+        Assert.Null(AddAppFlow.InstallFolderHintFor(cemu, cemu.Installs.Where(i => i.Id == "linux-native")));
+    }
+
+    [Fact]
     public void A_plan_for_a_portable_install_keeps_its_folder_editable_and_a_copied_install_can_be_chosen()
     {
         using var sandbox = new Sandbox();

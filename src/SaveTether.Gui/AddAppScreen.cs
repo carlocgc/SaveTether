@@ -515,6 +515,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
                     var (box, row) = PathField(value ?? string.Empty, AddAppFlow.FieldLabel(field));
                     fields.Add((field, box));
                     content.Add(new TextBlock { Text = AddAppFlow.FieldLabel(field), FontWeight = FontWeight.SemiBold });
+                    if (field == LocationField.InstallFolder && view.InstallFolderHint is { } hint)
+                    {
+                        content.Add(new TextBlock { Text = hint, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 });
+                    }
+
                     content.Add(row);
                 }
 
@@ -575,6 +580,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
         {
             var (locationBox, locationRow) = PathField(value ?? string.Empty, AddAppFlow.FieldLabel(field));
             yield return new TextBlock { Text = AddAppFlow.FieldLabel(field), FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
+            if (field == LocationField.InstallFolder && view.InstallFolderHint is { } hint)
+            {
+                yield return new TextBlock { Text = hint, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 };
+            }
+
             yield return locationRow;
             var change = new Button { Content = "Use this folder" };
             var locationField = field;

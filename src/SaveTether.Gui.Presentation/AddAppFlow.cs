@@ -91,6 +91,9 @@ public sealed record AddAppView(
     /// <summary>True for an imported definition: converted from the Ludusavi manifest, not tried by hand.</summary>
     public bool Unverified { get; init; }
 
+    /// <summary>Under the Install folder field: which folder to choose, from what the definition looks for inside it. Null when there is no field.</summary>
+    public string? InstallFolderHint { get; init; }
+
     /// <summary>For a plan: a note that some store's copy of the app keeps saves in the cloud too; null when none does.</summary>
     public string? CloudNote { get; init; }
 
@@ -533,6 +536,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 // The install folder stays editable: the one stored or given is shown, so a copied or moved install can be
                 // pointed at (the stored folder may still exist, which is why Look again never came up).
                 Fields = FieldsFor([install], definition, request).Where(f => f.Field == LocationField.InstallFolder).ToList(),
+                InstallFolderHint = InstallFolderHintFor(definition, [install]),
                 Roles = roles,
                 Quirks = plan.Quirks,
                 Plan = plan,
@@ -579,6 +583,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                     Title = $"No install of {name} was found.",
                     Sentences = sentences,
                     Fields = FieldsFor(wanting, definition, request),
+                    InstallFolderHint = InstallFolderHintFor(definition, wanting),
                 };
             }
 
@@ -594,6 +599,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                     Title = "A folder could not be worked out",
                     Sentences = [outcome.Message?.Text ?? "A folder could not be worked out."],
                     Fields = helps ? FieldsFor(installs, definition, request) : [],
+                    InstallFolderHint = helps ? InstallFolderHintFor(definition, installs) : null,
                 };
             }
 
@@ -637,6 +643,38 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         RoleClass.Media => "Off by default: screenshots and recordings, which can be large.",
         _ => "Off by default.",
     };
+
+    /// <summary>
+    /// Says which folder to choose for {install_dir}: the one that contains the folders the definition shares, as the
+    /// definition writes them for this system ("mlc01/usr/save"). Worked out from the definition, so every app with an
+    /// install folder gets it. An install with no default folder to share falls back to what it looks for.
+    /// </summary>
+    public static string? InstallFolderHintFor(AppDefinition? definition, IEnumerable<InstallDefinition> installs)
+    {
+        const string token = "{install_dir}";
+        var hints = new List<string>();
+        foreach (var install in installs)
+        {
+            var detect = install.Detect.Dir ?? install.Detect.File;
+            if (detect is null || !detect.StartsWith(token, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var marker = detect[token.Length..].Trim('/');
+            var baseRelative = install.Base.Path is { } b && b.StartsWith(token, StringComparison.Ordinal) ? b[token.Length..].Trim('/') : string.Empty;
+            var shared = (definition?.Roles ?? [])
+                .Where(r => r.Default && r.Paths.ContainsKey(install.Id))
+                .Select(r => string.Join('/', new[] { baseRelative, r.Paths[install.Id] }.Where(part => part.Length > 0)))
+                .ToList();
+            var contains = shared.Count > 0 ? shared : marker.Length > 0 ? [marker] : [];
+            hints.Add(contains.Count == 0
+                ? "Select the folder the app is installed in."
+                : $"Select the folder containing {string.Join(" or ", contains.Select(p => $"\"{p}\""))}.");
+        }
+
+        return hints.Count == 0 ? null : string.Join(" ", hints.Distinct());
+    }
 
     private List<(LocationField Field, string? Value)> FieldsFor(IEnumerable<InstallDefinition> installs, AppDefinition? definition, AppAddRequest request)
     {
