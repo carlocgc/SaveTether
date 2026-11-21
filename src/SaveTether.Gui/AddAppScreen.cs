@@ -498,12 +498,17 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 {
                     var use = new Button { Content = $"Use {candidate.Id}" };
                     use.Click += (_, _) => _ = PlanAsync(() => _flow.ChooseInstall(candidate.Id));
-                    content.Add(new StackPanel
+                    // The path wraps in the room beside the button: a long one (an SD card's) was cut off at the window's edge on the Deck.
+                    var where = new TextBlock
                     {
-                        Orientation = Orientation.Horizontal,
-                        Spacing = 12,
-                        Children = { use, new TextBlock { Text = view.InstallPaths.GetValueOrDefault(candidate.Id) ?? candidate.Found ?? string.Empty, Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center } },
-                    });
+                        Text = view.InstallPaths.GetValueOrDefault(candidate.Id) ?? candidate.Found ?? string.Empty,
+                        Opacity = 0.75,
+                        TextWrapping = TextWrapping.Wrap,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(12, 0, 0, 0),
+                    };
+                    Grid.SetColumn(where, 1);
+                    content.Add(new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Children = { use, where } });
                 }
 
                 break;
