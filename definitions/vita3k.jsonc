@@ -22,6 +22,12 @@
       "base": "{appdata}/Vita3K/Vita3K"
     },
     {
+      "id": "custom-pref-path",
+      "os": ["windows", "linux"],
+      "detect": { "dir": "{install_dir}/ux0" },
+      "base": "{install_dir}"
+    },
+    {
       "id": "linux-native",
       "os": "linux",
       "detect": { "dir": "{xdg_data}/Vita3K/Vita3K/ux0" },
@@ -78,7 +84,7 @@
   ],
   "quirks": [
     "The firmware (os0, sa0, vs0, pd0) stays on each device: install it on each one. config.yml and the cache stay too.",
-    "Settings > Emulator can move the whole folder (pref-path in config.yml); EmuDeck moves it to Emulation/storage/Vita3K. Add app follows the default location and EmuDeck's only.",
+    "Settings > Emulator can move the whole folder (pref-path in config.yml); EmuDeck moves it to Emulation/storage/Vita3K. For a folder of your own, use the custom-pref-path install with that folder (the one holding ux0) as the install folder.",
     "Process name for the running check: Vita3K.exe on Windows, Vita3K on Linux."
   ]
 }

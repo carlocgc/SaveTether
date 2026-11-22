@@ -50,6 +50,7 @@
     "On a portable install the folder also holds the program; only content and patches are shared. cache and xenia-canary.config.toml stay on each device.",
     "Saves belong to a profile: use the same profile on every device, or a game will not see the other device's saves.",
     "storage_root and content_root in xenia-canary.config.toml can move these folders; Add app follows the default location only.",
+    "Xenia Manager keeps a portable Xenia Canary in its Emulators/Xenia Canary folder: use that as the install folder.",
     "Process name for the running check: xenia_canary.exe."
   ]
 }
