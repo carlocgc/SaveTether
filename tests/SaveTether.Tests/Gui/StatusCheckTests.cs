@@ -60,13 +60,15 @@ public class StatusCheckTests
     {
         using var sandbox = new Sandbox();
         var pc = new CliDevice(sandbox, "pc");
-        pc.SetUp(createRoot: true);
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", pc.Name, "--create-root");
         var local = new LocalStore(pc.LocalFolder);
-        pc.Save("GAME1/save.bin", "one");
-        pc.Ok("apply", Id, "--copy");
-        Directory.Delete(pc.Source, recursive: true);
+        var source = sandbox.Dir("pc", "aaaaxy");
+        File.WriteAllText(Path.Combine(source, "save.bin"), "one");
+        pc.Ok("map", "add", "aaaaxy.savedata", "--target", "aaaaxy/savedata", "--source", source);
+        pc.Ok("apply", "aaaaxy.savedata", "--copy");
+        Directory.Delete(source, recursive: true);
 
-        // ppsspp.savedata is a hand-made mapping: the imported PPSSPP definition has no 'savedata' role.
+        // aaaaxy.savedata is a hand-made mapping: the imported AAAAXY definition has no 'savedata' role.
         var row = Assert.Single(StatusCheck.Run(local).Mappings);
         Assert.False(row.HasDefinition);
         Assert.Equal(HealthReason.FolderMissing, row.Health.Reason);

@@ -1,0 +1,86 @@
+// shadPS4 (PlayStation 4 emulator). Shipped with SaveTether. The folders come from shadPS4's source (common/path_util.cpp and
+// path_util.h for the user folder, save_data/save_instance.cpp and user_manager.cpp for home/<user>/savedata), read 2026-11-22. Older
+// builds kept saves in user/savedata, which is what the owner's Steam Deck (EmuDeck) has. Not yet tried with `app add`. Design 5.2
+// explains the format.
+{
+  "schema": 1,
+  "id": "shadps4",
+  "name": "shadPS4",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/user" },
+      "base": "{install_dir}/user"
+    },
+    {
+      "id": "win-appdata",
+      "os": "windows",
+      "detect": { "dir": "{appdata}/shadPS4" },
+      "base": "{appdata}/shadPS4"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/shadPS4" },
+      "base": "{xdg_data}/shadPS4"
+    }
+  ],
+  "roles": [
+    {
+      "id": "home",
+      "class": "save",
+      "default": true,
+      "path": "home",
+      "target": "home",
+      "notes": "The emulated users' home folders: saves (home/<user>/savedata), trophies and input settings. Current builds."
+    },
+    {
+      "id": "savedata",
+      "class": "save",
+      "default": false,
+      "path": "savedata",
+      "target": "savedata",
+      "notes": "Saves from builds before the home folder. Turn this on if this folder holds your saves."
+    },
+    {
+      "id": "patches",
+      "class": "mod",
+      "default": false,
+      "path": "patches",
+      "target": "patches",
+      "notes": "Game patches."
+    },
+    {
+      "id": "cheats",
+      "class": "mod",
+      "default": false,
+      "path": "cheats",
+      "target": "cheats",
+      "notes": "Cheat files."
+    },
+    {
+      "id": "screenshots",
+      "class": "media",
+      "default": false,
+      "path": "screenshots",
+      "target": "screenshots",
+      "notes": "Screenshots."
+    },
+    {
+      "id": "sys_modules",
+      "class": "system",
+      "default": false,
+      "path": "sys_modules",
+      "target": "sys_modules",
+      "notes": "System modules taken from a console's firmware."
+    }
+  ],
+  "quirks": [
+    "config.toml, shader, cache, log and custom_configs stay on each device. Installed games are not in this folder.",
+    "shadPS4 uses a user folder in its working folder when one exists (the Windows release works that way), else AppData/Roaming/shadPS4 or ~/.local/share/shadPS4.",
+    "Process name for the running check: shadPS4.exe or shadps4-qt.exe on Windows, Shadps4-qt or the AppImage on Linux."
+  ]
+}

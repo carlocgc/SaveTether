@@ -1,0 +1,88 @@
+// Ryujinx (Nintendo Switch emulator; Ryubing continues it under the same name and folders). Shipped with SaveTether; replaces the
+// Ludusavi entry, which lists only bis/user/save. The folders are Ryujinx's: AppData/Roaming/Ryujinx, ~/.config/Ryujinx, or a
+// portable folder beside the program (as in the Ludusavi entry and Ryubing's migration notes). Which folders go together comes from
+// EmuDeck's Ryujinx script on the owner's Steam Deck, which links all three save folders. Not yet tried with `app add`. Design 5.2
+// explains the format.
+{
+  "schema": 1,
+  "id": "ryujinx",
+  "name": "Ryujinx",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/portable/bis" },
+      "base": "{install_dir}/portable"
+    },
+    {
+      "id": "win-appdata",
+      "os": "windows",
+      "detect": { "dir": "{appdata}/Ryujinx/bis" },
+      "base": "{appdata}/Ryujinx"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_config}/Ryujinx/bis" },
+      "base": "{xdg_config}/Ryujinx"
+    }
+  ],
+  "roles": [
+    {
+      "id": "saves",
+      "class": "save",
+      "default": true,
+      "path": "bis/user/save",
+      "target": "save",
+      "notes": "Game saves, in numbered folders. Ryujinx finds them through the save index in system_saves: share all three save roles together."
+    },
+    {
+      "id": "savemeta",
+      "class": "save",
+      "default": true,
+      "path": "bis/user/saveMeta",
+      "target": "saveMeta",
+      "notes": "Save metadata. Share it with saves."
+    },
+    {
+      "id": "system_saves",
+      "class": "save",
+      "default": true,
+      "path": "bis/system/save",
+      "target": "system_save",
+      "notes": "System saves: the save index that maps games and profiles to their save folders."
+    },
+    {
+      "id": "mods",
+      "class": "mod",
+      "default": false,
+      "path": "mods",
+      "target": "mods",
+      "notes": "Mods and cheats: mods/contents/<title ID>."
+    },
+    {
+      "id": "sdcard",
+      "class": "mod",
+      "default": false,
+      "path": "sdcard",
+      "target": "sdcard",
+      "notes": "The emulated SD card: mostly mods laid out for a console (atmosphere/contents)."
+    },
+    {
+      "id": "system",
+      "class": "system",
+      "default": true,
+      "path": "system",
+      "target": "system",
+      "notes": "The user profiles (Profiles.json) and the keys dumped from your own console (prod.keys, title.keys). On with saves: the save index names each save by profile ID, so every device needs the same profiles."
+    }
+  ],
+  "quirks": [
+    "Config.json and games (the shader cache) stay on each device. Installed firmware, updates and DLC (bis/system/Contents, bis/user/Contents) are not shared.",
+    "A save role on its own can leave a game without its save: the index in system_saves names the numbered folders in saves, by the profile IDs in system/Profiles.json (AccountSaveDataManager.cs).",
+    "EmuDeck keeps Ryujinx's own folder and only links Emulation/saves/ryujinx to it, so use the Linux install there.",
+    "Process name for the running check: Ryujinx.exe on Windows, Ryujinx or the AppImage on Linux."
+  ]
+}

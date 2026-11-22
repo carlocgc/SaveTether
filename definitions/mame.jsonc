@@ -1,0 +1,87 @@
+// MAME (arcade emulator). Shipped with SaveTether. The folder names are MAME's defaults under its home path (nvram, sta, snap,
+// artwork, cheat; the hiscore plugin's folder comes from plugins/hiscore/init.lua, read 2026-11-22). ~/.mame is the home path that
+// Linux builds and the Flatpak use (EmuDeck's MAME script and the owner's Steam Deck). EmuDeck moves nvram and sta to
+// Emulation/saves/mame. Not yet tried with `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "mame",
+  "name": "MAME",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-install",
+      "os": "windows",
+      "detect": { "file": "{install_dir}/mame.ini" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "linux-home",
+      "os": "linux",
+      "detect": { "dir": "{home}/.mame" },
+      "base": "{home}/.mame"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/saves/mame/saves" },
+      "base": "{emudeck}/saves/mame"
+    }
+  ],
+  "roles": [
+    {
+      "id": "nvram",
+      "class": "save",
+      "default": true,
+      "path": { "win-install": "nvram", "linux-home": "nvram", "emudeck": "saves" },
+      "target": "nvram",
+      "notes": "Each machine's NVRAM: the saves and high scores of games that keep them."
+    },
+    {
+      "id": "hiscore",
+      "class": "save",
+      "default": true,
+      "path": { "win-install": "hiscore", "linux-home": "hiscore" },
+      "target": "hiscore",
+      "notes": "High scores saved by the hiscore plugin. Not for EmuDeck, whose MAME home is ~/.mame."
+    },
+    {
+      "id": "sta",
+      "class": "state",
+      "default": false,
+      "path": { "win-install": "sta", "linux-home": "sta", "emudeck": "states" },
+      "target": "sta",
+      "notes": "Save states: a newer MAME may not load an older one."
+    },
+    {
+      "id": "snap",
+      "class": "media",
+      "default": false,
+      "path": { "win-install": "snap", "linux-home": "snap" },
+      "target": "snap",
+      "notes": "Screenshots and recordings. Not for EmuDeck."
+    },
+    {
+      "id": "artwork",
+      "class": "mod",
+      "default": false,
+      "path": { "win-install": "artwork", "linux-home": "artwork" },
+      "target": "artwork",
+      "notes": "Bezels and other artwork. Not for EmuDeck, which keeps it in Emulation/storage/mame/artwork."
+    },
+    {
+      "id": "cheat",
+      "class": "mod",
+      "default": false,
+      "path": { "win-install": "cheat", "linux-home": "cheat" },
+      "target": "cheat",
+      "notes": "Cheat files. Not for EmuDeck, which keeps them in Emulation/storage/mame/cheat."
+    }
+  ],
+  "quirks": [
+    "mame.ini, ini, cfg (inputs and machine settings) and plugin settings stay on each device.",
+    "The nvram_directory, state_directory and other paths in mame.ini can move these folders; Add app follows the default location and EmuDeck's only.",
+    "On EmuDeck both the EmuDeck install and ~/.mame are found: pick the EmuDeck one for nvram and states.",
+    "Process name for the running check: mame.exe on Windows, mame on Linux."
+  ]
+}

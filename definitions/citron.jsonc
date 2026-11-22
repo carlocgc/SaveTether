@@ -1,0 +1,103 @@
+// Citron (Nintendo Switch emulator, a yuzu fork). Shipped with SaveTether. Citron keeps yuzu's folder layout under its own name:
+// the name is confirmed by Eden's source (common/fs/fs_paths.h CITRON_DIR, read 2026-11-22) and by EmuDeck's Citron script on the
+// owner's Steam Deck, where nand, sdmc, load and screenshots are moved to Emulation/storage/citron. Not yet tried with `app add`.
+// Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "citron",
+  "name": "Citron",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/user/nand" },
+      "base": "{install_dir}/user"
+    },
+    {
+      "id": "win-appdata",
+      "os": "windows",
+      "detect": { "dir": "{appdata}/citron/nand" },
+      "base": "{appdata}/citron"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/citron/nand" },
+      "base": "{xdg_data}/citron"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/storage/citron/nand" },
+      "base": "{emudeck}/storage/citron"
+    }
+  ],
+  "roles": [
+    {
+      "id": "saves",
+      "class": "save",
+      "default": true,
+      "path": "nand/user/save",
+      "target": "save",
+      "entry_depth": 3,
+      "ignore": ["cache"],
+      "notes": "Game saves: 0000000000000000/<profile ID>/<title ID>. A game finds its save only under the same profile ID on every device. The cache folder here is the emulator's own and need not sync."
+    },
+    {
+      "id": "nand-system",
+      "class": "system",
+      "default": true,
+      "path": "nand/system",
+      "target": "system",
+      "notes": "The emulated system memory: user profiles, system saves and the installed firmware (a few hundred MiB). On with saves: a game finds its save only under the same profile ID, so every device needs the same profiles."
+    },
+    {
+      "id": "play_time",
+      "class": "save",
+      "default": false,
+      "path": { "win-portable": "play_time", "win-appdata": "play_time", "linux-native": "play_time" },
+      "target": "play_time",
+      "notes": "Play time per game. Not for EmuDeck, which keeps it in ~/.local/share/citron."
+    },
+    {
+      "id": "load",
+      "class": "mod",
+      "default": false,
+      "path": "load",
+      "target": "load",
+      "notes": "Mods and cheats: a folder per title ID."
+    },
+    {
+      "id": "sdmc",
+      "class": "mod",
+      "default": false,
+      "path": "sdmc",
+      "target": "sdmc",
+      "notes": "The emulated SD card: mostly mods laid out for a console (atmosphere/contents). Games, updates and DLC installed to the SD card instead of the NAND land in Nintendo/Contents here, and would sync too."
+    },
+    {
+      "id": "screenshots",
+      "class": "media",
+      "default": false,
+      "path": "screenshots",
+      "target": "screenshots",
+      "notes": "Screenshots."
+    },
+    {
+      "id": "keys",
+      "class": "system",
+      "default": false,
+      "path": { "win-portable": "keys", "win-appdata": "keys", "linux-native": "keys" },
+      "target": "keys",
+      "notes": "Keys dumped from your own console (prod.keys, title.keys). Not for EmuDeck, which keeps them in ~/.local/share/citron."
+    }
+  ],
+  "quirks": [
+    "The config folder (or ~/.config/citron), shader and cache stay on each device. Installed games, updates and DLC (nand/user/Contents) are not shared.",
+    "Settings > Filesystem can move nand, sdmc, load and screenshots; EmuDeck moves them to Emulation/storage/citron. Add app follows the default location and EmuDeck's only.",
+    "On EmuDeck both the EmuDeck install and ~/.local/share/citron are found; pick the EmuDeck one for saves.",
+    "Process name for the running check: citron.exe on Windows, citron or the AppImage on Linux."
+  ]
+}

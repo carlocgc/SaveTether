@@ -262,6 +262,9 @@ Build the CLI on Mint from the branch, copy it to the device, and with a throwaw
 - A role with a new mapping ID whose target another mapping already uses is refused ("already uses the same target"), by `--dry-run` too, so the dry run finds such clashes.
 - Read the emulator's own settings first: on the Deck several emulators point their folders at `~/Sync/...` by hand, so the default folders there hold nothing or old files.
 - EmuDeck's `Emulation/saves/<emulator>/saves` is sometimes only a symlink into `Emulation/storage/<emulator>` (Azahar, xemu). `ls -la` it before writing an install: the definition names the real folder, not the link.
+- EmuDeck's scripts in `~/.config/EmuDeck/backend/functions/EmuScripts/` say where each emulator's folders are. `linkToSaveFolder` leaves the data in the emulator's own folder and links `Emulation/saves` to it (Dolphin, PPSSPP, RetroArch, Ryujinx, shadPS4), so the native or Flatpak install is the one to use; `moveSaveFolder`, or a setting pointed at `Emulation/saves` or `Emulation/storage`, moves the data (PCSX2, MAME, ScummVM, RPCS3, Vita3K, Eden, Citron, yuzu), so the definition needs an `emudeck` install. Where both are found, `app add` asks which to use.
+- Before giving a role an ID, read the shared `.savetether/mappings/` for hand mappings of that app. A role with the same ID and target takes the hand mapping over (`app add` reuses it and sets this device's folder). One with a new ID and the same target is refused ("already uses the same target"; tried on the Deck, 2026-11-22).
+- A `detect` rule cannot use `{appdata}` or another Windows token on Linux, so an app under Wine with no Steam, shortcut or Lutris prefix to name (Flash Player) cannot be found by Add app there yet.
 
 ### Add a folder by hand
 

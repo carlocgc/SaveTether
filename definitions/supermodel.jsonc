@@ -1,0 +1,63 @@
+// Supermodel (Sega Model 3 emulator). Shipped with SaveTether. The folders come from Supermodel's source
+// (Src/OSD/Unix/FileSystemPath.cpp: a Config folder in the working folder makes it portable, else ~/.supermodel if it exists, else
+// ~/.local/share/supermodel; the NVRAM, Saves and Screenshots names), read 2026-11-22. The owner's Windows copies under LaunchBox are
+// portable, and the Deck's Flatpak uses ~/.supermodel (EmuDeck's Supermodel script). Not yet tried with `app add`. Design 5.2 explains
+// the format.
+{
+  "schema": 1,
+  "id": "supermodel",
+  "name": "Supermodel",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/NVRAM" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "linux-home",
+      "os": "linux",
+      "detect": { "dir": "{home}/.supermodel" },
+      "base": "{home}/.supermodel"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/supermodel" },
+      "base": "{xdg_data}/supermodel"
+    }
+  ],
+  "roles": [
+    {
+      "id": "nvram",
+      "class": "save",
+      "default": true,
+      "path": "NVRAM",
+      "target": "NVRAM",
+      "notes": "Each game's NVRAM (.nv): settings, records and high scores."
+    },
+    {
+      "id": "saves",
+      "class": "state",
+      "default": false,
+      "path": "Saves",
+      "target": "Saves",
+      "notes": "Save states (.st0 to .st9): a newer Supermodel may not load an older one."
+    },
+    {
+      "id": "screenshots",
+      "class": "media",
+      "default": false,
+      "path": "Screenshots",
+      "target": "Screenshots",
+      "notes": "Screenshots."
+    }
+  ],
+  "quirks": [
+    "Config (Supermodel.ini, inputs and Games.xml) stays on each device.",
+    "On Windows set the install folder to the one holding Supermodel.exe; each copy keeps its own NVRAM and Saves beside it.",
+    "Process name for the running check: Supermodel.exe on Windows, supermodel on Linux."
+  ]
+}

@@ -1,0 +1,123 @@
+// PCSX2 (PlayStation 2 emulator). Shipped with SaveTether; replaces the Ludusavi entry, which lists only memory cards and states.
+// The folders come from PCSX2's source (Pcsx2Config.cpp, EmuFolders::SetDataDirectory and LoadConfig), read 2026-11-22. The EmuDeck
+// folders come from EmuDeck's PCSX2 script, read on the owner's Steam Deck, where they are real folders. Not yet tried with `app add`.
+// Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "pcsx2",
+  "name": "PCSX2",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "file": "{install_dir}/portable.txt" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "win-documents",
+      "os": "windows",
+      "detect": { "dir": "{documents}/PCSX2" },
+      "base": "{documents}/PCSX2"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:net.pcsx2.PCSX2}/config/PCSX2" },
+      "base": "{flatpak:net.pcsx2.PCSX2}/config/PCSX2"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_config}/PCSX2" },
+      "base": "{xdg_config}/PCSX2"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/saves/pcsx2/saves" },
+      "base": "{emudeck}/saves/pcsx2"
+    }
+  ],
+  "roles": [
+    {
+      "id": "memcards",
+      "class": "save",
+      "default": true,
+      "path": { "win-portable": "memcards", "win-documents": "memcards", "linux-flatpak": "memcards", "linux-native": "memcards", "emudeck": "saves" },
+      "target": "memcards",
+      "notes": "Memory cards: .ps2 card images, or folder cards."
+    },
+    {
+      "id": "sstates",
+      "class": "state",
+      "default": false,
+      "path": { "win-portable": "sstates", "win-documents": "sstates", "linux-flatpak": "sstates", "linux-native": "sstates", "emudeck": "states" },
+      "target": "sstates",
+      "notes": "Save states: large, and a newer PCSX2 may not load an older one."
+    },
+    {
+      "id": "bios",
+      "class": "system",
+      "default": false,
+      "path": { "win-portable": "bios", "win-documents": "bios", "linux-flatpak": "bios", "linux-native": "bios" },
+      "target": "bios",
+      "notes": "PlayStation 2 BIOS images. Not for EmuDeck: it keeps them in the shared Emulation/bios folder."
+    },
+    {
+      "id": "cheats",
+      "class": "mod",
+      "default": false,
+      "path": { "win-portable": "cheats", "win-documents": "cheats", "linux-flatpak": "cheats", "linux-native": "cheats" },
+      "target": "cheats",
+      "notes": "Cheat files (.pnach). Not for EmuDeck, whose PCSX2 folder is not under its saves folder."
+    },
+    {
+      "id": "patches",
+      "class": "mod",
+      "default": false,
+      "path": { "win-portable": "patches", "win-documents": "patches", "linux-flatpak": "patches", "linux-native": "patches" },
+      "target": "patches",
+      "notes": "Game patches (.pnach), such as widescreen and frame rate fixes. Not for EmuDeck."
+    },
+    {
+      "id": "textures",
+      "class": "mod",
+      "default": false,
+      "path": { "win-portable": "textures", "win-documents": "textures", "linux-flatpak": "textures", "linux-native": "textures" },
+      "target": "textures",
+      "notes": "Texture replacements: can be large. Not for EmuDeck."
+    },
+    {
+      "id": "covers",
+      "class": "media",
+      "default": false,
+      "path": { "win-portable": "covers", "win-documents": "covers", "linux-flatpak": "covers", "linux-native": "covers" },
+      "target": "covers",
+      "notes": "Cover art for the game grid. Not for EmuDeck."
+    },
+    {
+      "id": "snaps",
+      "class": "media",
+      "default": false,
+      "path": { "win-portable": "snaps", "win-documents": "snaps", "linux-flatpak": "snaps", "linux-native": "snaps" },
+      "target": "snaps",
+      "notes": "Screenshots. Not for EmuDeck."
+    },
+    {
+      "id": "videos",
+      "class": "media",
+      "default": false,
+      "path": { "win-portable": "videos", "win-documents": "videos", "linux-flatpak": "videos", "linux-native": "videos" },
+      "target": "videos",
+      "notes": "Recorded videos. Not for EmuDeck."
+    }
+  ],
+  "quirks": [
+    "inis, gamesettings, inputprofiles and cache stay on each device: they hold graphics, controller and path settings.",
+    "Settings > Folders can move any of these folders; Add app follows the default location only.",
+    "On EmuDeck both the EmuDeck install and ~/.config/PCSX2 are found: EmuDeck points PCSX2's cards and states at Emulation/saves/pcsx2, so pick the EmuDeck install for those.",
+    "Process name for the running check: pcsx2-qt.exe on Windows, pcsx2-qt or the AppImage on Linux."
+  ]
+}

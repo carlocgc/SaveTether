@@ -1,0 +1,64 @@
+// ES-DE (EmulationStation Desktop Edition, the game browser EmuDeck uses). Shipped with SaveTether. The folder comes from ES-DE's
+// source (es-core/src/utils/FileSystemUtil.cpp getAppDataDirectory: ~/ES-DE on Linux and Windows; es-app/src/main.cpp for portable.txt),
+// read 2026-11-22; the owner's Steam Deck has ~/ES-DE with these folders. Not yet tried with `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "es-de",
+  "name": "ES-DE",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/ES-DE/gamelists" },
+      "base": "{install_dir}/ES-DE"
+    },
+    {
+      "id": "home",
+      "os": ["windows", "linux"],
+      "detect": { "dir": "{home}/ES-DE/gamelists" },
+      "base": "{home}/ES-DE"
+    }
+  ],
+  "roles": [
+    {
+      "id": "gamelists",
+      "class": "save",
+      "default": true,
+      "path": "gamelists",
+      "target": "gamelists",
+      "notes": "Game metadata you scraped or edited, favourites, play counts and last played."
+    },
+    {
+      "id": "collections",
+      "class": "save",
+      "default": true,
+      "path": "collections",
+      "target": "collections",
+      "notes": "Your custom collections."
+    },
+    {
+      "id": "downloaded_media",
+      "class": "media",
+      "default": false,
+      "path": "downloaded_media",
+      "target": "downloaded_media",
+      "notes": "Scraped box art, screenshots, marquees and videos: often many gigabytes."
+    },
+    {
+      "id": "themes",
+      "class": "mod",
+      "default": false,
+      "path": "themes",
+      "target": "themes",
+      "notes": "Themes you added."
+    }
+  ],
+  "quirks": [
+    "settings (es_settings.xml), custom_systems, controllers and logs stay on each device: they hold paths and emulator choices for that device.",
+    "Gamelists name games by path under the ROM folder (%ROMPATH%), so they match only where every device has the same ROM files.",
+    "The media folder can be moved in the settings (MediaDirectory); EmuDeck may point it at Emulation/tools/downloaded_media. Add app follows the default location only.",
+    "Process name for the running check: ES-DE.exe on Windows, es-de or the AppImage on Linux."
+  ]
+}

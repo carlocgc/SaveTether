@@ -1,0 +1,93 @@
+// PPSSPP (PSP emulator). Shipped with SaveTether; replaces the Ludusavi entry, which lists only SAVEDATA. The folders come from
+// PPSSPP's source (Core/Util/PathUtil.cpp GetSysDirectory, Windows/main.cpp InitMemstickDirectory, the XDG config path), read
+// 2026-11-22; the Flatpak folder was read on the owner's Steam Deck, where EmuDeck links Emulation/saves/ppsspp to it. Not yet tried
+// with `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "ppsspp",
+  "name": "PPSSPP",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/memstick/PSP" },
+      "base": "{install_dir}/memstick/PSP"
+    },
+    {
+      "id": "win-documents",
+      "os": "windows",
+      "detect": { "dir": "{documents}/PPSSPP/PSP" },
+      "base": "{documents}/PPSSPP/PSP"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:org.ppsspp.PPSSPP}/config/ppsspp/PSP" },
+      "base": "{flatpak:org.ppsspp.PPSSPP}/config/ppsspp/PSP"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_config}/ppsspp/PSP" },
+      "base": "{xdg_config}/ppsspp/PSP"
+    }
+  ],
+  "roles": [
+    {
+      "id": "savedata",
+      "class": "save",
+      "default": true,
+      "path": "SAVEDATA",
+      "target": "SAVEDATA",
+      "notes": "Game saves: a folder per save."
+    },
+    {
+      "id": "states",
+      "class": "state",
+      "default": false,
+      "path": "PPSSPP_STATE",
+      "target": "PPSSPP_STATE",
+      "notes": "Save states: a newer PPSSPP may not load an older one."
+    },
+    {
+      "id": "textures",
+      "class": "mod",
+      "default": false,
+      "path": "TEXTURES",
+      "target": "TEXTURES",
+      "notes": "Texture replacement packs: can be large."
+    },
+    {
+      "id": "cheats",
+      "class": "mod",
+      "default": false,
+      "path": "Cheats",
+      "target": "Cheats",
+      "notes": "Cheat files."
+    },
+    {
+      "id": "plugins",
+      "class": "mod",
+      "default": false,
+      "path": "PLUGINS",
+      "target": "PLUGINS",
+      "notes": "Game plugins, such as translation and control patches."
+    },
+    {
+      "id": "shots",
+      "class": "media",
+      "default": false,
+      "path": "SCREENSHOT",
+      "target": "SCREENSHOT",
+      "notes": "Screenshots."
+    }
+  ],
+  "quirks": [
+    "PSP/SYSTEM stays on each device: it holds ppsspp.ini, controls and the shader cache.",
+    "On Windows PPSSPP uses the memstick folder beside the program, unless installed.txt is there (the installer writes it), then Documents/PPSSPP.",
+    "EmuDeck keeps PPSSPP's own Flatpak folder and only links Emulation/saves/ppsspp to it, so use the Flatpak install there.",
+    "Process name for the running check: PPSSPPWindows64.exe on Windows, PPSSPPSDL or PPSSPPQt on Linux."
+  ]
+}
