@@ -103,6 +103,6 @@ public sealed class DeviceRenameTests : IDisposable
 
         File.WriteAllText(Path.Combine(Meta(pc), "devices", "other.json"), "not json");
         pc.Ok("device", "rename", "pc2");
-        Assert.Equal(["other.json", "pc2.json"], Directory.GetFiles(Path.Combine(Meta(pc), "devices")).Select(Path.GetFileName));
+        Assert.Equal(["other.json", "pc2.json"], Directory.GetFiles(Path.Combine(Meta(pc), "devices")).Select(Path.GetFileName).Order());
     }
 }
