@@ -31,7 +31,7 @@ public class ArgParserTests
     public void The_command_table_is_what_the_design_lists()
     {
         Assert.Equal(
-            ["init", "map add", "map remove", "map delete", "app add", "app list", "status", "apply", "revert", "backup list", "backup restore", "backup delete", "recover", "uninstall"],
+            ["init", "map add", "map remove", "map delete", "app add", "app list", "status", "device list", "apply", "revert", "backup list", "backup restore", "backup delete", "recover", "uninstall"],
             ArgParser.Commands.Select(c => c.Name));
     }
 

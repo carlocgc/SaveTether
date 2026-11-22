@@ -392,6 +392,31 @@ $.operations[]: object
 $.schema: number
 $: object
 
+## device-list
+$.command: string
+$.devices.backup_bytes: number
+$.devices.backup_count: number
+$.devices.devices: array
+$.devices.devices[].install_id: string
+$.devices.devices[].is_this_device: boolean
+$.devices.devices[].last_activity_utc: string
+$.devices.devices[].mapping_count: number
+$.devices.devices[].name: string
+$.devices.devices[].tombstoned: boolean
+$.devices.devices[]: object
+$.devices.linked_here: array
+$.devices.linked_here[]: string
+$.devices.mappings: array
+$.devices.mappings[]: string
+$.devices.mappings_here: array
+$.devices.mappings_here[]: string
+$.devices.orphans: array
+$.devices.sync_root: string
+$.devices: object
+$.exit_code: number
+$.schema: number
+$: object
+
 ## init
 $.command: string
 $.exit_code: number

@@ -123,6 +123,9 @@ internal sealed record CliOutput
 
     public StatusReport? Status { get; init; }
 
+    /// <summary>"device list": the devices, the mappings and the backups.</summary>
+    public MaintenanceOverview? Devices { get; init; }
+
     public IReadOnlyList<OperationOutput>? Operations { get; init; }
 
     public IReadOnlyList<BackupInfo>? Backups { get; init; }
@@ -205,6 +208,11 @@ internal static class OutputWriter
         if (output.Status is { } status)
         {
             WriteStatus(status, stdout, stderr);
+        }
+
+        if (output.Devices is { } overview)
+        {
+            WriteDevices(overview, stdout);
         }
 
         foreach (var operation in output.Operations ?? [])
@@ -410,6 +418,27 @@ internal static class OutputWriter
                 $"Warning: SaveTether is set to start with the session, but the entry points to '{program}', which is missing. " +
                 "Start the desktop app from where it is now to fix the entry, or turn starting with the session off in its settings.");
         }
+    }
+
+    private static void WriteDevices(MaintenanceOverview overview, TextWriter stdout)
+    {
+        stdout.WriteLine($"Sync root '{overview.SyncRoot}'");
+        var width = overview.Devices.Select(d => d.Name.Length).DefaultIfEmpty(0).Max();
+        foreach (var device in overview.Devices)
+        {
+            var when = device.LastActivityUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture);
+            var notes = (device.IsThisDevice ? "  (this device)" : string.Empty) + (device.Tombstoned ? "  (removed)" : string.Empty);
+            stdout.WriteLine($"  {device.Name.PadRight(width)}  last active {when}  {device.MappingCount} mapping(s){notes}");
+        }
+
+        stdout.WriteLine(
+            $"{overview.Mappings.Count} mapping(s): {overview.MappingsHere.Count} with a save folder here, {overview.LinkedHere.Count} linked here.");
+        if (overview.Orphans.Count > 0)
+        {
+            stdout.WriteLine($"No device uses: {string.Join(", ", overview.Orphans)}. 'savetether map delete <id>' removes one.");
+        }
+
+        stdout.WriteLine($"Backups on this device: {overview.BackupCount}, {FormatBytes(overview.BackupBytes)}.");
     }
 
     private static void WriteOperation(OperationOutput operation, TextWriter stdout, TextWriter stderr)

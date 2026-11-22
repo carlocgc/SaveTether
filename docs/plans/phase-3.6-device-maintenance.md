@@ -393,4 +393,15 @@ On a throwaway folder shared by the Deck and the Windows PC, each with a test ap
 
 ## Progress
 
-Not started.
+### T1: design section — done (2026-11-22)
+
+Closed by the owner. Note: design section 5.15 and the 5.6 line for `removed/` were not written in `docs/design/save-redirection-design.md`; the design of the removal, tombstone and rename flows stands in this file (above) until they are moved there.
+
+### T2: overview — built, hardware check open
+
+Branch `phase-3.6-t2-overview`, not committed yet.
+
+- `Core/Operations/Maintenance.cs`: `Maintenance.Overview(Workspace)`, read only. `SharedStore.LastActivityOf` takes the newest of the device file's write time and the device's seed markers' `SeededUtc` (not marker file times, which another device's supersede rewrites).
+- `device list` (CLI, `--json` as `devices`), in `docs/cli.md`, `docs/cli-json.md`, `json-shapes.txt`. `Tombstoned` is always false until T5.
+- Tests: `DeviceListTests` (counts, orphan, read-only), the contract, the command table. `dotnet build -warnaserror` clean; 920 tests pass.
+- Open: the hardware check on Mint and Windows (numbers against `ls -R` and `du`).

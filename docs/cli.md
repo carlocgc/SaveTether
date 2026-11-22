@@ -6,7 +6,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 - [Concepts](#concepts)
 - [Options every command takes](#options-every-command-takes)
-- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
+- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [device list](#device-list) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
 - [Workflows](#workflows)
 - [Files and environment](#files-and-environment)
 - [Exit codes](#exit-codes)
@@ -178,6 +178,18 @@ Shows each mapping's state on this device, or one mapping's. It only reads. It w
 ```bash
 savetether status
 savetether status cemu.save
+```
+
+## device list
+
+```
+savetether device list
+```
+
+Shows what is in the sync folder and on this device: each device (its last activity, how many mappings it has a save folder for, and which one this is), the mappings (how many have a save folder here, how many are linked here), mappings no device uses, and this device's backups (count and size). It only reads. A mapping no device uses can be cleaned up with `map delete`.
+
+```bash
+savetether device list
 ```
 
 ## apply
