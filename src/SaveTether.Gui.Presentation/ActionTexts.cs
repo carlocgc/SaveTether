@@ -172,8 +172,8 @@ public static class ActionTexts
             var entries = comparison.Entries.Where(e => e.Presence == presence).Select(e => e.Name).ToList();
             if (entries.Count > 0)
             {
-                // The identical ones are collapsed in the dialog, so their heading says how many.
-                result.Add((presence == EntryPresence.Identical ? $"{name} ({entries.Count})" : name, entries));
+                // Every group is collapsed in the dialog, so its heading says how many.
+                result.Add(($"{name} ({entries.Count})", entries));
             }
         }
 
