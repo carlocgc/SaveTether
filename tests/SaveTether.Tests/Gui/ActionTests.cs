@@ -151,6 +151,7 @@ public class ActionTests
             Assert.Equal($"{Role} is linked.", finished.Title);
             Assert.Contains(result.BackupIds.Select(id => $"Backup taken: {id}").First(), finished.Sentences);
             Assert.Empty(ActionTexts.FinishedView(null, result, Role, recovery: true).Steps);
+            Assert.Empty(ActionTexts.FinishedView(plan, new ExecutionResult(ExecutionStatus.Refused, Id, PlanOperation.Apply, [], []), Role).Steps);
         }
 
         Assert.Equal(OverallCondition.AllLinked, StatusCheck.Run(local).Condition);
