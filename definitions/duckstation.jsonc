@@ -56,6 +56,38 @@
       "path": { "win-portable": "savestates", "win-documents": "savestates", "linux-flatpak": "savestates", "linux-native": "savestates", "emudeck": "states" },
       "target": "savestates",
       "notes": "Save states: large, and a newer DuckStation may not load an older one."
+    },
+    {
+      "id": "bios",
+      "class": "system",
+      "default": false,
+      "path": { "win-portable": "bios", "win-documents": "bios", "linux-flatpak": "bios", "linux-native": "bios" },
+      "target": "bios",
+      "notes": "PlayStation BIOS images. Not for EmuDeck: it keeps them in the shared Emulation/bios folder."
+    },
+    {
+      "id": "screenshots",
+      "class": "media",
+      "default": false,
+      "path": { "win-portable": "screenshots", "win-documents": "screenshots", "linux-flatpak": "screenshots", "linux-native": "screenshots" },
+      "target": "screenshots",
+      "notes": "Screenshots. Not for EmuDeck, whose app data folder is not under its saves folder."
+    },
+    {
+      "id": "videos",
+      "class": "media",
+      "default": false,
+      "path": { "win-portable": "videos", "win-documents": "videos", "linux-flatpak": "videos", "linux-native": "videos" },
+      "target": "videos",
+      "notes": "Recorded videos. Not for EmuDeck, whose app data folder is not under its saves folder."
+    },
+    {
+      "id": "textures",
+      "class": "mod",
+      "default": false,
+      "path": { "win-portable": "textures", "win-documents": "textures", "linux-flatpak": "textures", "linux-native": "textures" },
+      "target": "textures",
+      "notes": "Texture replacements. Not for EmuDeck, whose app data folder is not under its saves folder."
     }
   ],
   "quirks": [
