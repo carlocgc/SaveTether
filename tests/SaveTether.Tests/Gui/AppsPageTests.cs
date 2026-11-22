@@ -226,8 +226,8 @@ public class AppsPageTests
         Assert.Contains("Eden saves\nCemu saves", text, StringComparison.Ordinal);
         Assert.Contains(AppsPage.FirstDeviceShare, text, StringComparison.Ordinal);
         Assert.Contains(AppsPage.FirstDeviceStartEmpty, text, StringComparison.Ordinal);
-        Assert.Equal("2 save folders have saves only on this device", AppsPage.FirstDeviceTitle(2, "Eden saves"));
-        Assert.Equal("Eden saves has saves only on this device", AppsPage.FirstDeviceTitle(1, "Eden saves"));
+        Assert.Equal("2 save folders have data only on this device", AppsPage.FirstDeviceTitle(2, "Eden saves"));
+        Assert.Equal("Eden saves has data only on this device", AppsPage.FirstDeviceTitle(1, "Eden saves"));
     }
 
     [Fact]

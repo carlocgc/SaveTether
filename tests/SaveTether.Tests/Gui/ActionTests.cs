@@ -144,6 +144,13 @@ public class ActionTests
             Assert.Equal(ExecutionStatus.Completed, result.Status);
             Assert.Equal($"{Role} is linked.", ActionTexts.Result(result, Role).Title);
             Assert.Equal(plan.Steps.Count * 2, steps.Count);
+
+            // The finished dialog keeps the plan's steps above the result; a run with no plan has none.
+            var finished = ActionTexts.FinishedView(plan, result, Role);
+            Assert.Equal(plan.Steps.Select(ActionTexts.Step), finished.Steps);
+            Assert.Equal($"{Role} is linked.", finished.Title);
+            Assert.Contains(result.BackupIds.Select(id => $"Backup taken: {id}").First(), finished.Sentences);
+            Assert.Empty(ActionTexts.FinishedView(null, result, Role, recovery: true).Steps);
         }
 
         Assert.Equal(OverallCondition.AllLinked, StatusCheck.Run(local).Condition);

@@ -653,13 +653,18 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             if (role is not null)
             {
                 // The list moves from the progress layer to the result's, in one step, so nothing flashes between.
-                var (resultTitle, sentences) = ActionTexts.Result(result, role, recovery);
-                var rows = lines.Children.ToList();
-                lines.Children.Clear();
-                var body = new StackPanel { Spacing = 12, Children = { new StackPanel { Spacing = 4, Children = { } } } };
-                foreach (var row in rows)
+                var (resultTitle, steps, sentences) = ActionTexts.FinishedView(plan, result, role, recovery);
+                var body = new StackPanel { Spacing = 12 };
+                if (steps.Count > 0)
                 {
-                    ((StackPanel)body.Children[0]).Children.Add(row);
+                    var kept = new StackPanel { Spacing = 4 };
+                    foreach (var row in lines.Children.ToList())
+                    {
+                        lines.Children.Remove(row);
+                        kept.Children.Add(row);
+                    }
+
+                    body.Children.Add(kept);
                 }
 
                 if (sentences.Count > 0)

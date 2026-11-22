@@ -259,6 +259,16 @@ public static class ActionTexts
         };
     }
 
+    /// <summary>
+    /// The finished dialog of section 9.3: the result, with the plan's steps kept above it. A run with no plan
+    /// (recover) has no steps, so nothing but the result's sentences is shown.
+    /// </summary>
+    public static (string Title, IReadOnlyList<string> Steps, IReadOnlyList<string> Sentences) FinishedView(Plan? plan, ExecutionResult result, string role, bool recovery = false)
+    {
+        var (title, sentences) = Result(result, role, recovery);
+        return (title, plan is null ? [] : plan.Steps.Select(Step).ToList(), sentences);
+    }
+
     /// <summary>A result as section 9.3 shows it.</summary>
     /// <param name="recovery">
     /// True for <c>Recover</c>'s result. Then Completed means the unfinished operation was carried through,
