@@ -314,6 +314,17 @@ public sealed partial class Workspace
         }
     }
 
+    /// <summary>
+    /// Deletes only a mapping's record (phase 3.6, the Maintenance screen's "Delete mapping"): its shared save folder stays, as when
+    /// "device remove" is told to delete just the mapping. Refused (a <see cref="StoreException"/>) while a device uses it.
+    /// The caller holds the operation lock and has the owner's confirmation.
+    /// </summary>
+    public void DeleteMappingRecord(string mappingId)
+    {
+        CheckMappingUnused(mappingId);
+        Shared.RetireMapping(mappingId);
+    }
+
     /// <summary>Checks nothing uses the mapping and answers its shared folder. Throws a <see cref="StoreException"/> when something does.</summary>
     private string CheckMappingUnused(string mappingId)
     {

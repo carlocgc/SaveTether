@@ -211,6 +211,18 @@ Mint and Windows, CLI only. The same two homes as "Device remove", one sync fold
 
 On Mint, build the CLI from the branch with `dotnet publish ... -o ~/sttest-t7/cli` and check `status` of the real setup before and after in a fresh shell. The Mint clone is on another branch: put it back after.
 
+### Maintenance (the app)
+
+The Deck, the app driven with `xdotool`, two homes on one scratch sync folder (a is the app's, `game.saves` applied; b joined with `game.saves`; an extra `solo.saves` applied on a and then removed, to make an orphan). Never the real setup.
+1. **Overview:** Maintenance opens from the bar. Its numbers match `device list --json` on a (devices, mappings, linked here, orphans, backups and size).
+2. **Rename:** type `Bad Name` and the button stays disabled with the message; type `a2` and Rename works. The window title, the tray tooltip (`gdbus`, as above) and the page say `a2`; b's `device list` shows `a2`.
+3. **Remove another device:** the warning, then its typed name (the button stays disabled until it matches). b's files are gone from the sync folder.
+4. **Orphans:** Delete mapping removes the record and leaves `solo/saves` in the sync folder; Delete mapping and saves needs `delete everything` and removes both.
+5. **Clean up** on Backups: keep first, then delete all (the warning, then `delete all backups`).
+6. **Remove this device:** page 1, page 2, the typed name, the result listing the folders. OK lands on setup with no restart, and the folders are real folders.
+7. **Banners:** from the CLI, remove a from b (`device remove --other a`). On a, the "removed by b" page replaces the Apps page; Set up again lands on setup. For "Removal not finished", copy `bootstrap.json` aside, run the removal, put it back.
+8. **Captures:** each page and dialog at the default window size, and a text dialog with the on-screen keyboard open (Steam+X). On Mint the same screens, clicks only.
+
 ### Start with the session
 
 Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME` to a folder under the scratch area in the environment file, check it in the same `case` as `SAVETETHER_HOME`, and pass it to `systemd-run` with `-E XDG_CONFIG_HOME`. List `~/.config/autostart` before and after, and compare. On Windows the switch writes the real Run value: test it only with the owner's leave, and check `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` before and after.

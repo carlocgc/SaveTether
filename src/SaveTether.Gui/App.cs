@@ -325,7 +325,9 @@ internal sealed class App : Application
                 _tray.Icon = Icons.For(result.Icon.IsAmber);
             }
 
-            _tray.ToolTipText = $"{Texts.AppName}: {result.Icon.Headline}";
+            _tray.ToolTipText = result.Shown.Report is { } named
+                ? $"{Texts.AppName} ({named.DeviceName}): {result.Icon.Headline}"
+                : $"{Texts.AppName}: {result.Icon.Headline}";
             _headline!.Header = result.Icon.Headline;
         }
 

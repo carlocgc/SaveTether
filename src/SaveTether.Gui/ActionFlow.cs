@@ -309,9 +309,12 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     /// "Delete" (section 5), on a "Not on this device" row no device uses: <c>map delete</c> after its confirmation. It removes the
     /// shared saves, record and markers for every device, after a verified backup on this device (design 5.3, invariant 2).
     /// </summary>
-    public async Task DeleteMappingAsync(MappingState mapping)
+    public Task DeleteMappingAsync(MappingState mapping) =>
+        DeleteMappingAsync(mapping.MappingId, $"{mapping.AppName} {mapping.Role}");
+
+    /// <param name="confirmed">The caller has already asked (the Maintenance screen asks for a typed phrase).</param>
+    public async Task DeleteMappingAsync(string mappingId, string role, bool confirmed = false)
     {
-        var role = $"{mapping.AppName} {mapping.Role}";
         var session = await BeginAsync("map delete");
         if (session is null)
         {
@@ -322,26 +325,26 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         {
             try
             {
-                var described = await Work("Checking what the shared folder holds…", () => session.DescribeMappingDeletion(mapping.MappingId));
-                if (!await overlay.ConfirmAsync(
+                var described = await Work("Checking what the shared folder holds…", () => session.DescribeMappingDeletion(mappingId));
+                if (!confirmed && !await overlay.ConfirmAsync(
                         AppsPage.DeleteTitle(role), AppsPage.DeleteText, "Delete", Overlay.OperationDialogTimeout, danger: true))
                 {
                     return;
                 }
 
-                var done = await Work("Backing up the shared saves and deleting…", () => session.DeleteMapping(mapping.MappingId));
-                log.Write($"map delete {mapping.MappingId}: done{(done.Backup is { } backup ? $", backed up as {backup.Id}" : string.Empty)}");
+                var done = await Work("Backing up the shared saves and deleting…", () => session.DeleteMapping(mappingId));
+                log.Write($"map delete {mappingId}: done{(done.Backup is { } backup ? $", backed up as {backup.Id}" : string.Empty)}");
                 await overlay.InformAsync("Deleted", AppsPage.DeletedText(role, done.Backup is not null));
             }
             catch (MappingDeletionIncompleteException e)
             {
                 // It stopped after it had started: the shared copy may already be gone, so this is not "nothing was deleted".
-                log.Write($"map delete {mapping.MappingId} stopped part way: {e.Message}");
+                log.Write($"map delete {mappingId} stopped part way: {e.Message}");
                 await overlay.InformAsync("Deleted only in part", e.Message);
             }
             catch (Exception e) when (e is StoreException or IOException or UnauthorizedAccessException or SafeFsException or BackupException)
             {
-                log.Write($"map delete {mapping.MappingId} refused: {e.Message}");
+                log.Write($"map delete {mappingId} refused: {e.Message}");
                 await overlay.InformAsync("Nothing was deleted", e.Message);
             }
         }
@@ -453,6 +456,206 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         using (session)
         {
             await RunWithProgressAsync("Recovering", null, progress => session.Recover(progress), "the operation", recovery: true);
+        }
+    }
+
+    private static bool Expected(Exception e) =>
+        e is StoreException or IOException or UnauthorizedAccessException or SafeFsException or BackupException;
+
+    /// <summary>"Rename" (phase 3.6): a text dialog, then <c>device rename</c> under the lock. A check follows and redraws the title and tray.</summary>
+    public async Task RenameDeviceAsync(string currentName, IReadOnlyCollection<string> taken)
+    {
+        ArgumentNullException.ThrowIfNull(taken);
+        var name = await overlay.AskTextAsync(
+            "Rename this device", "The name shows in the sync folder and on your other devices. Your links and saves are not touched.",
+            "Rename", typed => MaintenancePage.DeviceNameProblem(typed, taken), initial: currentName);
+        if (name is null || name == currentName)
+        {
+            return;
+        }
+
+        var session = await BeginAsync("device rename");
+        if (session is null)
+        {
+            return;
+        }
+
+        using (session)
+        {
+            try
+            {
+                var done = await Work("Renaming the device…", () => session.RenameDevice(name));
+                log.Write($"device rename {done.OldName} -> {done.NewName}: done");
+                await overlay.InformAsync("Renamed", $"This device is now '{done.NewName}'.");
+            }
+            catch (Exception e) when (Expected(e))
+            {
+                log.Write($"device rename refused: {e.Message}");
+                await overlay.InformAsync("Nothing was changed", e.Message);
+            }
+        }
+    }
+
+    /// <summary>"Remove" on another device: a warning, then its typed name (D8), then <c>device remove --other</c>.</summary>
+    public async Task RemoveOtherDeviceAsync(string name)
+    {
+        if (!await overlay.ConfirmAsync(MaintenancePage.RemoveOtherTitle(name), MaintenancePage.RemoveOtherText, "Continue", danger: true)
+            || await overlay.AskTextAsync($"Type {name} to confirm", MaintenancePage.RemoveOtherTitle(name), "Remove device", typed => MaintenancePage.TypedPhraseProblem(typed, name), danger: true) is null)
+        {
+            return;
+        }
+
+        var session = await BeginAsync("device remove --other");
+        if (session is null)
+        {
+            return;
+        }
+
+        using (session)
+        {
+            try
+            {
+                var files = await Work("Removing the device from the sync folder…", () => session.RemoveOtherDevice(name, dryRun: false));
+                log.Write($"device remove --other {name}: done, {files.Count} file(s)");
+                await overlay.InformAsync("Removed", $"'{name}' is removed from the sync folder. {files.Count} file(s) there were deleted.");
+            }
+            catch (Exception e) when (Expected(e))
+            {
+                log.Write($"device remove --other {name} refused: {e.Message}");
+                await overlay.InformAsync("Nothing was changed", e.Message);
+            }
+        }
+    }
+
+    /// <summary>An orphaned mapping's two deletions. With the saves it asks for the typed phrase (D8) and goes through <c>map delete</c>.</summary>
+    public async Task DeleteOrphanAsync(string mappingId, bool withSaves)
+    {
+        if (withSaves)
+        {
+            if (await overlay.AskTextAsync(
+                    $"Delete {mappingId} and its saves?", MaintenancePage.DeleteOrphanWithSavesText, "Delete", typed => MaintenancePage.TypedPhraseProblem(typed, MaintenancePage.DeleteEverythingPhrase), danger: true) is null)
+            {
+                return;
+            }
+
+            await DeleteMappingAsync(mappingId, mappingId, confirmed: true);
+            return;
+        }
+
+        if (!await overlay.ConfirmAsync($"Delete the mapping {mappingId}?", MaintenancePage.DeleteOrphanMappingText, "Delete mapping", Overlay.OperationDialogTimeout, danger: true))
+        {
+            return;
+        }
+
+        var session = await BeginAsync("map delete");
+        if (session is null)
+        {
+            return;
+        }
+
+        using (session)
+        {
+            try
+            {
+                await Work("Deleting the mapping…", () => session.DeleteMappingRecord(mappingId));
+                log.Write($"mapping record {mappingId}: deleted, saves kept");
+                await overlay.InformAsync("Deleted", $"The mapping {mappingId} is deleted. Its saves in the sync folder stay.");
+            }
+            catch (Exception e) when (Expected(e))
+            {
+                log.Write($"mapping record {mappingId} refused: {e.Message}");
+                await overlay.InformAsync("Nothing was deleted", e.Message);
+            }
+        }
+    }
+
+    /// <summary>Backup Clean up (D9) over the given mappings (null: every backup). "All" asks for a warning, then the typed phrase.</summary>
+    public async Task CleanUpBackupsAsync(IReadOnlyList<string>? mappingIds, string scope, BackupCleanup mode)
+    {
+        var session = await BeginAsync("backup delete");
+        if (session is null)
+        {
+            return;
+        }
+
+        using (session)
+        {
+            try
+            {
+                IReadOnlyList<string?> targets = mappingIds is null ? [null] : [.. mappingIds];
+                var found = await Work("Checking the backups…", () => targets.SelectMany(m => session.DescribeBackupCleanup(m, mode)).ToList());
+                if (found.Count == 0)
+                {
+                    await overlay.InformAsync("Nothing to delete", BackupCleanupTexts.Result(0));
+                    return;
+                }
+
+                var text = $"{BackupCleanupTexts.Describe(mode, scope)}\n\nThis deletes {BackupCleanupTexts.Count(found.Count)} ({ActionTexts.Size(found.Sum(b => b.TotalBytes))}).";
+                var all = mode == BackupCleanup.All;
+                if (!await overlay.ConfirmAsync(BackupCleanupTexts.Label(mode) + "?", text, all ? "Continue" : "Delete", Overlay.OperationDialogTimeout, danger: all)
+                    || (all && await overlay.AskTextAsync("Delete all backups", BackupCleanupTexts.Describe(mode, scope), "Delete all backups", typed => MaintenancePage.TypedPhraseProblem(typed, BackupCleanupTexts.AllPhrase), danger: true) is null))
+                {
+                    return;
+                }
+
+                var removed = await Work("Deleting the backups…", () => targets.Sum(m => session.CleanUpBackups(m, mode).Count));
+                log.Write($"backup cleanup {mode} of {scope}: {removed} deleted");
+                await overlay.InformAsync("Backups deleted", BackupCleanupTexts.Result(removed));
+            }
+            catch (Exception e) when (Expected(e))
+            {
+                log.Write($"backup cleanup refused: {e.Message}");
+                await overlay.InformAsync("Nothing was deleted", e.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// "Remove this device", after page 2 (phase 3.6): plan again under the lock, the typed phrases (D8), the removal, the result.
+    /// When it is done a check finds the device not set up and the window shows setup, with no restart.
+    /// </summary>
+    public async Task RemoveThisDeviceAsync(RemovalChoices choices)
+    {
+        var session = await BeginAsync("device remove");
+        if (session is null)
+        {
+            return;
+        }
+
+        using (session)
+        {
+            try
+            {
+                var plan = await Work("Planning the removal…", () => session.PlanDeviceRemoval(choices));
+                if (plan.IsRefused)
+                {
+                    var refusals = RemoveDeviceFlow.Refusals(plan, id => RemoveDeviceFlow.NamesOf(session.Workspace, id));
+                    await overlay.InformAsync("Nothing was changed", string.Join("\n\n", refusals));
+                    return;
+                }
+
+                foreach (var phrase in RemoveDeviceFlow.PhrasesToType(plan.DeviceName, choices))
+                {
+                    var asking = phrase == MaintenancePage.DeleteEverythingPhrase
+                        ? "This deletes saves from the sync folder for every device."
+                        : string.Join("\n", RemoveDeviceFlow.PlanLines(plan));
+                    if (await overlay.AskTextAsync($"Type {phrase} to confirm", asking, "Continue", typed => MaintenancePage.TypedPhraseProblem(typed, phrase), danger: true) is null)
+                    {
+                        return;
+                    }
+                }
+
+                var result = await Work("Removing this device…", () => session.RemoveDevice(plan));
+                log.Write($"device remove: {(result.Failure is null ? "done" : "a revert did not finish")}, {result.GivenBack.Count} folder(s) given back");
+                var (text, details) = RemoveDeviceFlow.Result(result);
+                await overlay.InformAsync(
+                    result.Failure is null ? "This device is removed" : "Not removed", text, details.Count > 0 ? Overlay.Details(string.Join("\n", details)) : null);
+            }
+            catch (Exception e) when (Expected(e))
+            {
+                log.Write($"device remove refused: {e.Message}");
+                await overlay.InformAsync("Nothing was changed", e.Message);
+            }
         }
     }
 

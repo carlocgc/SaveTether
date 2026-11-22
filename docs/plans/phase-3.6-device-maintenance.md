@@ -370,7 +370,7 @@ Branch `phase-3.6-t6-remove-other`.
   - **Delete everything:** D4's option is disabled with two devices and offered with one.
 - **Verify on hardware: Mint.** The presentation has no window to drive. Run `dotnet test --filter "Maintenance|RemoveDevice"` on Mint as well as on Windows. Then, from a two-home scratch setup, check that the numbers `MaintenancePage` shows (from a test run against that folder, or the CLI's `device list --json`) match the folder.
 
-### T9: the app's screens (M)
+### T9: the app's screens (M) — built, hardware check not run
 
 - **Deliver**, in `SaveTether.Gui`:
   - the **Maintenance** button and `MaintenanceScreen`
@@ -486,3 +486,12 @@ Branch `phase-3.6-t8-app-logic`.
 - Tests: `MaintenancePageTests`, `RemoveDeviceFlowTests` (synthetic overviews, no disk). `dotnet build -warnaserror` clean; 975 tests pass on Windows.
 - Review fix: `MaintenancePage.From` (`This` is null) and `DeleteEverythingOption` cope with this device's file being gone (an unfinished removal); T9's screen must handle `This == null`. A failed revert returns an empty `GivenBack`, so its result lists no folders.
 - Hardware check (2026-11-22, commit 7a81d34, Mint, from a `git archive`, scratch under `~/sttest-t8`): `dotnet test --filter "Maintenance|RemoveDevice"` passed (15). Two homes on one sync folder (a: `game.saves` applied with `--copy` and `solo.saves` added then removed; b: `game.saves`): `device list` and `--json` showed 2 devices (1 mapping each), 2 mappings, 1 here and linked, the orphan `solo.saves`, and 1 backup of 4 bytes. The sync folder listing agrees (2 device files, 2 mapping files, 1 marker, `game/saves/f.txt`). `MaintenancePage` shows these same `MaintenanceOverview` fields, which its tests cover. The real setup was never touched (every call had a guarded `SAVETETHER_HOME`); the scratch folder is gone. The apphost needs `DOTNET_ROOT=~/.dotnet` over SSH, and `map add` takes `--target` and `--source`, not a path.
+
+### T9: the app's screens: built, hardware check not run
+
+Branch `phase-3.6-t9-app-screens`.
+
+- Screens: `MaintenanceScreen`, `RemoveDeviceScreen` (two pages), **Clean up** on `BackupsScreen`, `Overlay.AskTextAsync` (and a `focus` parameter on `ShowAsync`), the Maintenance button, the two banners, the title and tray tooltip with the device's name. Spec section 9.8 and the "Maintenance (the app)" flow in `hardware-testing.md` are written.
+- Core: `Workspace.DeleteMappingRecord` (an orphan's record only; its saves stay), with a test. Needed by the orphan row's **Delete mapping**, which the core had no entry for. `OperationSession` got thin wrappers for the maintenance calls.
+- Decisions: the removal and the cleanup run behind the busy dialog, not the paced step list; **Set up again** runs the removal with its defaults; the "Delete mapping and saves" row asks for `delete everything` (D8) and not a second confirmation.
+- Not verified: no screen has been run. The Deck flow, the Mint captures and the Windows run in the task's "Verify on hardware" are still to do, and the typed-name dialogs with the on-screen keyboard are unchecked.

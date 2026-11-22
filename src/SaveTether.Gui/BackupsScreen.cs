@@ -3,6 +3,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using SaveTether.Core.Backup;
 using SaveTether.Core.Storage;
 using SaveTether.Gui.Presentation;
 
@@ -27,6 +28,10 @@ internal sealed class BackupsScreen : UserControl, IScreen
     private readonly ContentControl _page = new();
     private string? _appFilter;
 
+    // What Clean up covers: the app the list is filtered to, or all apps (D9).
+    private IReadOnlyList<string>? _cleanUpMappings;
+    private string _cleanUpScope = BackupCleanupTexts.Scope(null);
+
     /// <param name="appFilter">An app to show at first, from a row's "Backups"; null for all.</param>
     public BackupsScreen(string localFolder, Func<Func<ActionFlow, Task>, Task> operate, Action close, string? appFilter)
     {
@@ -44,7 +49,7 @@ internal sealed class BackupsScreen : UserControl, IScreen
                 {
                     Orientation = Orientation.Horizontal,
                     Spacing = 12,
-                    Children = { Navigation.BackRow("Back to apps", close), _filterHost },
+                    Children = { Navigation.BackRow("Back to apps", close), _filterHost, CleanUpButton() },
                 },
             },
         };
@@ -107,6 +112,8 @@ internal sealed class BackupsScreen : UserControl, IScreen
         }
 
         var shown = BackupsPage.Filter(groups, _appFilter);
+        _cleanUpMappings = _appFilter is null ? null : shown.Select(g => g.MappingId).ToList();
+        _cleanUpScope = BackupCleanupTexts.Scope(_appFilter is null ? null : apps.First(a => a.AppId == _appFilter).Name);
         if (shown.Count == 0)
         {
             content.Add(new TextBlock { Text = "No backups yet. SaveTether takes one before it first changes a folder.", Opacity = 0.75 });
@@ -153,6 +160,29 @@ internal sealed class BackupsScreen : UserControl, IScreen
         delete.Click += (_, _) => _ = DeleteAsync(row);
         Add(grid, 6, delete);
         return grid;
+    }
+
+    private Button CleanUpButton()
+    {
+        var menu = new MenuFlyout();
+        foreach (var mode in new[] { BackupCleanup.KeepFirst, BackupCleanup.KeepLast, BackupCleanup.All })
+        {
+            var item = new MenuItem { Header = BackupCleanupTexts.Label(mode) };
+            item.Click += (_, _) => _ = CleanUpAsync(mode);
+            menu.Items.Add(item);
+        }
+
+        var button = new Button { Content = "Clean up", Flyout = menu, VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetName(button, "Clean up backups");
+        return button;
+    }
+
+    private async Task CleanUpAsync(BackupCleanup mode)
+    {
+        var mappings = _cleanUpMappings;
+        var scope = _cleanUpScope;
+        await _operate(actions => actions.CleanUpBackupsAsync(mappings, scope, mode));
+        await LoadAsync();
     }
 
     private async Task DeleteAsync(BackupRow row)

@@ -46,10 +46,41 @@ internal sealed class Overlay : Panel
     }
 
     /// <summary>
-    /// Shows a dialog with the given content and buttons, and answers the button pressed. Escape, and the
-    /// timeout when given, answer <paramref name="safe"/>, which also has the focus when the dialog opens.
+    /// Asks for a line of text (desktop-app-spec.md, "Maintenance"): answers the text, trimmed, or null when cancelled. The confirm button
+    /// is disabled while <paramref name="problem"/> answers a message, which is shown under the box. Enter does not confirm and Escape
+    /// cancels. Focus starts in the box: the one exception to "focus on the safe choice", since typing cannot confirm by itself.
     /// </summary>
-    public Task<Button> ShowAsync(string title, Control body, IReadOnlyList<Button> buttons, Button safe, TimeSpan? timeout = null)
+    public async Task<string?> AskTextAsync(string title, string text, string confirmLabel, Func<string, string?> problem, bool danger = false, string initial = "")
+    {
+        ArgumentNullException.ThrowIfNull(problem);
+        var box = new TextBox { Text = initial, MinWidth = 320, AcceptsReturn = false };
+        var message = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Opacity = 0.85 };
+        var cancel = new Button { Content = "Cancel" };
+        var confirm = new Button { Content = confirmLabel, IsEnabled = false };
+        if (danger)
+        {
+            Danger.Style(confirm);
+        }
+
+        void Check()
+        {
+            var why = problem(box.Text ?? string.Empty);
+            message.Text = why ?? string.Empty;
+            confirm.IsEnabled = why is null;
+        }
+
+        box.TextChanged += (_, _) => Check();
+        Check();
+        var entry = new StackPanel { Spacing = 6, Children = { box, message } };
+        var pressed = await ShowAsync(title, Body(text, entry), [cancel, confirm], cancel, focus: box);
+        return pressed == confirm ? (box.Text ?? string.Empty).Trim() : null;
+    }
+
+    /// <summary>
+    /// Shows a dialog with the given content and buttons, and answers the button pressed. Escape, and the
+    /// timeout when given, answer <paramref name="safe"/>, which also has the focus when the dialog opens unless <paramref name="focus"/> is given.
+    /// </summary>
+    public Task<Button> ShowAsync(string title, Control body, IReadOnlyList<Button> buttons, Button safe, TimeSpan? timeout = null, Control? focus = null)
     {
         ArgumentNullException.ThrowIfNull(buttons);
         var answer = new TaskCompletionSource<Button>();
@@ -122,7 +153,7 @@ internal sealed class Overlay : Panel
 
                 ready = true;
                 buttonRow.IsEnabled = true;
-                safe.Focus(NavigationMethod.Tab);
+                (focus ?? safe).Focus(NavigationMethod.Tab);
             },
             Presentation.Pacing.DialogMinimum);
         return answer.Task;

@@ -214,6 +214,21 @@ public sealed class DeviceRemoveTests : IDisposable
         pc.Ok("device", "list");
     }
 
+    [Fact]
+    public void DeleteMappingRecord_deletes_an_unused_mapping_and_keeps_its_saves_and_refuses_a_used_one()
+    {
+        var (pc, deck) = Devices();
+        deck.Ok("device", "remove", "--confirm-remove"); // only the pc is left, and the pc's file has solo.saves
+        pc.Ok("map", "add", "orph.saves", "--target", "orph/saves", "--source", Path.Combine(pc.AppFolder, "orph"));
+        pc.Ok("map", "remove", "orph.saves");
+
+        var workspace = Open(pc);
+        Assert.Throws<StoreException>(() => workspace.DeleteMappingRecord(Solo)); // the pc uses it
+        workspace.DeleteMappingRecord("orph.saves");
+        Assert.False(File.Exists(Path.Combine(Meta(pc), "mappings", "orph.saves.json")));
+        Assert.True(File.Exists(Path.Combine(Meta(pc), "mappings", Solo + ".json")));
+    }
+
     private sealed class NoProcesses : IProcessLister
     {
         public IReadOnlyList<string> RunningProcessNames() => [];

@@ -2,6 +2,8 @@ using System.Globalization;
 using SaveTether.Core.Backup;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
+using SaveTether.Core.Planning;
+using SaveTether.Core.Storage;
 
 namespace SaveTether.Gui.Presentation;
 
@@ -58,6 +60,38 @@ public static class MaintenancePage
             overview.Devices.Where(d => !d.IsThisDevice).Select(Row).ToList(),
             overview.Orphans.Select(o => new OrphanRow(o, blocker)).ToList(),
             blocker);
+    }
+
+    /// <summary>What the screen opens with: the core's overview and the rows, or why there are none (the sync folder cannot be read).</summary>
+    public sealed record Loaded(MaintenanceOverview? Overview, MaintenanceView? View, string DeviceName, string InstallId, string? Blocker);
+
+    /// <summary>
+    /// Reads the device and the sync folder, and works out why actions are disabled, if they are. Call it off the UI thread. A
+    /// <see cref="StoreException"/> means this device is not set up.
+    /// </summary>
+    public static Loaded Load(LocalStore local)
+    {
+        ArgumentNullException.ThrowIfNull(local);
+        var workspace = Workspace.Open(local, new NoProcesses());
+        var journal = workspace.Journal.IsOpen;
+        var locked = OperationLock.HeldByAnotherProcess(local) is not null;
+        MaintenanceOverview? overview = null;
+        try
+        {
+            overview = Maintenance.Overview(workspace);
+        }
+        catch (Exception e) when (e is StoreException or IOException or UnauthorizedAccessException)
+        {
+            // The sync folder cannot be read: no rows, and the blocker says so.
+        }
+
+        var blocker = Blocker(journal, locked, overview is not null);
+        return new Loaded(overview, overview is null ? null : From(overview, blocker), workspace.DeviceName, workspace.Bootstrap.InstallId, blocker);
+    }
+
+    private sealed class NoProcesses : IProcessLister
+    {
+        public IReadOnlyList<string> RunningProcessNames() => [];
     }
 
     /// <summary>"3 hours ago", in the coarsest unit that is not zero.</summary>
