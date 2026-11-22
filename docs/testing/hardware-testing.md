@@ -215,7 +215,7 @@ On Mint, build the CLI from the branch with `dotnet publish ... -o ~/sttest-t7/c
 
 The Deck, the app driven with `xdotool`, two homes on one scratch sync folder (a is the app's, `game.saves` applied; b joined with `game.saves`; an extra `solo.saves` applied on a and then removed, to make an orphan). Never the real setup.
 1. **Overview:** Maintenance opens from the bar. Its numbers match `device list --json` on a (devices, mappings, linked here, orphans, backups and size).
-2. **Rename:** type `Bad Name` and the button stays disabled with the message; type `a2` and Rename works. The window title, the tray tooltip (`gdbus`, as above) and the page say `a2`; b's `device list` shows `a2`.
+2. **Rename:** type `Bad Name` and the button stays disabled with the message; type `a2` and Rename works. The window title, the tray tooltip (`gdbus` on the item's `Title`, as in "The tray icon's image": its `ToolTip` is empty) and the page say `a2`; b's `device list` shows `a2`.
 3. **Remove another device:** the warning, then its typed name (the button stays disabled until it matches). b's files are gone from the sync folder.
 4. **Orphans:** Delete mapping removes the record and leaves `solo/saves` in the sync folder; Delete mapping and saves needs `delete everything` and removes both.
 5. **Clean up** on Backups: keep first, then delete all (the warning, then `delete all backups`).
