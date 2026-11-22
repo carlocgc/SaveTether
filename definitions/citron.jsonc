@@ -48,10 +48,10 @@
     {
       "id": "nand-system",
       "class": "system",
-      "default": false,
+      "default": true,
       "path": "nand/system",
       "target": "system",
-      "notes": "The emulated system memory: user profiles (share them so every device has the same profile ID, which names the saves folder), system saves and the installed firmware."
+      "notes": "The emulated system memory: user profiles, system saves and the installed firmware (a few hundred MiB). On with saves: a game finds its save only under the same profile ID, so every device needs the same profiles."
     },
     {
       "id": "play_time",

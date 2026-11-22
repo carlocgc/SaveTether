@@ -52,7 +52,7 @@
       "default": true,
       "path": "bis/system/save",
       "target": "system_save",
-      "notes": "System saves: the save index that maps games to their save folders, and the user profiles."
+      "notes": "System saves: the save index that maps games and profiles to their save folders."
     },
     {
       "id": "mods",
@@ -71,17 +71,17 @@
       "notes": "The emulated SD card: mostly mods laid out for a console (atmosphere/contents)."
     },
     {
-      "id": "keys",
+      "id": "system",
       "class": "system",
-      "default": false,
+      "default": true,
       "path": "system",
       "target": "system",
-      "notes": "Keys dumped from your own console (prod.keys, title.keys)."
+      "notes": "The user profiles (Profiles.json) and the keys dumped from your own console (prod.keys, title.keys). On with saves: the save index names each save by profile ID, so every device needs the same profiles."
     }
   ],
   "quirks": [
-    "Config.json, profiles.json and games (the shader cache) stay on each device. Installed firmware, updates and DLC (bis/system/Contents, bis/user/Contents) are not shared.",
-    "A save role on its own can leave a game without its save: the index in system_saves names the numbered folders in saves.",
+    "Config.json and games (the shader cache) stay on each device. Installed firmware, updates and DLC (bis/system/Contents, bis/user/Contents) are not shared.",
+    "A save role on its own can leave a game without its save: the index in system_saves names the numbered folders in saves, by the profile IDs in system/Profiles.json (AccountSaveDataManager.cs).",
     "EmuDeck keeps Ryujinx's own folder and only links Emulation/saves/ryujinx to it, so use the Linux install there.",
     "Process name for the running check: Ryujinx.exe on Windows, Ryujinx or the AppImage on Linux."
   ]
