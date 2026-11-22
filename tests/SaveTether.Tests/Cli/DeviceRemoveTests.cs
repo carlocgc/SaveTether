@@ -229,6 +229,18 @@ public sealed class DeviceRemoveTests : IDisposable
         Assert.True(File.Exists(Path.Combine(Meta(pc), "mappings", Solo + ".json")));
     }
 
+    [Fact]
+    public void The_overview_works_on_a_device_another_one_removed()
+    {
+        var (pc, deck) = Devices();
+        deck.Ok("device", "remove", "--other", "pc", "--confirm-remove"); // the pc's file is gone, and the tombstone says deck did it
+        deck.DeliverTo(pc, mirror: true);
+
+        var overview = Maintenance.Overview(Open(pc));
+        Assert.DoesNotContain(overview.Devices, d => d.IsThisDevice);
+        Assert.Equal(["deck"], overview.Devices.Select(d => d.Name));
+    }
+
     private sealed class NoProcesses : IProcessLister
     {
         public IReadOnlyList<string> RunningProcessNames() => [];

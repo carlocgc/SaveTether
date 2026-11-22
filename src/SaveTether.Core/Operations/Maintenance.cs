@@ -44,12 +44,12 @@ public static class Maintenance
                 name == workspace.DeviceName, removed.Contains(device.InstallId)));
         }
 
-        var backups = workspace.ListBackups();
+        var backups = workspace.ReadAsRemovedDevice(() => workspace.ListBackups());
         return new MaintenanceOverview(
             shared.SyncRoot,
             devices,
             mappings,
-            workspace.MappingsWithPaths(),
+            workspace.ReadAsRemovedDevice(workspace.MappingsWithPaths),
             workspace.Local.ReadState().Mappings.Keys.Order(StringComparer.Ordinal).ToList(),
             mappings.Where(id => !used.Contains(id)).ToList(),
             backups.Count,

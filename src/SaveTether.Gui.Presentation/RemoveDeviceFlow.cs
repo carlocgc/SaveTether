@@ -44,7 +44,18 @@ public static class RemoveDeviceFlow
         ArgumentNullException.ThrowIfNull(local);
         var workspace = Workspace.Open(local, new NoProcesses());
         var plan = workspace.PlanDeviceRemoval(new RemovalChoices());
-        return new Start(workspace.DeviceName, plan.Orphans.Select(o => o.MappingId).ToList(), DeleteEverythingOption(Maintenance.Overview(workspace)));
+        // After Delete everything's tree delete the overview cannot be read: there is nothing left to delete, so the option is not offered.
+        (bool Offered, string? Reason) option;
+        try
+        {
+            option = DeleteEverythingOption(Maintenance.Overview(workspace));
+        }
+        catch (StoreException)
+        {
+            option = (false, null);
+        }
+
+        return new Start(workspace.DeviceName, plan.Orphans.Select(o => o.MappingId).ToList(), option);
     }
 
     public static PlanView ViewPlan(LocalStore local, RemovalChoices choices)
