@@ -468,6 +468,21 @@ $.removal: object
 $.schema: number
 $: object
 
+## device-remove-other-dry-run
+$.command: string
+$.exit_code: number
+$.removal.backups_deleted: number
+$.removal.dry_run: boolean
+$.removal.given_back: array
+$.removal.not_linked: array
+$.removal.orphans: array
+$.removal.other: string
+$.removal.shared_files: array
+$.removal.shared_files[]: string
+$.removal: object
+$.schema: number
+$: object
+
 ## device-rename
 $.command: string
 $.exit_code: number
@@ -652,6 +667,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status: object
@@ -672,6 +688,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status: object
@@ -692,6 +709,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status.sync_root_problem: string

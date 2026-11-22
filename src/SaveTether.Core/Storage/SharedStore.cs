@@ -225,6 +225,18 @@ public sealed class SharedStore
         SafeFs.RemoveSharedFile(DataRoot, DevicePathOf(deviceName));
     }
 
+    /// <summary>Deletes the tombstone for a device name, if there is one: a new install is taking the name (phase 3.6, D6).</summary>
+    public void DeleteTombstone(string deviceName)
+    {
+        RequireInitialized();
+        RequireDeviceName(deviceName);
+        var file = Path.Combine(MetaRoot, RemovedFolder, deviceName + ".json");
+        if (SafeFs.Probe(file) == EntryKind.File)
+        {
+            SafeFs.RemoveSharedFile(DataRoot, file);
+        }
+    }
+
     /// <summary>The shared files that belong to one device and no one else: its seed markers, then its device file. Only those that exist.</summary>
     public IReadOnlyList<string> FilesOf(string deviceName)
     {

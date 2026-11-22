@@ -151,7 +151,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | Field | Type | |
 |---|---|---|
 | `sync_root` | string | |
-| `devices[]` | array | `name`, `install_id`, `last_activity_utc` (the newest of its device file and its seed markers), `mapping_count` (mappings it has a save folder for), `is_this_device`, `tombstoned` (always `false` until device removal exists). |
+| `devices[]` | array | `name`, `install_id`, `last_activity_utc` (the newest of its device file and its seed markers), `mapping_count` (mappings it has a save folder for), `is_this_device`, `tombstoned` (the device was removed, and its file came back). |
 | `mappings` | array of string | Every mapping ID in the shared list. |
 | `mappings_here` | array of string | Those this device has a save folder for. |
 | `linked_here` | array of string | Those this device has applied. |
@@ -165,7 +165,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 
 ### `device remove`
 
-`device remove [--delete-orphan <mapping>[:saves]]... [--delete-backups] [--confirm-remove]` (added 2026-11-22). Under `--json` without `--confirm-remove` nothing is changed and the answer has `dry_run` true. Exit 1 when a link cannot be reverted (the error says which and why) or a `--delete-orphan` names a mapping another device uses; 2 when a revert failed and was rolled back; 3 while an operation is unfinished. A failed revert leaves everything in the sync folder as it was. `removal` object:
+`device remove [--delete-orphan <mapping>[:saves]]... [--delete-backups] [--confirm-remove]` (added 2026-11-22). `device remove --other <name> [--confirm-remove]` removes a device that is gone: `removal` has an empty `given_back`, `not_linked` and `orphans`, `shared_files` lists that device's deleted files, `backups_deleted` is 0. Exit 1 when the name is this device's own, unknown, or a file left by a rename. Under `--json` without `--confirm-remove` nothing is changed and the answer has `dry_run` true. Exit 1 when a link cannot be reverted (the error says which and why) or a `--delete-orphan` names a mapping another device uses; 2 when a revert failed and was rolled back; 3 while an operation is unfinished. A failed revert leaves everything in the sync folder as it was. `removal` object:
 
 | Field | Type | |
 |---|---|---|
@@ -175,6 +175,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `orphans` | array of objects | Mappings only this device used: `mapping_id`, and `choice`: `keep`, `delete-mapping` or `delete-with-saves`. After a run, only the ones deleted. |
 | `shared_files` | array of strings | This device's files in the sync folder (its seed markers and its device file). |
 | `backups_deleted` | number | The backups deleted, or with `dry_run` the ones that would be; 0 when they are kept. |
+| `other` | string | Only with `--other`: the name of the device removed. Absent when this device was removed. |
 
 ### `status`
 
@@ -191,6 +192,9 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `device_file_mismatch` | boolean | The device name now belongs to another install. |
 | `journal_open` | boolean | An operation is unfinished. |
 | `mappings` | array of object | One per mapping. |
+| `removal` | string | Present when this install's ID is in a record of removed devices: `removed-by-another` (the device `removed_by` removed this one) or `unfinished` (this device's own removal did not finish). `mappings` is then empty if this device's file is gone. Added 2026-11-22. |
+| `removed_by` | string | Present with `removal`: the name of the device that did the removal. |
+| `returned_devices` | array of string | Devices whose file is in the sync folder although they were removed: a sync tool put it back. Empty when none. |
 | `autostart_missing` | string | Present only when the desktop app is set to start with the session and the program the entry names is missing: that program's path. `status` only reports it; it does not change the entry. Added 2026-11-18. |
 
 `mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner).
@@ -322,6 +326,8 @@ Every value `--json` can print, by field. A test checks that each value in the c
 **Store problem** (top-level `problem`): `not-found`, `invalid`, `schema-too-new` (a file was written by a newer SaveTether; it is left as it is), `not-initialized`, `conflict`, `name-in-use`, `operation-running` (another SaveTether process holds the operation lock), `mappings-applied`.
 
 **Conflict kind** (`conflict.kind`): `target-differs`, `applied-elsewhere`, `folder-in-use`, `target-in-use`, `in-use-on-devices` (`map delete`: a device still has a folder set for the mapping; `conflict.mapping_id` is that mapping).
+
+**Removal** (`status.removal`): `removed-by-another`, `unfinished`.
 
 **Health state** (`status.mappings[].state`, design 5.5): `ok`, `not-applied`, `replaced`, `broken`, `retargeted`, `double-seed`, `foreign-link`.
 

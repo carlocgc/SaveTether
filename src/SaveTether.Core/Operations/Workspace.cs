@@ -33,6 +33,15 @@ public sealed record StatusReport(
 {
     public bool SyncRootAvailable => SyncRootProblem is null;
 
+    /// <summary>Set when this install's ID is in a tombstone: the device was removed from the sync folder (phase 3.6, D6).</summary>
+    public RemovalKind? Removal { get; init; }
+
+    /// <summary>The device that did the removal, when <see cref="Removal"/> is set.</summary>
+    public string? RemovedBy { get; init; }
+
+    /// <summary>Devices whose file is in the sync folder although their install ID is tombstoned: a sync tool put it back.</summary>
+    public IReadOnlyList<string> ReturnedDevices { get; init; } = [];
+
     /// <summary>
     /// The program the autostart entry starts, when the entry is there and the program is not (desktop-app-spec.md,
     /// section 11). Set by the front end that reads the entry, not by <see cref="Workspace.Status"/>.
@@ -165,6 +174,11 @@ public sealed partial class Workspace
         var alreadyOurs = existing is not null && local.TryReadBootstrap() is { } known
             && known.DeviceName == existing.DeviceName && known.InstallId == existing.InstallId;
         var device = alreadyOurs ? existing! : DeviceIdentity.Claim(shared, request.DeviceName, backupRoot, request.TakeOver);
+        if (!alreadyOurs)
+        {
+            shared.DeleteTombstone(request.DeviceName); // The name is reused by a new install, with a new install ID.
+        }
+
         if (device.BackupRoot != backupRoot)
         {
             device = device with { BackupRoot = backupRoot };
@@ -414,18 +428,55 @@ public sealed partial class Workspace
                 problem);
         }
 
-        var device = Shared.TryReadDevice(DeviceName)
-            ?? throw new StoreException(
+        var tombstones = Shared.ReadTombstones();
+        var own = tombstones.FirstOrDefault(t => t.InstallId == Bootstrap.InstallId);
+        var gone = tombstones.Select(t => t.InstallId).ToHashSet(StringComparer.Ordinal);
+        var returned = new List<string>();
+        foreach (var name in Shared.ListDeviceNames())
+        {
+            try
+            {
+                if (gone.Contains(Shared.ReadDevice(name).InstallId))
+                {
+                    returned.Add(name);
+                }
+            }
+            catch (StoreException)
+            {
+                // A device file this version cannot read is not one to flag.
+            }
+        }
+
+        var device = Shared.TryReadDevice(DeviceName);
+        if (device is null && own is not null)
+        {
+            // Removed from the sync folder, with this install's files still here: nothing to check against.
+            return new StatusReport(DeviceName, Shared.SyncRoot, DeviceFileMismatch: false, Journal.IsOpen, [])
+            {
+                Removal = RemovalOf(own), RemovedBy = own.RemovedBy, ReturnedDevices = returned,
+            };
+        }
+
+        if (device is null)
+        {
+            throw new StoreException(
                 StoreProblem.NotFound,
                 new Note($"The sync root has no file for this device ('{DeviceName}').", new NextStep(NextStepKind.SetUpAgain)));
+        }
         var state = Local.ReadState();
         var mappings = mappingId is null ? Shared.ListMappings() : [ReadMapping(mappingId)];
         return new StatusReport(
             DeviceName, Shared.SyncRoot, !DeviceIdentity.Matches(Bootstrap, device), Journal.IsOpen,
             mappings
                 .Select(m => HealthCheck.Check(Shared, m, device.Paths.GetValueOrDefault(m.Id), state.Mappings.GetValueOrDefault(m.Id)))
-                .ToList());
+                .ToList())
+        {
+            Removal = own is null ? null : RemovalOf(own), RemovedBy = own?.RemovedBy, ReturnedDevices = returned,
+        };
     }
+
+    private RemovalKind RemovalOf(TombstoneFile own) =>
+        own.RemovedBy == DeviceName ? RemovalKind.Unfinished : RemovalKind.RemovedByAnother;
 
     /// <summary>The mappings this device has a save folder for, in order: what "apply --all" runs.</summary>
     public IReadOnlyList<string> MappingsWithPaths() => ReadOwnDevice().Paths.Keys.Order(StringComparer.Ordinal).ToList();
@@ -578,7 +629,7 @@ public sealed partial class Workspace
     /// </summary>
     private DeviceFile ReadOwnDevice()
     {
-        var device = Shared.TryReadDevice(DeviceName)
+        var device = Shared.TryReadDevice(DeviceName) ?? RemovedDeviceFile()
             ?? throw new StoreException(
                 StoreProblem.NotFound,
                 new Note($"The sync root has no file for this device ('{DeviceName}').", new NextStep(NextStepKind.SetUpAgain)));

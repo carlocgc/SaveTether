@@ -27,6 +27,12 @@ public enum OverallCondition
     /// <summary>Row 4: the sync folder cannot be used.</summary>
     SyncRootUnavailable,
 
+    /// <summary>Phase 3.6, D6: another device removed this one from the sync folder. Texts come with the Maintenance screen.</summary>
+    RemovedByAnother,
+
+    /// <summary>Phase 3.6, D6: this device's own removal did not finish.</summary>
+    RemovalUnfinished,
+
     /// <summary>Row 5: another install uses this device's name.</summary>
     DeviceNameInUse,
 
@@ -76,6 +82,8 @@ public sealed record OverallStatus(
         OverallCondition.CannotCheck => "Cannot check this device",
         OverallCondition.Unfinished => "An operation did not finish",
         OverallCondition.SyncRootUnavailable => "Sync folder not available",
+        OverallCondition.RemovedByAnother => "Removed from the sync folder",
+        OverallCondition.RemovalUnfinished => "Removal not finished",
         OverallCondition.DeviceNameInUse => "Device name used by another install",
         OverallCondition.NeedsAttention => AttentionHeadline(),
         OverallCondition.CheckFailed => "Health check failed",
@@ -147,6 +155,8 @@ public static class StatusCheck
             var condition =
                 report.JournalOpen ? OverallCondition.Unfinished
                 : !report.SyncRootAvailable ? OverallCondition.SyncRootUnavailable
+                : report.Removal == RemovalKind.RemovedByAnother ? OverallCondition.RemovedByAnother
+                : report.Removal == RemovalKind.Unfinished ? OverallCondition.RemovalUnfinished
                 : report.DeviceFileMismatch ? OverallCondition.DeviceNameInUse
                 : mappings.Any(m => m.Word.NeedsAttention) ? OverallCondition.NeedsAttention
                 : OverallCondition.AllLinked;

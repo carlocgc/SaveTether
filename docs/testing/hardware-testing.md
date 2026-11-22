@@ -193,6 +193,14 @@ Mint, the Deck and Windows, CLI only. Two homes `home-a` and `home-b` on one scr
 
 In PowerShell, `cli` is an alias for `Clear-Item`: do not name a helper function `Cli`. Under `$ErrorActionPreference = 'Stop'` the CLI's stderr text ends the script: use `Continue` and join the output as strings. The held `operation.lock` file stays in a's home on Windows (it is open while the command runs); it is empty and harmless.
 
+### Device remove: another device, and the tombstone checks (CLI)
+
+Mint (and Windows), CLI only. The same two homes as "Device remove", one sync folder, `game.saves` applied on a and added on b. Keep a copy of `devices/a.json` first. Then:
+1. From b, `device remove --other a` lists 2 files and changes nothing; with `--confirm-remove`, a's device file and seed marker are gone, `removed/a.json` has `removed_by` b, and a's source folder is still a link. `--other b` (own name) and an unknown name exit 1.
+2. `status` on a says b removed it. `device remove --confirm-remove` on a finishes it: the folder is real, with the saves, and `bootstrap.json` and `state.json` are gone. Do this with a's backup folder not there (a device set up with `--backup-root`): the finish must still work.
+3. Put the saved `devices/a.json` back: `status` and `device list` on b flag it ("came back", "(removed)").
+4. Make an unfinished removal: copy `bootstrap.json` aside, run `device remove --confirm-remove`, put the copy back. `status` says the removal did not finish; `device remove --confirm-remove` again deletes the bootstrap.
+
 ### Start with the session
 
 Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME` to a folder under the scratch area in the environment file, check it in the same `case` as `SAVETETHER_HOME`, and pass it to `systemd-run` with `-E XDG_CONFIG_HOME`. List `~/.config/autostart` before and after, and compare. On Windows the switch writes the real Run value: test it only with the owner's leave, and check `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` before and after.
