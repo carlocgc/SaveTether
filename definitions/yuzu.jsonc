@@ -1,0 +1,110 @@
+// yuzu (Nintendo Switch emulator; no longer developed). Shipped with SaveTether; replaces the Ludusavi entry, which lists only
+// saves. Its folder layout is the one Eden kept (common/fs/path_util.cpp and fs_paths.h, YUZU_DIR, read 2026-11-22); the EmuDeck
+// folders come from EmuDeck's yuzu script and the owner's Steam Deck (Emulation/storage/yuzu). Not yet tried with `app add`. Design
+// 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "yuzu",
+  "name": "yuzu",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/user/nand" },
+      "base": "{install_dir}/user"
+    },
+    {
+      "id": "win-appdata",
+      "os": "windows",
+      "detect": { "dir": "{appdata}/yuzu/nand" },
+      "base": "{appdata}/yuzu"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/yuzu/nand" },
+      "base": "{xdg_data}/yuzu"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/storage/yuzu/nand" },
+      "base": "{emudeck}/storage/yuzu"
+    }
+  ],
+  "roles": [
+    {
+      "id": "saves",
+      "class": "save",
+      "default": true,
+      "path": "nand/user/save",
+      "target": "save",
+      "entry_depth": 3,
+      "notes": "Game saves: 0000000000000000/<profile ID>/<title ID>. A game finds its save only under the same profile ID on every device."
+    },
+    {
+      "id": "profiles",
+      "class": "system",
+      "default": false,
+      "path": "nand/system/save/8000000000000010",
+      "target": "profiles",
+      "notes": "The user profiles and their pictures. Share them so every device has the same profile ID, which names the saves folder."
+    },
+    {
+      "id": "play_time",
+      "class": "save",
+      "default": false,
+      "path": { "win-portable": "play_time", "win-appdata": "play_time", "linux-native": "play_time" },
+      "target": "play_time",
+      "notes": "Play time per game. Not for EmuDeck, which keeps it in ~/.local/share/yuzu."
+    },
+    {
+      "id": "load",
+      "class": "mod",
+      "default": false,
+      "path": "load",
+      "target": "load",
+      "notes": "Mods and cheats: a folder per title ID."
+    },
+    {
+      "id": "sdmc",
+      "class": "mod",
+      "default": false,
+      "path": "sdmc",
+      "target": "sdmc",
+      "notes": "The emulated SD card: mostly mods laid out for a console (atmosphere/contents)."
+    },
+    {
+      "id": "screenshots",
+      "class": "media",
+      "default": false,
+      "path": "screenshots",
+      "target": "screenshots",
+      "notes": "Screenshots."
+    },
+    {
+      "id": "keys",
+      "class": "system",
+      "default": false,
+      "path": { "win-portable": "keys", "win-appdata": "keys", "linux-native": "keys" },
+      "target": "keys",
+      "notes": "Keys dumped from your own console (prod.keys, title.keys). Not for EmuDeck, which keeps them in ~/.local/share/yuzu."
+    },
+    {
+      "id": "firmware",
+      "class": "system",
+      "default": false,
+      "path": "nand/system/Contents/registered",
+      "target": "firmware",
+      "notes": "The installed system firmware."
+    }
+  ],
+  "quirks": [
+    "The config folder (or ~/.config/yuzu), shader and cache stay on each device. Installed games, updates and DLC (nand/user/Contents) are not shared.",
+    "Settings > Filesystem can move nand, sdmc, load and screenshots; EmuDeck moves them to Emulation/storage/yuzu. Add app follows the default location and EmuDeck's only.",
+    "On EmuDeck both the EmuDeck install and ~/.local/share/yuzu are found; pick the EmuDeck one for saves.",
+    "Process name for the running check: yuzu.exe on Windows, yuzu or the AppImage on Linux."
+  ]
+}

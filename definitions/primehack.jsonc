@@ -1,0 +1,71 @@
+// PrimeHack (a Dolphin fork for the Metroid Prime trilogy). Shipped with SaveTether. It keeps Dolphin's folder layout (Dolphin's
+// CommonPaths.h); the Flatpak folder comes from EmuDeck's PrimeHack script, read on the owner's Steam Deck (2026-11-22). Not yet tried
+// with `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "primehack",
+  "name": "PrimeHack",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/User" },
+      "base": "{install_dir}/User"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:io.github.shiiion.primehack}/data/dolphin-emu" },
+      "base": "{flatpak:io.github.shiiion.primehack}/data/dolphin-emu"
+    }
+  ],
+  "roles": [
+    {
+      "id": "gc",
+      "class": "save",
+      "default": true,
+      "path": "GC",
+      "target": "GC",
+      "notes": "GameCube memory cards: Metroid Prime 1 and 2 saves."
+    },
+    {
+      "id": "wii",
+      "class": "save",
+      "default": true,
+      "path": "Wii",
+      "target": "Wii",
+      "notes": "The emulated Wii NAND: Metroid Prime Trilogy saves, and also the system menu and Miis."
+    },
+    {
+      "id": "states",
+      "class": "state",
+      "default": false,
+      "path": "StateSaves",
+      "target": "StateSaves",
+      "notes": "Save states: large, and a newer PrimeHack may not load an older one."
+    },
+    {
+      "id": "load",
+      "class": "mod",
+      "default": false,
+      "path": "Load",
+      "target": "Load",
+      "notes": "Custom textures and graphics mods."
+    },
+    {
+      "id": "screenshots",
+      "class": "media",
+      "default": false,
+      "path": "ScreenShots",
+      "target": "ScreenShots",
+      "notes": "Screenshots."
+    }
+  ],
+  "quirks": [
+    "PrimeHack's Windows release is portable: its User folder sits beside the program. An install without that folder uses Dolphin's own; add Dolphin instead.",
+    "Config and Cache stay on each device: they hold graphics, controller and path settings.",
+    "Process name for the running check: Dolphin.exe on Windows, dolphin-emu on Linux, as for Dolphin."
+  ]
+}

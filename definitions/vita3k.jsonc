@@ -1,0 +1,84 @@
+// Vita3K (PlayStation Vita emulator). Shipped with SaveTether; replaces the Ludusavi entry, which shares the whole user folder. The
+// folders come from Vita3K's source (app/src/app_init.cpp init_paths: SDL_GetPrefPath for Vita3K, or a portable folder beside the
+// program), read 2026-11-22. The EmuDeck folder comes from EmuDeck's Vita3K script. Not yet tried with `app add`. Design 5.2 explains
+// the format.
+{
+  "schema": 1,
+  "id": "vita3k",
+  "name": "Vita3K",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/portable/fs/ux0" },
+      "base": "{install_dir}/portable/fs"
+    },
+    {
+      "id": "win-appdata",
+      "os": "windows",
+      "detect": { "dir": "{appdata}/Vita3K/Vita3K/ux0" },
+      "base": "{appdata}/Vita3K/Vita3K"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/Vita3K/Vita3K/ux0" },
+      "base": "{xdg_data}/Vita3K/Vita3K"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/storage/Vita3K/ux0" },
+      "base": "{emudeck}/storage/Vita3K"
+    }
+  ],
+  "roles": [
+    {
+      "id": "savedata",
+      "class": "save",
+      "default": true,
+      "path": "ux0/user/00/savedata",
+      "target": "savedata",
+      "notes": "Game saves for the first user: a folder per game."
+    },
+    {
+      "id": "trophy",
+      "class": "save",
+      "default": true,
+      "path": "ux0/user/00/trophy",
+      "target": "trophy",
+      "notes": "Trophies for the first user."
+    },
+    {
+      "id": "app",
+      "class": "system",
+      "default": false,
+      "path": "ux0/app",
+      "target": "app",
+      "notes": "Installed games: often many gigabytes."
+    },
+    {
+      "id": "addcont",
+      "class": "system",
+      "default": false,
+      "path": "ux0/addcont",
+      "target": "addcont",
+      "notes": "Installed DLC."
+    },
+    {
+      "id": "patch",
+      "class": "system",
+      "default": false,
+      "path": "ux0/patch",
+      "target": "patch",
+      "notes": "Installed game updates."
+    }
+  ],
+  "quirks": [
+    "The firmware (os0, sa0, vs0, pd0) stays on each device: install it on each one. config.yml and the cache stay too.",
+    "Settings > Emulator can move the whole folder (pref-path in config.yml); EmuDeck moves it to Emulation/storage/Vita3K. Add app follows the default location and EmuDeck's only.",
+    "Process name for the running check: Vita3K.exe on Windows, Vita3K on Linux."
+  ]
+}
