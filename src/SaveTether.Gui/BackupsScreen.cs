@@ -49,7 +49,7 @@ internal sealed class BackupsScreen : UserControl, IScreen
             },
         };
         _appFilter = appFilter;
-        Content = new StackPanel { Spacing = 16, MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Left, Children = { _page } };
+        Content = new StackPanel { Spacing = 16, Children = { _page } };
         _ = LoadAsync();
     }
 

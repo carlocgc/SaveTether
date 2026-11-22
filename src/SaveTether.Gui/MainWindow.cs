@@ -125,7 +125,8 @@ internal sealed class MainWindow : Window
 
         // The rows' button columns are one width across the list (see Row), so no row's sentence is moved by another row's buttons.
         Grid.SetIsSharedSizeScope(_rows, true);
-        _body = new ScrollViewer { Content = _rows };
+        // Right padding keeps the last button clear of the scroll bar, which is drawn over the content.
+        _body = new ScrollViewer { Content = _rows, Padding = new Thickness(0, 0, 12, 0) };
         // The box is the scrollable area's frame: always drawn, outside what scrolls.
         var bodyBox = new Border
         {
