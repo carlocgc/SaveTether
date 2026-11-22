@@ -497,6 +497,7 @@ Progress:
 - *Readable progress and dialogs: 2026-11-18, asked for by the owner (spec section 9.3, "As built"). The step list ticks at least 300 ms apart and holds the finished list 800 ms; dialogs answer only after 600 ms. Tests: `PacedProgressTests` with a clock that moves on request. On the Deck, with a throwaway device: a Cancel clicked at once was ignored and one clicked a second later closed the dialog; captures during an apply showed two steps ticked, then seven, then the result.*
 
 - *Too-broad save folder refused: 2026-11-22, found by an audit. `apply` refuses a source that is the home folder, holds it, or is a drive root (`source-unusable`; test in `PrecheckAndComparisonTests`). The definitions workflow's PR body now lists the changed definition lines, since the bundle is gzip. Not run on hardware; the workflow is untested until its next monthly run.*
+- *Autostart and menu `Exec=` lines write `%` as `%%`, so a percent sign in the install path is not read as a field code: 2026-11-22, found by an audit. Tests in `AutostartTests`. Not checked by launching from a Linux desktop.*
 Exit test: on Windows and on Linux, a new user sets up a device, adds an app and applies it without the CLI; the tray icon turns amber when the sync root is unmounted and green again when it returns. *Passed 2026-11-20 on `5d53e2c`; see section 8.*
 
 ## 5a. Phase 3.5: definitions from the Ludusavi manifest
