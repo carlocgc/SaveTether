@@ -527,9 +527,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             foreach (var (group, entries) in ActionTexts.ComparisonGroups(comparison))
             {
                 var list = new TextBlock { Text = string.Join("\n", entries), TextWrapping = TextWrapping.Wrap, FontSize = 13 };
-                body.Children.Add(group.StartsWith("On both, the same", StringComparison.Ordinal)
-                    ? new Expander { Header = group, Content = list, HorizontalAlignment = HorizontalAlignment.Stretch }
-                    : new StackPanel { Spacing = 2, Children = { new TextBlock { Text = group, FontWeight = FontWeight.SemiBold }, list } });
+                body.Children.Add(new Expander { Header = group, Content = list, HorizontalAlignment = HorizontalAlignment.Stretch });
             }
         }
 

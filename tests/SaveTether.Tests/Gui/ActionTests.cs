@@ -91,9 +91,9 @@ public class ActionTests
         Assert.DoesNotContain(guardOffered, c => c.Choice == SetupChoice.Copy);
         Assert.Equal("Use the shared data", guardOffered.Single(c => c.Choice == SetupChoice.NoCopy).Label);
 
-        // The comparison's groups, with the identical ones counted.
+        // The comparison's groups, each counted.
         var groups = ActionTexts.ComparisonGroups(guard.Comparison!);
-        Assert.Contains(groups, g => g.Group == "Only on this device");
+        Assert.Contains(groups, g => g.Group.StartsWith("Only on this device (", StringComparison.Ordinal));
         Assert.All(groups, g => Assert.NotEmpty(g.Entries));
     }
 

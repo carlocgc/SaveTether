@@ -201,7 +201,7 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 
 **The choice dialog** (`choice-needed`). Title: "<Role> on this device already has data." Then the comparison and the allowed choices.
 
-- **Comparison** (5.4), grouped by entry (5.13's entry depth): "Only on this device", "Only in the shared copy", "On both, different", and a collapsed "On both, the same (*n*)". Each entry expands to its files with size and time. Above the groups: "Newest here: <time>. Newest in the shared copy: <time>."
+- **Comparison** (5.4), grouped by entry (5.13's entry depth): "Only on this device (*n*)", "Only in the shared copy (*n*)", "On both, different (*n*)" and "On both, the same (*n*)", each collapsed (changed 2026-11-22, asked for by the owner: a long list of memory cards filled the dialog). Each entry expands to its files with size and time. Above the groups: "Newest here: <time>. Newest in the shared copy: <time>."
 - **Choices**, one per `AllowedChoices` value, as a list where nothing is selected at first. Continue is disabled until one is.
 
 | Choice | Label | Sentence |
