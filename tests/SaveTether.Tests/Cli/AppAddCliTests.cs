@@ -256,7 +256,8 @@ public class AppAddCliTests
 
         var run = deck.Expect(CliApp.ExitRefused, "app", "add", "nope");
 
-        Assert.Contains("There is no definition for 'nope'. Known apps: cemu", run.Err, StringComparison.Ordinal);
+        Assert.Contains("There is no definition for 'nope'. Known apps: ", run.Err, StringComparison.Ordinal);
+        Assert.Contains("cemu, ", run.Err, StringComparison.Ordinal);
     }
 
     // ---- Shared definitions ----
