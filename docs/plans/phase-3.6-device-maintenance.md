@@ -393,7 +393,7 @@ Branch `phase-3.6-t6-remove-other`.
 
   **Mint:** the same screens open and lay out (captures), with clicks only. **Windows, the owner:** the flow above once, with a debug build and a scratch `SAVETETHER_HOME`.
 
-### T10: exit test (S, hardware) — Deck passed, Windows not run
+### T10: exit test (S, hardware) — done
 
 - **Deliver:** the exit test below, on the Deck and the Windows PC, on a throwaway folder that both devices sync, as in phase 3's exit test. Record the results in the plan's section 8 and in this file. Bugs found get a regression test.
 - **Files:** this file, `implementation-plan.md` section 8, `docs/testing/hardware-testing.md`.
@@ -498,7 +498,7 @@ Branch `phase-3.6-t9-app-screens`.
 - Hardware check, Deck (2026-11-22, commit ded28a0 plus the fix below, GUI and CLI built on Mint, `~/sttest/t9`, `home-a` and `home-b` on one scratch sync folder, the app run as a user unit and driven with `xdotool`, captures with `spectacle`): the overview matched `device list` (2 devices, 2 mappings, 1 here, 1 orphan, 3 backups of 10 bytes). Rename: `Bad Name` kept the button disabled with the message; `a2` renamed, and the window title and the tray item's `Title` ("SaveTether (a2): All linked") say `a2`. Delete mapping removed the record and left `solo/` in the sync folder. Remove another device: the button stayed disabled until `B`/`b` matched (case ignored), then `b` was gone and its tombstone said `a2`. Clean up: keep-first deleted 1; delete-all showed its warning, then the typed phrase (disabled until `delete all backups` was complete). Remove this device: page 1 (with D4's option offered, as the last device), page 2, the typed name, the result, then setup with no restart. "Removal not finished": with `bootstrap.json` put back after a removal, the banner showed. **Bug found:** its **Finish removal** failed with "The sync root has no file for this device", because `Maintenance.Overview` read this device's file, which is gone (the Maintenance screen would have said the sync folder was unavailable). Fixed: `Workspace.ReadAsRemovedDevice` (the overview rebuilds the file from the local record, as a removal does), and page 1 no longer needs the overview after Delete everything's tree delete. Regression test `The_overview_works_on_a_device_another_one_removed`. Re-run on the Deck: Finish removal opened page 1, and Remove finished the removal. "Removed by `b3`": the banner replaced the Apps page, and **Set up again** (typed name) landed on setup. The real setup was never touched (the owner's running app copy was left alone); the scratch folder, the unit and the build are gone.
 - Not verified: the typed-name dialogs with the on-screen keyboard (Steam+X), the Windows run, and Finish removal here (it opens the same screen as Finish removal).
 
-### T10: exit test: Deck passed, Windows not run
+### T10: exit test — done
 
 - Run 2026-11-22 on `c764c2f` (GUI and CLI Release linux-x64, built on Mint from a `git archive`, copied to the Deck). One scratch folder `~/sttest/t10` on the Deck, with a sync folder and two homes: `home-deck` (the app, driven with `xdotool`) and `home-pc` (the CLI, standing in for the PC). `test.saves` on both, `deckonly.saves` on the Deck only, and 6 backups on the PC. The Windows PC itself was not run: that is the owner's, once, with a debug build and a scratch `SAVETETHER_HOME`.
 - 1 Rename: `deck2` in the app. Title, header and page said `deck2`, and the PC's `device list` showed it (the PC's own Maintenance page was not opened).
@@ -506,3 +506,5 @@ Branch `phase-3.6-t9-app-screens`.
 - 3 `backup delete --keep-first` on the PC: 5 deleted, the first kept. 4 `device remove --delete-everything`: `savetether/` gone, the sync folder empty, the PC's folder real and equal to its copy.
 - 5 Both set up again from scratch on the empty sync folder (`init --create-root` on the PC, `init` on the Deck, `map add`, `apply --copy` and `apply --add-missing`): both `status` OK, `device list` showed both, and both folders were links to the same shared folder.
 - Steps 3 to 5 used the CLI, not the app (the app's screens for them were checked in T9). Not run: the Windows PC, and the setup in step 5 through the app. The real setup on the Deck was not touched (`status` as before); the scratch folder, the unit and the Mint build are gone. No bugs found.
+
+- Windows (2026-11-22, the owner): the Maintenance flow and the exit test passed on the PC. The owner chose to skip the remaining Deck check (the typed-name dialogs with the on-screen keyboard, Steam+X); it was never run. Phase 3.6 is complete.
