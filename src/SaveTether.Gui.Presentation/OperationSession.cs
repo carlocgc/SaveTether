@@ -128,6 +128,26 @@ public sealed class OperationSession : IDisposable
         return (plans, needYou);
     }
 
+    // Maintenance (phase 3.6). Each changes things under the operation lock this session holds; the owner has confirmed first.
+
+    public Core.Operations.RenameResult RenameDevice(string newName) => Workspace.RenameDevice(newName);
+
+    /// <summary>The files "Remove" on another device would delete (a dry run), or deletes.</summary>
+    public IReadOnlyList<string> RemoveOtherDevice(string name, bool dryRun) => Workspace.RemoveOtherDevice(name, dryRun);
+
+    /// <summary>Delete only the record of a mapping no device uses; its saves stay.</summary>
+    public void DeleteMappingRecord(string mappingId) => Workspace.DeleteMappingRecord(mappingId);
+
+    public IReadOnlyList<Core.Backup.BackupInfo> DescribeBackupCleanup(string? mappingId, Core.Backup.BackupCleanup mode) =>
+        Workspace.DescribeBackupCleanup(mappingId, mode);
+
+    public IReadOnlyList<Core.Backup.BackupInfo> CleanUpBackups(string? mappingId, Core.Backup.BackupCleanup mode) =>
+        Workspace.CleanUpBackups(mappingId, mode);
+
+    public DeviceRemovalPlan PlanDeviceRemoval(RemovalChoices choices) => Workspace.PlanDeviceRemoval(choices);
+
+    public DeviceRemovalResult RemoveDevice(DeviceRemovalPlan plan, IProgress<StepProgress>? progress = null) => Workspace.RemoveDevice(plan, progress);
+
     public ExecutionResult Recover(IProgress<StepProgress>? progress) => Workspace.Recover(progress);
 
     public void Dispose() => _lock.Dispose();

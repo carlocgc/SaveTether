@@ -298,6 +298,21 @@ Choices made while building:
 
 *Delete, added 2026-11-18 at the owner's request* (not in the spec above). Each backup row has **Delete**. It is the core's `DeleteBackup`, which removes the backup's folder through `SafeFs` and refuses while an operation is unfinished, since recovering it may need its backups. The CLI has the same as `backup delete` (`docs/cli-json.md`). The confirmation names the backup and says it cannot be undone. For the kept first backup it adds that this is usually the only copy of the folder from before SaveTether changed it, and its button reads "Delete the first backup". Deleting the first backup is allowed: the owner may need the space. Retention then keeps the next oldest as the first. The list is read again after a delete.
 
+## 9.8 Maintenance
+
+The screen behind the **Maintenance** button (after Settings), and the dialogs it opens: the overview of the sync folder, Rename, Remove this device, Remove another device, orphaned mappings, and Clean up on the Backups screen. The full design, with its decisions (D1 to D9), is in `docs/plans/phase-3.6-device-maintenance.md`, "The app: screens and dialogs". The logic and texts are `MaintenancePage` and `RemoveDeviceFlow` (presentation project, tested); the views are `MaintenanceScreen`, `RemoveDeviceScreen` and `BackupsScreen`.
+
+*As built (2026-11-22).*
+- **Maintenance** opens from the bar. It reads the core's `Maintenance.Overview` off the UI thread and shows the plan's four blocks. Actions are disabled, with the reason at the top of the page, while a journal is open, the lock is held, or the sync folder cannot be read (`MaintenancePage.Blocker`). A device row says why Remove is disabled in the page's blocker, not under each row.
+- **Open Backups** opens the Backups screen. Its **Back to apps** goes to the Apps page, not back to Maintenance.
+- **`Overlay.AskTextAsync`** is `ShowAsync` with a `TextBox`; `ShowAsync` gained a `focus` parameter so focus starts in the box. Enter does not confirm, Escape cancels, and the problem text shows under the box.
+- **Rename** asks for the name, then runs `device rename` under the lock. The window title is now "SaveTether: <device>" and the tray tooltip "SaveTether (<device>): <state>", so the next check shows the new name in both.
+- **Orphaned mappings:** **Delete mapping** is a confirmation, then the new `Workspace.DeleteMappingRecord` (the record only; the saves stay). **Delete mapping and saves** asks for the typed phrase `delete everything` (D8), then runs `map delete` as the Apps page's Delete does, without its second confirmation.
+- **Remove another device:** a warning, then the device's typed name, then `RemoveOtherDevice`.
+- **Remove this device** is a screen of two pages (choices, then the plan). **Remove** then plans again under the lock, asks for each typed phrase in turn, and runs the removal behind the busy dialog (not the paced step list the plan sketched). The result lists the folders given back under "Details". Once the device is not set up, the next check shows setup, with no restart.
+- **Banners:** "Removal not finished" keeps the Apps page and adds **Finish removal**, which opens page 1 with the defaults. "Removed by <name>" takes the Apps page's place, with **Finish removal here** (page 1) and **Set up again**, which runs the removal with its defaults (links become folders, nothing shared is deleted) after the typed name, and then setup shows. Both conditions pause the Apps page's actions.
+- **Clean up** on Backups is a menu of three modes, over the app the list is filtered to or all apps. Keep first and Keep newest ask once; Delete all asks, then asks for `delete all backups`. It runs behind the busy dialog.
+
 ## 10. Errors outside the tables
 
 - **`StoreException`**: shown in the dialog or page that caused it. Its `StoreProblem` picks the title (`NotFound` "Not found", `Invalid` "Not valid", `Conflict` "Already set up differently", `MappingsApplied` "Revert these first", `NotInitialized` banner B3, `SchemaTooNew` banner B1), and the message is the core's, which must therefore be free of CLI wording (section 13, item 1).

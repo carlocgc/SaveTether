@@ -391,12 +391,4 @@ public sealed class ManualAddFlow(LocalStore local)
         !OperatingSystem.IsWindows() && (path == "~" || path.StartsWith("~/", StringComparison.Ordinal))
             ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + path[1..]
             : path;
-
-    /// <summary>Adding a folder runs no plan that checks processes.</summary>
-    private sealed class NoProcesses : IProcessLister
-    {
-        public static readonly NoProcesses Instance = new();
-
-        public IReadOnlyList<string> RunningProcessNames() => [];
-    }
 }

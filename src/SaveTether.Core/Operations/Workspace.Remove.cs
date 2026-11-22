@@ -344,6 +344,26 @@ public sealed partial class Workspace
     private bool _finishingRemoval;
 
     /// <summary>
+    /// Runs a read the way a removal does (see <see cref="RemovedDeviceFile"/>): when this device's file is gone and this install's
+    /// tombstone says why, the file is rebuilt from the local record, so the Maintenance overview still works on a device whose removal
+    /// did not finish.
+    /// </summary>
+    public T ReadAsRemovedDevice<T>(Func<T> read)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        var before = _finishingRemoval;
+        _finishingRemoval = true;
+        try
+        {
+            return read();
+        }
+        finally
+        {
+            _finishingRemoval = before;
+        }
+    }
+
+    /// <summary>
     /// While a removal is planned or run: this device's file as it was, rebuilt from the local record, when another device removed
     /// this one (or an earlier run deleted the file) and this install's tombstone says so. The backup root is then the default one,
     /// since the file that named it is gone; the app's process names are not known, so a running app is not noticed.

@@ -185,6 +185,8 @@ internal sealed class MainWindow : Window
     public void Show(CheckResult result)
     {
         var status = result.Shown;
+        // The device's name in the title, so a rename shows in the window's title bar and the task list at once.
+        Title = status.Report is { } named ? $"{Texts.AppName}: {named.DeviceName}" : Texts.AppName;
         _device.Text = status.Report is { } report ? $"This device: {report.DeviceName}" : Texts.AppName;
         _syncRoot.Text = status.Report is { } r ? $"Sync folder: {r.SyncRoot}" : string.Empty;
         _dot.Fill = new SolidColorBrush(status.IsAmber ? Icons.Amber : Icons.Green);
@@ -214,6 +216,28 @@ internal sealed class MainWindow : Window
             recover.Click += (_, _) => _ = _operate(flow => flow.RecoverAsync());
             _banners.Children.Add(Banner(ActionTexts.Unfinished(Journal.For(new LocalStore(_localFolder)).TryRead()), null, recover));
         }
+        else if (status.Condition == OverallCondition.RemovalUnfinished)
+        {
+            // Phase 3.6: this device started its removal and it did not finish. Choices are asked again (they are not stored).
+            var finish = new Button { Content = RemoveDeviceFlow.FinishRemoval };
+            finish.Click += (_, _) => OpenScreen(new RemoveDeviceScreen(_localFolder, _operate, CloseScreen));
+            _banners.Children.Add(Banner(Texts.Banner(status)!, Texts.BannerDetail(status), finish));
+        }
+        else if (status.Condition == OverallCondition.RemovedByAnother)
+        {
+            // Phase 3.6, D6: another device removed this one. The banner takes the Apps page's place.
+            var finishHere = new Button { Content = RemoveDeviceFlow.FinishRemovalHere };
+            finishHere.Click += (_, _) => OpenScreen(new RemoveDeviceScreen(_localFolder, _operate, CloseScreen));
+            // Set up again: the removal with its defaults (links become folders, nothing shared is deleted), then setup shows.
+            var again = new Button { Content = RemoveDeviceFlow.SetUpAgain };
+            again.Click += (_, _) => _ = _operate(flow => flow.RemoveThisDeviceAsync(new Core.Operations.RemovalChoices()));
+            _banners.Children.Add(Banner(Texts.Banner(status)!, Texts.BannerDetail(status), finishHere, again));
+            _rows.Children.Clear();
+            _pageActions = null;
+            _body.Content = _screen ?? _rows;
+            _bar.Content = (_screen as IScreen)?.Bar;
+            return;
+        }
         else if (Texts.Banner(status) is { } banner)
         {
             _banners.Children.Add(Banner(banner, Texts.BannerDetail(status)));
@@ -238,7 +262,8 @@ internal sealed class MainWindow : Window
 
         // While B1, B2 or B3 is shown, or another process holds the lock, the core would refuse every action (section 4.1).
         var actionsAllowed = result.LockHeldBy is null
-            && status.Condition is not (OverallCondition.UpdateNeeded or OverallCondition.Unfinished or OverallCondition.SyncRootUnavailable);
+            && status.Condition is not (OverallCondition.UpdateNeeded or OverallCondition.Unfinished or OverallCondition.SyncRootUnavailable
+            or OverallCondition.RemovalUnfinished or OverallCondition.RemovedByAnother);
         _rows.Children.Clear();
         var page = AppsPage.From(status);
 
@@ -262,6 +287,9 @@ internal sealed class MainWindow : Window
         var settings = new Button { Content = "Settings" };
         settings.Click += (_, _) => OpenScreen(new SettingsScreen(_localFolder, App.Session, _overlay, CloseScreen));
         pageActions.Children.Add(settings);
+        var maintenance = new Button { Content = "Maintenance" };
+        maintenance.Click += (_, _) => OpenMaintenance();
+        pageActions.Children.Add(maintenance);
         // The page's title above its buttons, as on the other pages.
         _pageActions = new StackPanel
         {
@@ -458,6 +486,13 @@ internal sealed class MainWindow : Window
         _body.Content = screen;
         _bar.Content = (screen as IScreen)?.Bar;
     }
+
+    private void OpenMaintenance() => OpenScreen(new MaintenanceScreen(
+        _localFolder,
+        _operate,
+        () => OpenScreen(new BackupsScreen(_localFolder, _operate, CloseScreen, null)),
+        () => OpenScreen(new RemoveDeviceScreen(_localFolder, _operate, OpenMaintenance)),
+        CloseScreen));
 
     private void CloseScreen()
     {

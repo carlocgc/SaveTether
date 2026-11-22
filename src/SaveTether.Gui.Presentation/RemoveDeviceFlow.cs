@@ -1,4 +1,6 @@
 using SaveTether.Core.Operations;
+using SaveTether.Core.Planning;
+using SaveTether.Core.Storage;
 
 namespace SaveTether.Gui.Presentation;
 
@@ -29,6 +31,48 @@ public static class RemoveDeviceFlow
     public const string FinishRemoval = "Finish removal";
     public const string FinishRemovalHere = "Finish removal here";
     public const string SetUpAgain = "Set up again";
+
+    /// <summary>Page 1's data: the device's name, the mappings only it uses, and D4's option.</summary>
+    public sealed record Start(string DeviceName, IReadOnlyList<string> Orphans, (bool Offered, string? Reason) DeleteEverything);
+
+    /// <summary>Page 2's lines, or the refusals (then <see cref="PlanView.Refused"/>).</summary>
+    public sealed record PlanView(IReadOnlyList<string> Lines, bool Refused);
+
+    /// <summary>Reads only; call it off the UI thread. A <see cref="StoreException"/> says why the removal cannot be planned.</summary>
+    public static Start Load(LocalStore local)
+    {
+        ArgumentNullException.ThrowIfNull(local);
+        var workspace = Workspace.Open(local, NoProcesses.Instance);
+        var plan = workspace.PlanDeviceRemoval(new RemovalChoices());
+        // After Delete everything's tree delete the overview cannot be read: there is nothing left to delete, so the option is not offered.
+        (bool Offered, string? Reason) option;
+        try
+        {
+            option = DeleteEverythingOption(Maintenance.Overview(workspace));
+        }
+        catch (StoreException)
+        {
+            option = (false, null);
+        }
+
+        return new Start(workspace.DeviceName, plan.Orphans.Select(o => o.MappingId).ToList(), option);
+    }
+
+    public static PlanView ViewPlan(LocalStore local, RemovalChoices choices)
+    {
+        ArgumentNullException.ThrowIfNull(local);
+        var workspace = Workspace.Open(local, NoProcesses.Instance);
+        var plan = workspace.PlanDeviceRemoval(choices);
+        return plan.IsRefused ? new PlanView(Refusals(plan, id => NamesOf(workspace, id)), true) : new PlanView(PlanLines(plan), false);
+    }
+
+    /// <summary>A mapping ID's role and its app's name, for a refusal's words.</summary>
+    public static (string Role, string App) NamesOf(Workspace workspace, string mappingId)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        var dot = mappingId.IndexOf('.', StringComparison.Ordinal);
+        return dot < 0 ? (mappingId, mappingId) : (mappingId[(dot + 1)..], AppNames.Resolve(workspace.Definitions, mappingId[..dot]).Name);
+    }
 
     public static string RemovedByBanner(string by) => $"This device was removed from the sync folder by {by}.";
 

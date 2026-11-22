@@ -81,7 +81,7 @@ Each local folder has its own single-instance claim, so a test copy with its own
 **Input.** The app runs through XWayland on the Deck and X11 on Mint, so `xdotool` can click and type in it:
 
 ```bash
-W=$(xdotool search --onlyvisible --name '^SaveTether$' | head -1)   # the visible window; a tray-only copy has a hidden one
+W=$(xdotool search --onlyvisible --name '^SaveTether' | head -1)   # the visible window; a tray-only copy has a hidden one
 xdotool windowactivate --sync $W
 xdotool mousemove --window $W <x> <y> click 1                       # coordinates inside the window, below the title bar
 xdotool type --delay 40 '/some/path'; xdotool key Return
@@ -92,7 +92,7 @@ Find coordinates from a capture of the window: subtract the capture's margin and
 **Seeing it.**
 
 - **Deck:** `spectacle -b -n -a -o /tmp/shot.png` captures the active window. A blank white image means the display is asleep: wake it first with `xdotool mousemove_relative 1 0`. A copy started from a scratch folder first asks "Install SaveTether for this user?": press Not now, since Install writes to the real `~/.local`. Menus and other popups are separate windows that `-a` leaves out: capture the whole screen with `-f` and crop to the app window's geometry before looking. That also keeps the rest of the owner's desktop out of view.
-- **Mint:** the screen is usually locked, so a full-screen capture shows the lock screen. Capture the window itself: `import -window $(xwininfo -root -tree | grep '"SaveTether"' | awk '{print $1}' | head -1) /tmp/shot.png`.
+- **Mint:** the screen is usually locked, so a full-screen capture shows the lock screen. Capture the window itself: `import -window $(xwininfo -root -tree | grep '"SaveTether' | awk '{print $1}' | head -1) /tmp/shot.png`.
 
 Then copy the image to the PC to look at it.
 
@@ -211,6 +211,18 @@ Mint and Windows, CLI only. The same two homes as "Device remove", one sync fold
 
 On Mint, build the CLI from the branch with `dotnet publish ... -o ~/sttest-t7/cli` and check `status` of the real setup before and after in a fresh shell. The Mint clone is on another branch: put it back after.
 
+### Maintenance (the app)
+
+The Deck, the app driven with `xdotool`, two homes on one scratch sync folder (a is the app's, `game.saves` applied; b joined with `game.saves`; an extra `solo.saves` applied on a and then removed, to make an orphan). Never the real setup.
+1. **Overview:** Maintenance opens from the bar. Its numbers match `device list --json` on a (devices, mappings, linked here, orphans, backups and size).
+2. **Rename:** type `Bad Name` and the button stays disabled with the message; type `a2` and Rename works. The window title, the tray tooltip (`gdbus` on the item's `Title`, as in "The tray icon's image": its `ToolTip` is empty) and the page say `a2`; b's `device list` shows `a2`.
+3. **Remove another device:** the warning, then its typed name (the button stays disabled until it matches). b's files are gone from the sync folder.
+4. **Orphans:** Delete mapping removes the record and leaves `solo/saves` in the sync folder; Delete mapping and saves needs `delete everything` and removes both.
+5. **Clean up** on Backups: keep first, then delete all (the warning, then `delete all backups`).
+6. **Remove this device:** page 1, page 2, the typed name, the result listing the folders. OK lands on setup with no restart, and the folders are real folders.
+7. **Banners:** from the CLI, remove a from b (`device remove --other a`). On a, the "removed by b" page replaces the Apps page; Set up again lands on setup. For "Removal not finished", copy `bootstrap.json` aside, run the removal, put it back.
+8. **Captures:** each page and dialog at the default window size, and a text dialog with the on-screen keyboard open (Steam+X). On Mint the same screens, clicks only.
+
 ### Start with the session
 
 Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME` to a folder under the scratch area in the environment file, check it in the same `case` as `SAVETETHER_HOME`, and pass it to `systemd-run` with `-E XDG_CONFIG_HOME`. List `~/.config/autostart` before and after, and compare. On Windows the switch writes the real Run value: test it only with the owner's leave, and check `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` before and after.
@@ -283,7 +295,7 @@ Start the app as a user unit with `-p KillMode=process` (and `-E HOME=<scratch>/
 
 Each machine with a throwaway local folder, sync folder and save folder; every step in the app, none with the CLI. Wait for the app's own check (every five minutes) rather than pressing Check now: the test is that the tray changes by itself.
 
-- **Windows:** put the sync folder on a drive of its own with `subst T: <scratch folder>`; `subst T: /D` takes it away and `subst T: <folder>` brings it back. The app's controls are reachable with UI Automation from PowerShell (`System.Windows.Automation`): fields are `Edit` elements named after their labels (a `Text` element has the same name, so pick the `Edit`), buttons are invoked by name, and a dialog's buttons are in the same window as the page, after it ("This is my first device" appears twice: the dialog's is the last). The tray icon's tooltip, "SaveTether: <state>", is the name of its button in the hidden icons flyout. Remove the junction with `cmd /c rmdir` before deleting the scratch folder: PowerShell 5.1's `Remove-Item -Recurse` follows junctions.
+- **Windows:** put the sync folder on a drive of its own with `subst T: <scratch folder>`; `subst T: /D` takes it away and `subst T: <folder>` brings it back. The app's controls are reachable with UI Automation from PowerShell (`System.Windows.Automation`): fields are `Edit` elements named after their labels (a `Text` element has the same name, so pick the `Edit`), buttons are invoked by name, and a dialog's buttons are in the same window as the page, after it ("This is my first device" appears twice: the dialog's is the last). The tray icon's tooltip, "SaveTether (<device>): <state>", is the name of its button in the hidden icons flyout. Remove the junction with `cmd /c rmdir` before deleting the scratch folder: PowerShell 5.1's `Remove-Item -Recurse` follows junctions.
 - **Deck:** mount the folder that holds the sync folder with `fuse-overlayfs` as the user (no root needed), started with `systemd-run --user`: a FUSE process started from an SSH shell is stopped when the session ends, which leaves a dead mount ("Transport endpoint is not connected"). `fusermount3 -u` leaves the empty mount point an unplugged drive leaves. `udisksctl loop-setup` needs a password from an SSH session, so it cannot be used. The tray item's `ToolTip` is empty over D-Bus: compare `IconPixmap` (an `md5sum` of the reply is enough) to see it change.
 - **A mount that stopped answering:** `pkill -9` the `fuse-overlayfs` process instead of unmounting. `ls` on the mount point then says "Transport endpoint is not connected". `status` exits 0 and says the sync root cannot be read, with that reason; the app shows banner B3 with it; setup's step 1 on that folder says it cannot be read. `fusermount3 -u` clears the dead mount afterwards.
 
@@ -300,4 +312,4 @@ Built here with `build/build-installer.ps1` from a package made by `build/packag
 - The wizard on screen: start the installer with `/DIR=` only, and drive it with UI Automation from PowerShell (`System.Windows.Automation`): its window is named "Setup - SaveTether <version>"; select "I accept the agreement" (`SelectionItemPattern`) and invoke Next, Install and Finish (`InvokePattern`). Leave the `Path` task unticked. "Start SaveTether" on the last page is a list item without a toggle pattern: focus it and send a space to untick it, or the app starts against the real local folder. Capture each page with `CopyFromScreen` over the window's rectangle, after `SetProcessDPIAware`.
 - The desktop shortcut (an unticked task, `/TASKS=desktopicon` when silent): it is created and removed with the install; `check-installer.ps1` checks both.
 - Setup's children and junctions: a program Setup starts inherits Setup's mitigations (Inno Setup 6.5 turns RedirectionGuard on unless `RedirectionGuard=no`), which made the app's first run after an install refuse every junction. To check it, build the installer from a copy of `savetether.iss` with a `[Run]` entry that starts a `.cmd` doing `init`, `map add` and `apply --no-copy` with the installed `savetether.exe` in a throwaway `SAVETETHER_HOME` (`{cmd}`, `runhidden`), install it with `/VERYSILENT /DIR=...`, and read the output: with the directive the apply succeeds, without it it fails with "untrusted mount point" (found and fixed 2026-11-21).
-- The Start menu entry: with `SAVETETHER_HOME` set to a scratch folder in the shell, `Start-Process` on `%APPDATA%\Microsoft\Windows\Start Menu\Programs\SaveTether.lnk`; the shortcut starts the installed copy with that environment. The window footer names the local folder: check it is the scratch one. The taskbar and tray buttons are found by UI Automation under `Shell_TrayWnd` ("SaveTether - 1 running window", "Show Hidden Icons"); invoking Show Hidden Icons opens the flyout (`TopLevelWindowForOverflowXamlIsland`), where the tray button is named after the tooltip.
+- The Start menu entry: with `SAVETETHER_HOME` set to a scratch folder in the shell, `Start-Process` on `%APPDATA%\Microsoft\Windows\Start Menu\Programs\SaveTether.lnk`; the shortcut starts the installed copy with that environment. The window footer names the local folder: check it is the scratch one. The taskbar and tray buttons are found by UI Automation under `Shell_TrayWnd` ("SaveTether: <device> - 1 running window", "Show Hidden Icons"); invoking Show Hidden Icons opens the flyout (`TopLevelWindowForOverflowXamlIsland`), where the tray button is named after the tooltip.

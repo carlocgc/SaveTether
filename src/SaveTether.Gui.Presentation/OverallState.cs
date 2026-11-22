@@ -224,12 +224,4 @@ public static class StatusCheck
     }
 
     private static string RoleOf(string mappingId) => mappingId.Contains('.', StringComparison.Ordinal) ? mappingId[(mappingId.IndexOf('.', StringComparison.Ordinal) + 1)..] : mappingId;
-
-    /// <summary>A status check runs no plan, so it never asks which processes are running.</summary>
-    private sealed class NoProcesses : IProcessLister
-    {
-        public static readonly NoProcesses Instance = new();
-
-        public IReadOnlyList<string> RunningProcessNames() => [];
-    }
 }

@@ -854,12 +854,4 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         !OperatingSystem.IsWindows() && (path == "~" || path.StartsWith("~/", StringComparison.Ordinal))
             ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + path[1..]
             : path;
-
-    /// <summary>Adding an app runs no plan that checks processes.</summary>
-    private sealed class NoProcesses : IProcessLister
-    {
-        public static readonly NoProcesses Instance = new();
-
-        public IReadOnlyList<string> RunningProcessNames() => [];
-    }
 }
