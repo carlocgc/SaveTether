@@ -1,0 +1,65 @@
+// DuckStation (PlayStation 1 emulator). Shipped with SaveTether. The Windows and native Linux folders are
+// DuckStation's defaults; the Flatpak and EmuDeck installs were found on the owner's Steam Deck. Not yet
+// tested with `app add` on hardware (T6). Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "duckstation",
+  "name": "DuckStation",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/memcards" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "win-documents",
+      "os": "windows",
+      "detect": { "dir": "{documents}/DuckStation/memcards" },
+      "base": "{documents}/DuckStation"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:org.duckstation.DuckStation}/data/duckstation/memcards" },
+      "base": "{flatpak:org.duckstation.DuckStation}/data/duckstation"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/duckstation/memcards" },
+      "base": "{xdg_data}/duckstation"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/saves/duckstation/saves" },
+      "base": "{emudeck}/saves/duckstation"
+    }
+  ],
+  "roles": [
+    {
+      "id": "memcards",
+      "class": "save",
+      "default": true,
+      "path": { "win-portable": "memcards", "win-documents": "memcards", "linux-flatpak": "memcards", "linux-native": "memcards", "emudeck": "saves" },
+      "target": "memcards",
+      "notes": "Memory cards: .mcd files, one per game by default, plus shared_card_1.mcd."
+    },
+    {
+      "id": "savestates",
+      "class": "state",
+      "default": false,
+      "path": { "win-portable": "savestates", "win-documents": "savestates", "linux-flatpak": "savestates", "linux-native": "savestates", "emudeck": "states" },
+      "target": "savestates",
+      "notes": "Save states: large, and a newer DuckStation may not load an older one."
+    }
+  ],
+  "quirks": [
+    "EmuDeck keeps the cards in Emulation/saves/duckstation/saves and the states in .../states; the folder names differ from the other installs.",
+    "Settings > Folders can move either folder (an existing setup may point both at a synced folder already); Add app follows the default location only.",
+    "Process name for the running check: duckstation-qt-x64-ReleaseLTCG.exe on Windows, duckstation-qt or the AppImage on Linux."
+  ]
+}
