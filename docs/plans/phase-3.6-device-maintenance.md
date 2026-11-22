@@ -475,7 +475,7 @@ Branch `phase-3.6-t7-delete-everything`.
 - Tests: four in `DeviceRemoveTests` (refusal, single flag, run and fresh start, crash state, rename leftover). `dotnet build -warnaserror` clean; 962 tests pass.
 - Hardware check (2026-11-22, commit 1cce15c, CLI on Windows (Debug) and Mint (Release, linux-x64, published from the branch), `home-a` and `home-b` on one scratch sync folder): all four steps passed on both. Refused while b is registered and naming it; the one-flag run refused; after `--other b` the run left an empty sync folder, a's folder real and equal to `before/`, no bootstrap; the put-back bootstrap gave "removal did not finish", and a second run cleared it; `init --create-root` and `map add` left only the new files. `status` of the real setup was the same before and after on both, and the scratch folders and the Mint binary are gone. The step 4 check used `map add`, not `app add`. A first Mint script copied the link, not the files, so its `diff -r` compared nothing; the flow now says `cp -rL`, and a second run showed no difference.
 
-### T8: the app's logic and texts — built, Mint check not run
+### T8: the app's logic and texts — done
 
 Branch `phase-3.6-t8-app-logic`.
 
@@ -484,4 +484,5 @@ Branch `phase-3.6-t8-app-logic`.
 - `Texts.Banner` now has the "Removal not finished" and "removed by <name>" sentences.
 - Decision: the caller (T9) works out `blocker` from the status report and the lock, since the page reads nothing itself.
 - Tests: `MaintenancePageTests`, `RemoveDeviceFlowTests` (synthetic overviews, no disk). `dotnet build -warnaserror` clean; 975 tests pass on Windows.
-- Not done: the Mint run of `--filter "Maintenance|RemoveDevice"`, and the comparison of the shown numbers with `device list --json` (needs a two-home scratch setup on Mint).
+- Review fix: `MaintenancePage.From` (`This` is null) and `DeleteEverythingOption` cope with this device's file being gone (an unfinished removal); T9's screen must handle `This == null`. A failed revert returns an empty `GivenBack`, so its result lists no folders.
+- Hardware check (2026-11-22, commit 7a81d34, Mint, from a `git archive`, scratch under `~/sttest-t8`): `dotnet test --filter "Maintenance|RemoveDevice"` passed (15). Two homes on one sync folder (a: `game.saves` applied with `--copy` and `solo.saves` added then removed; b: `game.saves`): `device list` and `--json` showed 2 devices (1 mapping each), 2 mappings, 1 here and linked, the orphan `solo.saves`, and 1 backup of 4 bytes. The sync folder listing agrees (2 device files, 2 mapping files, 1 marker, `game/saves/f.txt`). `MaintenancePage` shows these same `MaintenanceOverview` fields, which its tests cover. The real setup was never touched (every call had a guarded `SAVETETHER_HOME`); the scratch folder is gone. The apphost needs `DOTNET_ROOT=~/.dotnet` over SSH, and `map add` takes `--target` and `--source`, not a path.
