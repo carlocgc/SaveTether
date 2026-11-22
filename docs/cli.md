@@ -186,7 +186,7 @@ savetether status cemu.save
 savetether device list
 ```
 
-Shows what is in the sync folder and on this device: each device (its last activity, how many mappings it has a save folder for, and which one this is), the mappings (how many have a save folder here, how many are linked here), mappings no device uses, and this device's backups (count and size). It only reads. A mapping no device uses can be cleaned up with `map delete`.
+Shows what is in the sync folder and on this device: each device (its last activity, which is the time of its device file and seed markers as they reached this folder, so a sync tool that does not keep file times shows when they arrived; how many mappings it has a save folder for, and which one this is), the mappings (how many have a save folder here, how many are linked here), mappings no device uses, and this device's backups (count and size). It only reads. A mapping no device uses can be cleaned up with `map delete`.
 
 ```bash
 savetether device list
