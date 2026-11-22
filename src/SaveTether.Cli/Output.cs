@@ -163,7 +163,8 @@ public sealed record DeviceRemovalOutput(
     IReadOnlyList<OrphanRemoval> Orphans,
     IReadOnlyList<string> SharedFiles,
     int BackupsDeleted,
-    string? Other = null);
+    string? Other = null,
+    [property: JsonIgnore] bool DeleteEverything = false);
 
 /// <summary>"uninstall": the paths removed, and each one left with the reason.</summary>
 public sealed record UninstallOutput(IReadOnlyList<string> Removed, IReadOnlyList<string> Left);
@@ -518,6 +519,13 @@ internal static class OutputWriter
         }
 
         stdout.WriteLine(removal.DryRun ? "Would remove this device from the sync folder:" : "Removed this device from the sync folder.");
+        if (removal.DeleteEverything)
+        {
+            stdout.WriteLine(removal.DryRun
+                ? "  The whole SaveTether folder in the sync folder would be deleted: every mapping and shared save. It cannot be undone."
+                : "  The whole SaveTether folder in the sync folder was deleted.");
+        }
+
         if (removal.GivenBack.Count > 0)
         {
             stdout.WriteLine(removal.DryRun

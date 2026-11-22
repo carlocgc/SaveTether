@@ -411,6 +411,15 @@ public sealed partial class Workspace
     {
         if (!Shared.IsInitialized)
         {
+            if (SharedTreeGone)
+            {
+                // Delete everything deleted the shared folder and stopped before the local state: not "sync root unavailable".
+                return new StatusReport(DeviceName, Shared.SyncRoot, DeviceFileMismatch: false, Journal.IsOpen, [])
+                {
+                    Removal = RemovalKind.Unfinished, RemovedBy = DeviceName,
+                };
+            }
+
             var problem = Shared.NotAvailableMessage;
             var recorded = Local.ReadState().Mappings;
             if (mappingId is not null && !recorded.ContainsKey(mappingId))

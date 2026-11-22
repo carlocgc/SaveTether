@@ -151,11 +151,13 @@ internal static class CliApp
           savetether device rename <new-name>
               Give this device a new name, here and in the sync folder.
 
-          savetether device remove [--delete-orphan <mapping>[:saves]]... [--delete-backups] [--confirm-remove]
+          savetether device remove [--delete-orphan <mapping>[:saves]]... [--delete-backups] [--delete-everything] [--confirm-remove] [--confirm-delete]
               Take this device out of the sync folder: linked folders become real folders again, and this
               device's files in the sync folder and its local setup are deleted. Without --confirm-remove
               it asks you to type the device name, or, with no terminal, only lists what it would do.
               --delete-orphan <mapping> deletes a mapping only this device used; with :saves, its shared saves too.
+              --delete-everything also deletes the whole SaveTether folder in the sync folder; refused while another
+              device is registered. It needs --confirm-remove and --confirm-delete, or both phrases typed.
               Run on a device that another device removed, it finishes the removal here.
 
           savetether device remove --other <name> [--confirm-remove]
@@ -632,7 +634,7 @@ internal static class CliApp
         {
             if (command.Value("--other") is { } other)
             {
-                if (command.Has("--delete-backups") || command.Values("--delete-orphan").Any())
+                if (command.Has("--delete-backups") || command.Has("--delete-everything") || command.Has("--confirm-delete") || command.Values("--delete-orphan").Any())
                 {
                     throw new UsageException("'--other' takes no other option than --confirm-remove.");
                 }
@@ -652,8 +654,13 @@ internal static class CliApp
                 orphans[parts[0]] = parts.Length == 2 ? OrphanChoice.DeleteWithSaves : OrphanChoice.DeleteMapping;
             }
 
+            if (command.Has("--confirm-delete") && !command.Has("--delete-everything"))
+            {
+                throw new UsageException("'--confirm-delete' goes with '--delete-everything'.");
+            }
+
             var workspace = Open();
-            var plan = workspace.PlanDeviceRemoval(new RemovalChoices(orphans, command.Has("--delete-backups")));
+            var plan = workspace.PlanDeviceRemoval(new RemovalChoices(orphans, command.Has("--delete-backups"), command.Has("--delete-everything")));
             if (plan.IsRefused)
             {
                 return Failed(ExitRefused, string.Concat(plan.Refusals.Select(r => PlanRenderer.ToText(new PlanOutcome(null, r)))));
@@ -661,7 +668,14 @@ internal static class CliApp
 
             DeviceRemovalOutput Summary(bool dryRun, DeviceRemovalResult? done) => new(
                 dryRun, done?.GivenBack ?? plan.GivenBack, plan.NotLinked, done?.OrphansDeleted ?? plan.Orphans,
-                plan.SharedFiles, done?.BackupsDeleted ?? plan.Backups.Count);
+                plan.SharedFiles, done?.BackupsDeleted ?? plan.Backups.Count, DeleteEverything: plan.DeleteEverything);
+
+            // From a script both flags are needed; at a terminal a typed phrase takes the place of --confirm-delete.
+            var everythingConfirmed = !plan.DeleteEverything || command.Has("--confirm-delete");
+            if (command.Has("--confirm-remove") && !everythingConfirmed && !CanAsk)
+            {
+                return Failed(ExitRefused, "Deleting the SaveTether folder cannot be undone. Add --confirm-delete to go ahead.");
+            }
 
             if (!command.Has("--confirm-remove"))
             {
@@ -674,6 +688,7 @@ internal static class CliApp
                     $"Remove '{workspace.DeviceName}' from the sync folder? {plan.Reverts.Count} linked folder(s) become real folders again, " +
                     $"{plan.SharedFiles.Count} shared file(s) of this device are deleted, and this device's local setup goes. " +
                     (plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves) ? "Shared saves of the mappings named with :saves are deleted. " : string.Empty) +
+                    (plan.DeleteEverything ? "The whole SaveTether folder in the sync folder is deleted too. " : string.Empty) +
                     (plan.DeleteBackups && plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves) ? "The backup taken of them first is deleted too. " : string.Empty) +
                     $"Type the device name '{workspace.DeviceName}' to go ahead: ";
                 if (!string.Equals(Ask(question), workspace.DeviceName, StringComparison.OrdinalIgnoreCase)
@@ -682,6 +697,12 @@ internal static class CliApp
                 {
                     return Failed(ExitRefused, "Cancelled. Nothing was changed.");
                 }
+            }
+
+            if (!everythingConfirmed
+                && !string.Equals(Ask("Type 'delete everything' to delete the whole SaveTether folder in the sync folder (it cannot be undone): "), "delete everything", StringComparison.OrdinalIgnoreCase))
+            {
+                return Failed(ExitRefused, "Cancelled. Nothing was changed.");
             }
 
             var result = workspace.RemoveDevice(plan);
