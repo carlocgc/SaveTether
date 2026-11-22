@@ -216,6 +216,27 @@ public sealed class SharedStore
         JsonFiles.Write(DevicePathOf(device.DeviceName), device, StorageJsonContext.Default.DeviceFile, DeviceFile.CurrentSchema);
     }
 
+    /// <summary>Deletes a device's file, through <see cref="SafeFs.RemoveSharedFile"/>. Nothing else of the device's is touched.</summary>
+    public void DeleteDevice(string deviceName)
+    {
+        RequireInitialized();
+        RequireDeviceName(deviceName);
+        SafeFs.RemoveSharedFile(DataRoot, DevicePathOf(deviceName));
+    }
+
+    /// <summary>Deletes the device's seed marker for the mapping, if it has one.</summary>
+    public void DeleteSeedMarker(string mappingId, string deviceName)
+    {
+        RequireInitialized();
+        RequireMappingId(mappingId);
+        RequireDeviceName(deviceName);
+        var file = Path.Combine(SeedFolderOf(mappingId), deviceName + ".json");
+        if (SafeFs.Probe(file) == EntryKind.File)
+        {
+            SafeFs.RemoveSharedFile(DataRoot, file);
+        }
+    }
+
     /// <summary>All seed markers for a mapping, active or superseded, by device name.</summary>
     public IReadOnlyList<SeedMarker> ReadSeedMarkers(string mappingId)
     {

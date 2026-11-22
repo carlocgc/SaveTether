@@ -193,6 +193,7 @@ public class JsonContractTests
         var moved = Path.Combine(deck.Home, "moved");
         CliDevice.Write(moved, "app.cfg", "config");
         RecordOn(deck, "app-add-conflict", 1, "app", "add", "testapp", "--install-dir", moved);
+        RecordOn(deck, "device-rename", 0, "device", "rename", "deck2");
 
         // Not enough space cannot be staged on a real drive, so the planner's refusal is
         // written the way the CLI writes it.

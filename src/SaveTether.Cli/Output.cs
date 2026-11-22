@@ -126,6 +126,9 @@ internal sealed record CliOutput
     /// <summary>"device list": the devices, the mappings and the backups.</summary>
     public MaintenanceOverview? Devices { get; init; }
 
+    /// <summary>"device rename": the old and the new name.</summary>
+    public RenameResult? Renamed { get; init; }
+
     public IReadOnlyList<OperationOutput>? Operations { get; init; }
 
     public IReadOnlyList<BackupInfo>? Backups { get; init; }
@@ -213,6 +216,13 @@ internal static class OutputWriter
         if (output.Devices is { } overview)
         {
             WriteDevices(overview, stdout);
+        }
+
+        if (output.Renamed is { } renamed)
+        {
+            stdout.WriteLine(renamed.OldName == renamed.NewName
+                ? $"This device is already '{renamed.NewName}'. Any files left by an earlier rename were cleared."
+                : $"Renamed this device from '{renamed.OldName}' to '{renamed.NewName}'.");
         }
 
         foreach (var operation in output.Operations ?? [])

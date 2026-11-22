@@ -405,3 +405,13 @@ Branch `phase-3.6-t2-overview`, commit db48b6e.
 - `device list` (CLI, `--json` as `devices`), in `docs/cli.md`, `docs/cli-json.md`, `json-shapes.txt`. `Tombstoned` is always false until T5.
 - Tests: `DeviceListTests` (counts, orphan, read-only), the contract, the command table. `dotnet build -warnaserror` clean; 920 tests pass.
 - Hardware check (2026-11-22, commit db48b6e, CLI Debug build, `home-a` and `home-b` on one scratch sync folder; `map add` with a plain folder stands in for `app add`, which T2 does not touch): on a, `apply --copy` of one mapping, then a second `map add` and `map remove` to orphan it; b joined. `device list` and `--json` on Windows and on Mint showed 2 devices (1 mapping each), 2 mappings with 1 linked here, the orphan `solo.saves`, and 1 backup. The sync folder listing agrees (2 device files, 2 mapping files, 1 seed marker). Backup bytes are the saved files' size (10 on Windows, with CRLF; 8 on Mint) and match what was written; `du` of the backup root is larger because it counts the manifest (the plan's "match `du`" is read that way; the flow is in `hardware-testing.md`, "Device list"). `status` of the real setup was the same before and after on both, and the scratch folders are gone.
+
+### T3: rename — built, hardware check not run
+
+Branch `phase-3.6-t3-rename` (not committed yet).
+
+- `Core/Operations/Workspace.Device.cs`: `Workspace.RenameDevice(newName)`. Order: write the new device file and marker copies, then `bootstrap.json` (the commit point), then delete every other device file (and its markers) that carries this install's ID. That one sweep serves the normal rename, a rename that stopped after the new files were written, and a rename that stopped after the commit (run again with the name the device already has). `SharedStore.DeleteDevice` and `DeleteSeedMarker` go through `SafeFs.RemoveSharedFile`.
+- Refusals: invalid name, a name whose device file has another install's ID (`NameInUse`), this device's file held by another install, an open journal (`Conflict`, Recover; the CLI answers exit 3 first), a sync root that cannot be read.
+- CLI `device rename <new-name>`, `--json` as `renamed` (`old_name`, `new_name`); `docs/cli.md`, `docs/cli-json.md`, `json-shapes.txt`, command table.
+- Tests: `DeviceRenameTests` (files, bootstrap, health, `device list`; refusals change nothing; both unfinished states). `dotnet build -warnaserror` clean; 924 tests pass.
+- Still to do: the hardware check (Mint and Windows, two homes, as in T3 above).

@@ -417,6 +417,15 @@ $.exit_code: number
 $.schema: number
 $: object
 
+## device-rename
+$.command: string
+$.exit_code: number
+$.renamed.new_name: string
+$.renamed.old_name: string
+$.renamed: object
+$.schema: number
+$: object
+
 ## init
 $.command: string
 $.exit_code: number
