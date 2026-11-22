@@ -204,7 +204,7 @@ Each check of the app ends with a capture (`spectacle -a` on the Deck, `import -
   - the backups' count and size
   The numbers must match `ls -R` of the sync folder and `du` of the backup root.
 
-### T7: delete everything — built, hardware check not run
+### T7: delete everything — done
 
 (see Progress)
 
@@ -466,11 +466,11 @@ Branch `phase-3.6-t3-rename` (not committed yet).
 - A review added: an unreadable device file is skipped by the leftover cleanup (it runs after the commit point and must not stop a re-run), and a test for a sync folder that cannot be reached.
 - Hardware check (2026-11-22, commit 232dca1, CLI on Windows (Debug) and on Mint (Release, linux-x64, built from a `git archive` of the commit, not a clone), `home-a` and `home-b` on one scratch sync folder, a with one applied mapping): `device rename a2` left `devices/a2.json` and `seed/game.saves/a2.json` and no `a.json` under either; `bootstrap.json` says `a2`; `status` on a2 is OK; `device list` from b shows `a2`. Refusals: the name `b` exit 1, `Bad Name` exit 1, an open journal made by hand exit 3. Re-run: with `a3.json` and its marker copied by hand and the bootstrap still on `a2`, `device rename a3` finished with one set of files, and `status` stayed OK. Same results on both. `status` of the real setup was the same before and after on both, and the scratch folders and the Mint build are gone.
 
-### T7: delete everything — built, hardware check not run
+### T7: delete everything — done
 
 Branch `phase-3.6-t7-delete-everything`.
 - `RemovalChoices.DeleteEverything`; `device remove --delete-everything` with `--confirm-remove` and `--confirm-delete` (both needed from a script; at a terminal the name, then `delete everything`). The plan is refused, naming them, while a device file with another install's ID exists; the run checks again before the tree delete. The tree delete (`SafeFs.DeleteTree` of `<sync root>/savetether`, `ExplicitlyConfirmed`) comes after the shared files and backups, before the local state.
 - Unfinished state: `Workspace.SharedTreeGone` (sync root readable, no `savetether/` folder, nothing linked in `state.json`). `Status` then reports `Removal = Unfinished`, and `device remove` run again skips every shared step and deletes only the local files.
 - Decisions: no new `--json` field (the contract is unchanged). No fault-injection seam was added for the tree delete: the tests reproduce the state a crash leaves (the bootstrap put back after the run), as the hardware step 3 does. Not checked: a crash part way through the tree delete. If `.savetether` is already gone but other files of `savetether/` remain, `SharedTreeGone` is false (the folder is there), so `status` says the sync folder is not set up and a re-run fails; the owner must delete the leftover folder by hand. A known gap.
 - Tests: four in `DeviceRemoveTests` (refusal, single flag, run and fresh start, crash state, rename leftover). `dotnet build -warnaserror` clean; 962 tests pass.
-- Hardware check (Mint and Windows) not run.
+- Hardware check (2026-11-22, commit 1cce15c, CLI on Windows (Debug) and Mint (Release, linux-x64, published from the branch), `home-a` and `home-b` on one scratch sync folder): all four steps passed on both. Refused while b is registered and naming it; the one-flag run refused; after `--other b` the run left an empty sync folder, a's folder real and equal to `before/`, no bootstrap; the put-back bootstrap gave "removal did not finish", and a second run cleared it; `init --create-root` and `map add` left only the new files. `status` of the real setup was the same before and after on both, and the scratch folders and the Mint binary are gone. The step 4 check used `map add`, not `app add`. A first Mint script copied the link, not the files, so its `diff -r` compared nothing; the flow now says `cp -rL`, and a second run showed no difference.

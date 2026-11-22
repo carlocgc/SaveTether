@@ -201,6 +201,16 @@ Mint (and Windows), CLI only. The same two homes as "Device remove", one sync fo
 3. Put the saved `devices/a.json` back: `status` and `device list` on b flag it ("came back", "(removed)").
 4. Make an unfinished removal: copy `bootstrap.json` aside, run `device remove --confirm-remove`, put the copy back. `status` says the removal did not finish; `device remove --confirm-remove` again deletes the bootstrap.
 
+### Device remove: delete everything (CLI)
+
+Mint and Windows, CLI only. The same two homes as "Device remove", one sync folder, `game.saves` applied on a (`--copy`) and added on b. Copy a's source folder to `before/` with `cp -rL` (a plain `cp -r` copies the link, not the files, and the later `diff -r` then compares nothing). Then:
+1. `device remove --delete-everything --confirm-remove --confirm-delete` on a: exit 1, names b, nothing changed. `device remove --other b --delete-everything` exits 64.
+2. `--other b --confirm-remove`. Then with `--confirm-remove` alone: exit 1. The dry run says the whole folder would go. With both flags: `savetether/` is gone (the sync folder is empty), a's source folder is real and `diff -r` against `before/` shows nothing, no `bootstrap.json`.
+3. Set a up again (`init --create-root`, `map add`, `apply --copy`), copy `bootstrap.json` aside, run it, put the copy back. `status` says the removal did not finish (exit 0, as a warning); the same command again leaves no bootstrap.
+4. `init --create-root` and `map add` on the same sync folder: `find` shows only the new files.
+
+On Mint, build the CLI from the branch with `dotnet publish ... -o ~/sttest-t7/cli` and check `status` of the real setup before and after in a fresh shell. The Mint clone is on another branch: put it back after.
+
 ### Start with the session
 
 Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME` to a folder under the scratch area in the environment file, check it in the same `case` as `SAVETETHER_HOME`, and pass it to `systemd-run` with `-E XDG_CONFIG_HOME`. List `~/.config/autostart` before and after, and compare. On Windows the switch writes the real Run value: test it only with the owner's leave, and check `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` before and after.
