@@ -240,8 +240,9 @@ public class AppAddCliTests
         var json = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu", "--json").Json();
 
         Assert.Equal("not-installed", json.GetProperty("app").GetProperty("problem").GetString());
-        var candidate = json.GetProperty("app").GetProperty("candidates")[0];
-        Assert.Equal("linux-native", candidate.GetProperty("id").GetString());
+        var candidates = json.GetProperty("app").GetProperty("candidates").EnumerateArray().ToList();
+        Assert.Equal(["linux-flatpak", "linux-native"], candidates.Select(c => c.GetProperty("id").GetString()));
+        var candidate = candidates.Single(c => c.GetProperty("id").GetString() == "linux-native");
         Assert.Contains("No folder at", candidate.GetProperty("reason").GetString(), StringComparison.Ordinal);
         Assert.Equal(before, DeviceFile(deck).ToString());
         Assert.False(MappingExists(deck, "cemu.save"));
