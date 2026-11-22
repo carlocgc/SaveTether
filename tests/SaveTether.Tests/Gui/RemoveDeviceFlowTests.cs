@@ -78,4 +78,24 @@ public class RemoveDeviceFlowTests
             Assert.NotEmpty(RemoveDeviceFlow.OrphanLabel(choice));
         }
     }
+
+    [Fact]
+    public void Delete_everything_is_judged_by_the_other_devices_when_this_ones_file_is_gone()
+    {
+        var gone = RemoveDeviceFlow.DeleteEverythingOption(MaintenancePageTests.Overview(MaintenancePageTests.Device("pc")));
+
+        Assert.False(gone.Offered);
+        Assert.True(RemoveDeviceFlow.DeleteEverythingOption(MaintenancePageTests.Overview()).Offered);
+    }
+
+    [Fact]
+    public void A_failed_revert_lists_no_folders_and_says_nothing_shared_was_deleted()
+    {
+        var failure = new SaveTether.Core.Execution.ExecutionResult(SaveTether.Core.Execution.ExecutionStatus.RolledBack, null, null, [], []);
+
+        var (text, details) = RemoveDeviceFlow.Result(new DeviceRemovalResult([], [], 0, failure));
+
+        Assert.Contains("nothing in the sync folder was deleted", text);
+        Assert.Empty(details);
+    }
 }

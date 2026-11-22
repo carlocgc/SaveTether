@@ -46,7 +46,7 @@ public static class RemoveDeviceFlow
     public static (bool Offered, string? Reason) DeleteEverythingOption(MaintenanceOverview overview)
     {
         ArgumentNullException.ThrowIfNull(overview);
-        var id = overview.Devices.Single(d => d.IsThisDevice).InstallId;
+        var id = overview.Devices.SingleOrDefault(d => d.IsThisDevice)?.InstallId;
         var others = overview.Devices.Count(d => !d.IsThisDevice && d.InstallId != id);
         return others == 0
             ? (true, null)

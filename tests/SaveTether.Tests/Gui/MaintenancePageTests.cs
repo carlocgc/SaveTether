@@ -24,13 +24,22 @@ public class MaintenancePageTests
         Assert.Contains("Orphaned mappings: 1", view.OverviewLines);
         Assert.Contains("Mappings this device uses: 1, 1 linked here", view.OverviewLines);
         Assert.StartsWith("Backups: 2, ", view.OverviewLines[^1]);
-        Assert.Equal(MaintenancePage.RemoveThisDeviceOnly, view.This.RemoveDisabled);
+        Assert.Equal(MaintenancePage.RemoveThisDeviceOnly, view.This!.RemoveDisabled);
         Assert.Equal(2, view.Others.Count);
         Assert.All(view.Others, o => Assert.Null(o.RemoveDisabled));
         Assert.Equal("3 hours ago", view.Others[0].Activity);
         Assert.Null(view.Others[0].Note);
         Assert.Equal(MaintenancePage.ReturnedNote, view.Others[1].Note);
         Assert.Equal("c.saves", Assert.Single(view.Orphans).MappingId);
+    }
+
+    [Fact]
+    public void A_missing_own_device_file_gives_no_this_row_and_does_not_throw()
+    {
+        var view = MaintenancePage.From(Overview(Device("pc")), null, Now);
+
+        Assert.Null(view.This);
+        Assert.Single(view.Others);
     }
 
     [Fact]

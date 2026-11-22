@@ -13,9 +13,9 @@ public sealed record DeviceRow(string Name, string InstallId, bool IsThisDevice,
 /// <summary>One orphaned mapping, with why its actions are disabled, if they are.</summary>
 public sealed record OrphanRow(string MappingId, string? Disabled);
 
-/// <summary>What the Maintenance screen shows, from the core's overview. Reads nothing itself.</summary>
+/// <summary>What the Maintenance screen shows, from the core's overview. Reads nothing itself. <c>This</c> is null when this device's file is gone (a removal that did not finish).</summary>
 public sealed record MaintenanceView(
-    IReadOnlyList<string> OverviewLines, DeviceRow This, IReadOnlyList<DeviceRow> Others, IReadOnlyList<OrphanRow> Orphans, string? Blocker);
+    IReadOnlyList<string> OverviewLines, DeviceRow? This, IReadOnlyList<DeviceRow> Others, IReadOnlyList<OrphanRow> Orphans, string? Blocker);
 
 /// <summary>The Maintenance screen's rows and texts, and the checks behind its text dialogs.</summary>
 public static class MaintenancePage
@@ -35,7 +35,7 @@ public static class MaintenancePage
     {
         ArgumentNullException.ThrowIfNull(overview);
         var clock = now ?? DateTimeOffset.UtcNow;
-        var self = overview.Devices.Single(d => d.IsThisDevice);
+        var self = overview.Devices.SingleOrDefault(d => d.IsThisDevice);
         var lines = new List<string>
         {
             $"Sync folder: {overview.SyncRoot}",
@@ -54,7 +54,7 @@ public static class MaintenancePage
             d.IsThisDevice ? RemoveThisDeviceOnly : blocker);
         return new MaintenanceView(
             lines,
-            Row(self),
+            self is null ? null : Row(self),
             overview.Devices.Where(d => !d.IsThisDevice).Select(Row).ToList(),
             overview.Orphans.Select(o => new OrphanRow(o, blocker)).ToList(),
             blocker);
