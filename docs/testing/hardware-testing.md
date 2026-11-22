@@ -216,6 +216,7 @@ Build the CLI on Mint from the branch, copy it to the device, and with a throwaw
 
 - `{emudeck}` reads the Emulation folder from `~/.config/EmuDeck/settings.sh`: on the Deck it is on the SD card (`/run/media/deck/<uuid>/Emulation`), not `~/Emulation`. A scratch `HOME` hides that file, so EmuDeck installs are tried with the real `HOME` (the dry run only reads).
 - Read the emulator's own settings first: on the Deck several emulators point their folders at `~/Sync/...` by hand, so the default folders there hold nothing or old files.
+- EmuDeck's `Emulation/saves/<emulator>/saves` is sometimes only a symlink into `Emulation/storage/<emulator>` (Azahar, xemu). `ls -la` it before writing an install: the definition names the real folder, not the link.
 
 ### Add a folder by hand
 
