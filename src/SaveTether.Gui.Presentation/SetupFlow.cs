@@ -66,6 +66,12 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
 {
     public const string NameRule = "Lowercase letters, digits, '-' and '_', starting with a letter or digit; up to 40 characters.";
 
+    /// <summary>Step 1's sentence. Windows leaves out a network share, which setup refuses there: junctions only point to local drives (docs/sharing.md).</summary>
+    public static string SyncFolderIntro { get; } =
+        "Where SaveTether keeps the folders you share. Each app's folder is kept in a folder of its own here, with a link left in its place. " +
+        "To share them between devices, choose a folder your sync tool keeps the same on all of them: " +
+        (OperatingSystem.IsWindows() ? "Syncthing, OneDrive or Nextcloud." : "Syncthing, OneDrive, Nextcloud or a network share.");
+
     public const string FirstDeviceWarning =
         "Only do this on the first device. If SaveTether is set up on another device, wait until the sync tool has delivered " +
         "the SaveTether folder here instead; setting it up twice creates two separate setups.";

@@ -71,9 +71,7 @@ internal sealed class SetupView : UserControl
         };
 
         _page.Content = Page(
-            "Where SaveTether keeps the folders you share. Each app's folder is kept in a SaveTether folder here, with a link left in its place. To share them between devices, choose a folder your sync tool keeps the same on all of them: " +
-            // Windows refuses a network share: junctions only point to local drives (docs/sharing.md).
-            (OperatingSystem.IsWindows() ? "Syncthing, OneDrive or Nextcloud." : "Syncthing, OneDrive, Nextcloud or a network share."),
+            SetupFlow.SyncFolderIntro,
             error,
             path.Row,
             finding,
