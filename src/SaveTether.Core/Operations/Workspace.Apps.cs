@@ -320,6 +320,17 @@ public sealed partial class Workspace
                     candidates);
             }
 
+            // The store refuses this on write; the plan says so first, so a dry run tells the truth.
+            if (mapping is null
+                && Shared.ListMappings().FirstOrDefault(m => string.Equals(m.Target, target, StringComparison.OrdinalIgnoreCase)) is { } taken)
+            {
+                var how = taken.Target == target ? "the same target" : "a target that differs only by letter case";
+                return AppAddOutcome.RefuseConflict(
+                    $"Mapping '{taken.Id}' already uses {how} ('{taken.Target}'). On Windows the two would be one folder.",
+                    new ConflictFacts(ConflictKind.TargetInUse, taken.Id, Target: taken.Target),
+                    candidates);
+            }
+
             if (device.Paths.TryGetValue(mappingId, out var current) && !PathRules.AreSame(current.Source, source) && IsLink(current.Source))
             {
                 return AppAddOutcome.RefuseConflict(

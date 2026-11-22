@@ -644,6 +644,28 @@ public class AppAddCliTests
     // ---- Dry run and file formats ----
 
     [Fact]
+    public void A_dry_run_refuses_a_role_whose_target_another_mapping_uses()
+    {
+        // Found on the Deck, 2026-11-22: the dry run showed "(new mapping)" where the real add refused.
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        var save = Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save");
+        Directory.CreateDirectory(save);
+        deck.Ok("map", "add", "cemu.hand", "--target", "cemu/save", "--source", Path.Combine(deck.Home, "elsewhere"));
+
+        var dry = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu", "--dry-run");
+        var real = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu");
+
+        const string Message = "Mapping 'cemu.hand' already uses the same target ('cemu/save'). On Windows the two would be one folder.";
+        Assert.Contains(Message, dry.Err, StringComparison.Ordinal);
+        Assert.Contains(Message, real.Err, StringComparison.Ordinal);
+        var app = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu", "--dry-run", "--json").Json().GetProperty("app");
+        Assert.Equal("conflict", app.GetProperty("problem").GetString());
+        Assert.Equal("target-in-use", app.GetProperty("conflict").GetProperty("kind").GetString());
+        Assert.False(MappingExists(deck, "cemu.save"));
+    }
+
+    [Fact]
     public void A_dry_run_writes_nothing()
     {
         using var sandbox = new Sandbox();

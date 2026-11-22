@@ -137,6 +137,8 @@ Adds an app from its definition: finds its install on this device, shows its sav
 
 The three path options give what cannot be found by looking. They are remembered for this device, so running `app add` again later, with a new path, follows a moved install.
 
+`--dry-run` refuses what the real add would refuse, with the same message and exit code: for example a role whose new mapping would use a target another mapping already has.
+
 Definitions come from `<sync root>/savetether/.savetether/definitions/<app>.jsonc` first, then those built in. Only Cemu is built in so far. A shared definition reaches every device through the sync tool. The format is in the [design, section 5.2](design/save-redirection-design.md).
 
 ```bash
