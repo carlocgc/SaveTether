@@ -47,10 +47,10 @@ internal sealed class Overlay : Panel
 
     /// <summary>
     /// Asks for a line of text (desktop-app-spec.md, "Maintenance"): answers the text, trimmed, or null when cancelled. The confirm button
-    /// is disabled while <paramref name="problem"/> answers a message, which is shown under the box. Enter does not confirm and Escape
-    /// cancels. Focus starts in the box: the one exception to "focus on the safe choice", since typing cannot confirm by itself.
+    /// is disabled while <paramref name="problem"/> answers a message, which is shown under the box. Enter does not confirm; Escape
+    /// cancels, and so does <paramref name="timeout"/> when given (an operation holding the lock passes one). Focus starts in the box: the one exception to "focus on the safe choice", since typing cannot confirm by itself.
     /// </summary>
-    public async Task<string?> AskTextAsync(string title, string text, string confirmLabel, Func<string, string?> problem, bool danger = false, string initial = "")
+    public async Task<string?> AskTextAsync(string title, string text, string confirmLabel, Func<string, string?> problem, bool danger = false, string initial = "", TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(problem);
         var box = new TextBox { Text = initial, MinWidth = 320, AcceptsReturn = false };
@@ -72,7 +72,7 @@ internal sealed class Overlay : Panel
         box.TextChanged += (_, _) => Check();
         Check();
         var entry = new StackPanel { Spacing = 6, Children = { box, message } };
-        var pressed = await ShowAsync(title, Body(text, entry), [cancel, confirm], cancel, focus: box);
+        var pressed = await ShowAsync(title, Body(text, entry), [cancel, confirm], cancel, timeout, box);
         return pressed == confirm ? (box.Text ?? string.Empty).Trim() : null;
     }
 

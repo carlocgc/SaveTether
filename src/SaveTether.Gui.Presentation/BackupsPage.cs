@@ -160,14 +160,6 @@ public static class BackupsPage
         return $"The save folder is put back as it was on {row.When} ({row.Reason}).";
     }
 
-    /// <summary>Listing backups checks no processes.</summary>
-    private sealed class NoProcesses : Core.Planning.IProcessLister
-    {
-        public static readonly NoProcesses Instance = new();
-
-        public IReadOnlyList<string> RunningProcessNames() => [];
-    }
-
     private static bool IsOfShared(string sourcePath, string resolvedSyncRoot)
     {
         try

@@ -593,7 +593,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 var text = $"{BackupCleanupTexts.Describe(mode, scope)}\n\nThis deletes {BackupCleanupTexts.Count(found.Count)} ({ActionTexts.Size(found.Sum(b => b.TotalBytes))}).";
                 var all = mode == BackupCleanup.All;
                 if (!await overlay.ConfirmAsync(BackupCleanupTexts.Label(mode) + "?", text, all ? "Continue" : "Delete", Overlay.OperationDialogTimeout, danger: all)
-                    || (all && await overlay.AskTextAsync("Delete all backups", BackupCleanupTexts.Describe(mode, scope), "Delete all backups", typed => MaintenancePage.TypedPhraseProblem(typed, BackupCleanupTexts.AllPhrase), danger: true) is null))
+                    || (all && await overlay.AskTextAsync("Delete all backups", BackupCleanupTexts.Describe(mode, scope), "Delete all backups", typed => MaintenancePage.TypedPhraseProblem(typed, BackupCleanupTexts.AllPhrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null))
                 {
                     return;
                 }
@@ -639,7 +639,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                     var asking = phrase == MaintenancePage.DeleteEverythingPhrase
                         ? "This deletes saves from the sync folder for every device."
                         : string.Join("\n", RemoveDeviceFlow.PlanLines(plan));
-                    if (await overlay.AskTextAsync($"Type {phrase} to confirm", asking, "Continue", typed => MaintenancePage.TypedPhraseProblem(typed, phrase), danger: true) is null)
+                    if (await overlay.AskTextAsync($"Type {phrase} to confirm", asking, "Continue", typed => MaintenancePage.TypedPhraseProblem(typed, phrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null)
                     {
                         return;
                     }

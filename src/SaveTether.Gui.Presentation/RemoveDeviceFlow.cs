@@ -42,7 +42,7 @@ public static class RemoveDeviceFlow
     public static Start Load(LocalStore local)
     {
         ArgumentNullException.ThrowIfNull(local);
-        var workspace = Workspace.Open(local, new NoProcesses());
+        var workspace = Workspace.Open(local, NoProcesses.Instance);
         var plan = workspace.PlanDeviceRemoval(new RemovalChoices());
         // After Delete everything's tree delete the overview cannot be read: there is nothing left to delete, so the option is not offered.
         (bool Offered, string? Reason) option;
@@ -61,7 +61,7 @@ public static class RemoveDeviceFlow
     public static PlanView ViewPlan(LocalStore local, RemovalChoices choices)
     {
         ArgumentNullException.ThrowIfNull(local);
-        var workspace = Workspace.Open(local, new NoProcesses());
+        var workspace = Workspace.Open(local, NoProcesses.Instance);
         var plan = workspace.PlanDeviceRemoval(choices);
         return plan.IsRefused ? new PlanView(Refusals(plan, id => NamesOf(workspace, id)), true) : new PlanView(PlanLines(plan), false);
     }
@@ -72,11 +72,6 @@ public static class RemoveDeviceFlow
         ArgumentNullException.ThrowIfNull(workspace);
         var dot = mappingId.IndexOf('.', StringComparison.Ordinal);
         return dot < 0 ? (mappingId, mappingId) : (mappingId[(dot + 1)..], AppNames.Resolve(workspace.Definitions, mappingId[..dot]).Name);
-    }
-
-    private sealed class NoProcesses : IProcessLister
-    {
-        public IReadOnlyList<string> RunningProcessNames() => [];
     }
 
     public static string RemovedByBanner(string by) => $"This device was removed from the sync folder by {by}.";

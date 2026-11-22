@@ -72,7 +72,7 @@ public static class MaintenancePage
     public static Loaded Load(LocalStore local)
     {
         ArgumentNullException.ThrowIfNull(local);
-        var workspace = Workspace.Open(local, new NoProcesses());
+        var workspace = Workspace.Open(local, NoProcesses.Instance);
         var journal = workspace.Journal.IsOpen;
         var locked = OperationLock.HeldByAnotherProcess(local) is not null;
         MaintenanceOverview? overview = null;
@@ -87,11 +87,6 @@ public static class MaintenancePage
 
         var blocker = Blocker(journal, locked, overview is not null);
         return new Loaded(overview, overview is null ? null : From(overview, blocker), workspace.DeviceName, workspace.Bootstrap.InstallId, blocker);
-    }
-
-    private sealed class NoProcesses : IProcessLister
-    {
-        public IReadOnlyList<string> RunningProcessNames() => [];
     }
 
     /// <summary>"3 hours ago", in the coarsest unit that is not zero.</summary>

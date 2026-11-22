@@ -3,6 +3,7 @@ using SaveTether.Core.Backup;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Storage;
+using SaveTether.Gui.Presentation;
 using SaveTether.Core.Execution;
 using SaveTether.Core.Planning;
 using SaveTether.Tests.Execution;
@@ -239,6 +240,44 @@ public sealed class DeviceRemoveTests : IDisposable
         var overview = Maintenance.Overview(Open(pc));
         Assert.DoesNotContain(overview.Devices, d => d.IsThisDevice);
         Assert.Equal(["deck"], overview.Devices.Select(d => d.Name));
+    }
+
+    [Fact]
+    public void Maintenance_loads_with_the_journal_as_its_blocker()
+    {
+        var (pc, _) = Devices();
+        var local = new LocalStore(pc.LocalFolder);
+        Assert.Null(MaintenancePage.Load(local).Blocker);
+
+        var journal = Path.Combine(pc.LocalFolder, "journal.json");
+        File.WriteAllText(journal, "{}");
+        Assert.Equal(MaintenancePage.BlockedByJournal, MaintenancePage.Load(local).Blocker);
+        File.Delete(journal);
+        Assert.Null(MaintenancePage.Load(local).Blocker);
+    }
+
+    [Fact]
+    public void The_remove_screen_loads_its_choices_and_a_device_another_one_removed()
+    {
+        var (pc, deck) = Devices();
+        var start = RemoveDeviceFlow.Load(new LocalStore(pc.LocalFolder));
+        Assert.Equal("pc", start.DeviceName);
+        Assert.Contains(Solo, start.Orphans);
+        Assert.False(start.DeleteEverything.Offered); // the deck uses this sync folder too
+
+        deck.Ok("device", "remove", "--other", "pc", "--confirm-remove");
+        deck.DeliverTo(pc, mirror: true);
+        var removed = RemoveDeviceFlow.Load(new LocalStore(pc.LocalFolder)); // this device's file is gone: still loads
+        Assert.Equal("pc", removed.DeviceName);
+    }
+
+    [Fact]
+    public void Names_of_a_mapping_in_a_refusal_come_from_its_id()
+    {
+        var (pc, _) = Devices();
+        var workspace = Open(pc);
+        Assert.Equal("saves", RemoveDeviceFlow.NamesOf(workspace, Solo).Role);
+        Assert.Equal(("odd", "odd"), RemoveDeviceFlow.NamesOf(workspace, "odd")); // no dot: the id stands for both
     }
 
     private sealed class NoProcesses : IProcessLister
