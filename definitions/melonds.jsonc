@@ -1,0 +1,42 @@
+// melonDS (Nintendo DS emulator). Shipped with SaveTether. Only EmuDeck's install has a fixed save folder: elsewhere melonDS keeps each
+// .sav beside its ROM unless Settings > Path settings names a folder, so those installs are left to "Add a folder by hand". The EmuDeck
+// folders come from EmuDeck's own melonDS script (read on the owner's Steam Deck, 2026-11-22). Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "melonds",
+  "name": "melonDS",
+  "kind": "emulator",
+  "tier": "verified",
+  "tested_on": ["Steam Deck, EmuDeck paths (dry run; the folder was absent there)"],
+  "installs": [
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/saves/melonds/saves" },
+      "base": "{emudeck}/saves/melonds"
+    }
+  ],
+  "roles": [
+    {
+      "id": "saves",
+      "class": "save",
+      "default": true,
+      "path": "saves",
+      "target": "saves",
+      "notes": "Game saves: one .sav per game."
+    },
+    {
+      "id": "savestates",
+      "class": "state",
+      "default": false,
+      "path": "states",
+      "target": "savestates",
+      "notes": "Save states: .ml1 to .ml8 per game; a newer melonDS may not load an older one."
+    }
+  ],
+  "quirks": [
+    "Outside EmuDeck, melonDS saves beside each ROM by default. Set Settings > Path settings > Save files to a folder, then add that folder by hand.",
+    "EmuDeck installs the Flatpak (net.kuribo64.melonDS) and points its save and state folders at Emulation/saves/melonds/saves and .../states.",
+    "Process name for the running check: melonDS.exe on Windows, melonDS on Linux (the Flatpak runs it too)."
+  ]
+}
