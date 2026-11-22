@@ -58,7 +58,7 @@ The overall state is computed from one `Status()` report plus the journal, the l
 
 Minimum 800 × 560, designed for 1280 × 800 (the Deck's screen) at 100 % scaling, base text 15 px.
 
-- **Header**: device name, sync folder path, the overall state word with its icon, "Check now", and the time of the last check.
+- **Header**: device name, sync folder path, the overall state word with its icon, "Check now", and the time of the last check. *As built (2026-11-22), asked for by the owner:* while the device is not set up, "Check now" and the time are hidden: there is nothing to check yet, and showing the window checks anyway. Setup's step 1 says what the sync folder is for (each app's folder is kept there, with a link left in its place) before asking for one a sync tool keeps the same on every device; on Windows it does not suggest a network share, which setup refuses there (`docs/sharing.md`).
 - **Banners**: zero or more, below the header, in the order of section 3's table. Each says what is wrong in one sentence and has its actions as buttons.
 - **Pages**, as a tab strip under the banners: **Apps** (default), **Backups**, **Settings**. Ctrl+1, Ctrl+2, Ctrl+3 switch pages; the tab strip is also reachable with Tab.
 - **Dialogs** are overlays over the page, with the page dimmed and not focusable underneath.

@@ -71,7 +71,7 @@ internal sealed class SetupView : UserControl
         };
 
         _page.Content = Page(
-            "The folder your sync tool keeps in step on every device: Syncthing's folder, a OneDrive or Nextcloud folder, a share.",
+            SetupFlow.SyncFolderIntro,
             error,
             path.Row,
             finding,
