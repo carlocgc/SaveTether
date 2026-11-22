@@ -282,10 +282,20 @@ public sealed class SharedStore
         var newest = new DateTimeOffset(File.GetLastWriteTimeUtc(DevicePathOf(deviceName)), TimeSpan.Zero);
         foreach (var id in mappingIds)
         {
-            var marker = ReadSeedMarkers(id).FirstOrDefault(m => m.DeviceName == deviceName);
-            if (marker is not null && marker.SeededUtc > newest)
+            var file = Path.Combine(SeedFolderOf(id), deviceName + ".json");
+            if (SafeFs.Probe(file) != EntryKind.File)
             {
-                newest = marker.SeededUtc;
+                continue;
+            }
+
+            try
+            {
+                var seeded = JsonFiles.Read(file, StorageJsonContext.Default.SeedMarker, SeedMarker.CurrentSchema).SeededUtc;
+                newest = seeded > newest ? seeded : newest;
+            }
+            catch (StoreException)
+            {
+                // Only the device's own marker is read, and an unreadable one just adds nothing: the time is advisory.
             }
         }
 

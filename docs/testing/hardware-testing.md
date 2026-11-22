@@ -179,6 +179,10 @@ A throwaway device whose apply replaced a shared copy, so it has a backup of eac
 - Delete on the first backup (`*`): the confirmation warns that it is usually the only copy from before SaveTether, and its button reads "Delete the first backup". Cancel keeps it. Delete on a later backup: its folder under the backup location is gone, and the list is read again.
 - The CLI: `backup delete <id>` with standard input not a terminal is refused, naming `--confirm-delete`. At a terminal it asks; to answer from a script over SSH, run it under `script -qc "<command>" /dev/null <<< "yes"`, which gives it a terminal. And with `set -e` in a script, an expected refusal (exit 1) ends the script: leave `set -e` out of steps that test refusals.
 
+### Device list (CLI)
+
+Mint and Windows, CLI only. Set up two local folders, `home-a` and `home-b`, as two devices on one scratch sync folder (a guarded `SAVETETHER_HOME` for each, `--backup-root` under the scratch folder). On a: `init --create-root`, `map add` and `apply --copy` for one mapping, then `map add` and `map remove` for a second, which leaves it with no device using it. On b: `init`, `map add` of the first mapping. From a, `device list` and `device list --json` must show 2 devices, the shared mapping linked here, the one orphan, and the backups. Compare with `find` (or `Get-ChildItem -Recurse`) of the sync folder. `backup_bytes` is the size of the saved files; `du` of the backup root is larger because it also counts each backup's manifest. Compare `savetether status` of the real setup before and after, in a fresh shell, and remove the scratch folders.
+
 ### Start with the session
 
 Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME` to a folder under the scratch area in the environment file, check it in the same `case` as `SAVETETHER_HOME`, and pass it to `systemd-run` with `-E XDG_CONFIG_HOME`. List `~/.config/autostart` before and after, and compare. On Windows the switch writes the real Run value: test it only with the owner's leave, and check `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` before and after.
