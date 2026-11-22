@@ -59,7 +59,7 @@ internal sealed class MaintenanceScreen : UserControl, IScreen
 
     private void Show(MaintenancePage.Loaded loaded)
     {
-        var page = new StackPanel { Spacing = 8, MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Left };
+        var page = new StackPanel { Spacing = 8 };
         if (loaded.View is not { } view)
         {
             page.Children.Add(new TextBlock { Text = loaded.Blocker ?? MaintenancePage.BlockedBySyncRoot, TextWrapping = TextWrapping.Wrap });

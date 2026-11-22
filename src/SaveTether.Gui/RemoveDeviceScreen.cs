@@ -55,7 +55,7 @@ internal sealed class RemoveDeviceScreen : UserControl, IScreen
             return;
         }
 
-        var page = new StackPanel { Spacing = 10, MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Left };
+        var page = new StackPanel { Spacing = 10 };
         page.Children.Add(new TextBlock { Text = $"Remove '{start.DeviceName}' from the sync folder. {RemoveDeviceFlow.Stays}", TextWrapping = TextWrapping.Wrap });
 
         var combos = new List<ComboBox>();
@@ -126,7 +126,7 @@ internal sealed class RemoveDeviceScreen : UserControl, IScreen
             view = new RemoveDeviceFlow.PlanView([e.Message], true);
         }
 
-        var page = new StackPanel { Spacing = 6, MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Left };
+        var page = new StackPanel { Spacing = 6 };
         page.Children.Add(new TextBlock { Text = view.Refused ? "Nothing can be removed yet:" : "This is what will happen:", FontWeight = FontWeight.SemiBold });
         foreach (var line in view.Lines)
         {
