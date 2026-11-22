@@ -120,7 +120,9 @@ jobs:
             # linked and backed up, so the changed lines are listed here (cut short to fit the body's size limit).
             echo "Changed definitions: \`<\` removed, \`>\` added (lines cut to 150 characters; the first 300 are shown)."
             echo '```diff'
-            { diff "$RUNNER_TEMP/old.jsonl" "$RUNNER_TEMP/new.jsonl" || true; } | cut -c1-150 | head -n 300
+            # Through a file, and head first: a pipe closed early by head would kill cut, and pipefail would fail the step.
+            diff "$RUNNER_TEMP/old.jsonl" "$RUNNER_TEMP/new.jsonl" > "$RUNNER_TEMP/changes.diff" || true
+            head -n 300 "$RUNNER_TEMP/changes.diff" | cut -c1-150
             echo '```'
             echo
             echo "Check the counts against the previous run before merging. CI for a pull request created by a workflow waits for approval: select **Approve workflows to run** when GitHub shows that prompt."

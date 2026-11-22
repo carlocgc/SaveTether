@@ -73,7 +73,7 @@ public class PrecheckTests
     public void The_home_folder_or_a_folder_holding_it_is_not_a_save_folder()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        foreach (var broad in new[] { home, Path.GetDirectoryName(home)! })
+        foreach (var broad in new[] { home, Path.GetDirectoryName(home) }.OfType<string>())
         {
             Assert.Equal([PrecheckKind.SourceUnusable], Failures(Snap.WithLocalSaves() with { ResolvedSource = broad }));
         }
