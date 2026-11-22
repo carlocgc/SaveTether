@@ -73,6 +73,14 @@ public class AppAddCliTests
             var entry = new DefinitionCatalog(null).Find(id)!;
             Assert.True(entry.IsValid, string.Join("\n", entry.Errors));
             Assert.Equal(DefinitionSource.BuiltIn, entry.Source);
+
+            // One role's folder inside another's would put a link inside a linked folder.
+            foreach (var install in entry.Definition!.Installs)
+            {
+                var paths = entry.Definition.Roles.Where(r => r.Paths.ContainsKey(install.Id)).Select(r => r.Paths[install.Id] + "/").ToList();
+                var nested = paths.SelectMany(a => paths.Where(b => a != b && b.StartsWith(a, StringComparison.OrdinalIgnoreCase)).Select(b => $"{b} is inside {a}"));
+                Assert.True(!nested.Any(), $"{id} ({install.Id}): {string.Join(", ", nested)}");
+            }
         }
     }
 

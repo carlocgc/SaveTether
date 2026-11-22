@@ -42,15 +42,16 @@
       "path": "nand/user/save",
       "target": "save",
       "entry_depth": 3,
-      "notes": "Game saves: 0000000000000000/<profile ID>/<title ID>. A game finds its save only under the same profile ID on every device."
+      "ignore": ["cache"],
+      "notes": "Game saves: 0000000000000000/<profile ID>/<title ID>. A game finds its save only under the same profile ID on every device. The cache folder here is the emulator's own and need not sync."
     },
     {
-      "id": "profiles",
+      "id": "nand-system",
       "class": "system",
       "default": false,
-      "path": "nand/system/save/8000000000000010",
-      "target": "profiles",
-      "notes": "The user profiles and their pictures. Share them so every device has the same profile ID, which names the saves folder."
+      "path": "nand/system",
+      "target": "system",
+      "notes": "The emulated system memory: user profiles (share them so every device has the same profile ID, which names the saves folder), system saves and the installed firmware."
     },
     {
       "id": "play_time",
@@ -91,14 +92,6 @@
       "path": { "win-portable": "keys", "win-appdata": "keys", "linux-native": "keys" },
       "target": "keys",
       "notes": "Keys dumped from your own console (prod.keys, title.keys). Not for EmuDeck, which keeps them in ~/.local/share/yuzu."
-    },
-    {
-      "id": "firmware",
-      "class": "system",
-      "default": false,
-      "path": "nand/system/Contents/registered",
-      "target": "firmware",
-      "notes": "The installed system firmware."
     }
   ],
   "quirks": [

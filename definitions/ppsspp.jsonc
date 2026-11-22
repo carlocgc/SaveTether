@@ -76,7 +76,7 @@
       "notes": "Game plugins, such as translation and control patches."
     },
     {
-      "id": "screenshots",
+      "id": "shots",
       "class": "media",
       "default": false,
       "path": "SCREENSHOT",

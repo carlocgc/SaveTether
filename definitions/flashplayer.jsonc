@@ -1,0 +1,35 @@
+// Adobe Flash Player (the standalone projector and browser plug-in; Flash games keep their saves in it). Shipped with SaveTether.
+// Flash Player keeps local shared objects in AppData/Roaming/Macromedia/Flash Player/#SharedObjects/<random ID>/<site>, and its own
+// settings beside them in macromedia.com/support/flashplayer/sys. The random ID differs on each device, so the whole folder is shared:
+// every device then uses the same ID. The owner shares this folder by hand on two Windows PCs and on the Steam Deck under Wine
+// (mapping flashplayer.data, 2026-11-22). Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "flashplayer",
+  "name": "Flash Player",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-appdata",
+      "os": "windows",
+      "detect": { "dir": "{appdata}/Macromedia/Flash Player" },
+      "base": "{appdata}/Macromedia"
+    }
+  ],
+  "roles": [
+    {
+      "id": "data",
+      "class": "save",
+      "default": true,
+      "path": "Flash Player",
+      "target": "data",
+      "notes": "Every Flash game's saves (#SharedObjects) and Flash Player's own per-site settings."
+    }
+  ],
+  "quirks": [
+    "The saves sit under a random folder name that differs on each device, which is why the whole Flash Player folder is shared and not #SharedObjects alone.",
+    "Under Wine on Linux, Add app cannot find this folder yet: add drive_c/users/<user>/AppData/Roaming/Macromedia/Flash Player in the Wine prefix by hand, as flashplayer.data with the shared folder flashplayer/data.",
+    "Process name for the running check: the projector's exe, such as flashplayer_32_sa.exe."
+  ]
+}
