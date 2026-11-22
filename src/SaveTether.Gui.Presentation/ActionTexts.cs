@@ -36,27 +36,27 @@ public sealed record ChoiceOption(SetupChoice Choice, string Label, string Sente
 /// </summary>
 public static class ActionTexts
 {
-    public const string EveryChoiceBacksUp = "This device's saves are backed up first, whichever you choose.";
+    public const string EveryChoiceBacksUp = "This device's data is backed up first, whichever you choose.";
 
     public const string MaybeArriving =
         "The shared copy may still be arriving: it lacks files a device shared. Wait for the sync tool, or confirm it has finished.";
 
     public static string AssumeClosedWarning(string app) =>
-        $"SaveTether thinks {app} is running. Linking while it runs can lose the saves it writes on exit. Go ahead only if it is closed.";
+        $"SaveTether thinks {app} is running. Linking while it runs can lose the data it writes on exit. Go ahead only if it is closed.";
 
     public const string AssumeSyncedWarning =
-        "Go ahead only if the shared saves were deleted on purpose. If the sync tool is still delivering them, wait instead: " +
+        "Go ahead only if the shared data was deleted on purpose. If the sync tool is still delivering them, wait instead: " +
         "going ahead now would start this device from an empty shared folder.";
 
-    public static string ReplaceTitle(string role) => $"Replace the shared saves for {role} on every device?";
+    public static string ReplaceTitle(string role) => $"Replace the shared data for {role} on every device?";
 
     public const string ReplaceText =
-        "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. " +
+        "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's data. " +
         "The deletion reaches every device through the sync tool.";
 
     public static string FirstSeed(string role) =>
         $"If {role} was already set up on another device, cancel and wait until it has synced here. " +
-        "Otherwise both devices will make their own saves the shared copy.";
+        "Otherwise both devices will make their own data the shared copy.";
 
     /// <summary>Section 9.2's precondition table: one sentence for each kind.</summary>
     /// <param name="role">The mapping, as the row names it: "Eden saves".</param>
@@ -110,10 +110,10 @@ public static class ActionTexts
                 PreconditionActions(refusal, sandboxGrantPossible),
                 details),
             RefusalKind.NotArrived => new RefusalView(
-                "The shared saves have not arrived",
+                "The shared data has not arrived",
                 [refusal.AssumeSyncedWouldHelp && refusal.Comparison is not null
                     ? MaybeArriving
-                    : "A device has shared these saves, but the shared folder here is still empty. The sync tool has probably not delivered it yet."],
+                    : "A device has shared this data, but the shared folder here is still empty. The sync tool has probably not delivered it yet."],
                 [RefusalAction.CheckAgain, RefusalAction.AssumeSynced],
                 details),
             RefusalKind.ForeignLink => new RefusalView(
@@ -126,7 +126,7 @@ public static class ActionTexts
                 ["The link is in place, but the shared folder is missing. It may not have synced yet."],
                 [RefusalAction.CheckAgain],
                 details),
-            RefusalKind.ChoiceNeeded => new RefusalView($"{role} on this device already has saves.", [refusal.Message.Text], [], details),
+            RefusalKind.ChoiceNeeded => new RefusalView($"{role} on this device already has data.", [refusal.Message.Text], [], details),
             RefusalKind.ConfirmationNeeded => new RefusalView(ReplaceTitle(role), [ReplaceText], [], details),
             RefusalKind.ChoiceNotAllowed => new RefusalView(
                 "Something went wrong", ["SaveTether offered a choice the core does not allow here. Nothing was changed."], [], details),
@@ -141,16 +141,16 @@ public static class ActionTexts
         var sharedHasData = refusal.Comparison?.Entries.Any(e => e.Presence != EntryPresence.OnlyLocal) == true;
         return refusal.AllowedChoices.Select(choice => choice switch
         {
-            SetupChoice.Copy => new ChoiceOption(choice, "Share this device's saves", "These saves become the shared copy for every device."),
+            SetupChoice.Copy => new ChoiceOption(choice, "Share this device's data", "This data becomes the shared copy for every device."),
             SetupChoice.NoCopy => sharedHasData
-                ? new ChoiceOption(choice, "Use the shared saves", $"This device's saves are kept in a backup only. {app} will see the shared saves.")
-                : new ChoiceOption(choice, "Start empty", $"This device's saves are kept in a backup only. {app} will see no saves until another device shares some."),
+                ? new ChoiceOption(choice, "Use the shared data", $"This device's data is kept in a backup only. {app} will see the shared data.")
+                : new ChoiceOption(choice, "Start empty", $"This device's data is kept in a backup only. {app} will see no data until another device shares some."),
             SetupChoice.AddMissing => new ChoiceOption(
-                choice, "Use the shared saves, and add games only this device has",
+                choice, "Use the shared data, and add games only this device has",
                 "Copies entries the shared copy does not have. Nothing in the shared copy is changed or deleted."),
             SetupChoice.ReplaceShared => new ChoiceOption(
-                choice, "Replace the shared saves with this device's",
-                "Every device's copy is replaced. The shared saves are backed up on this device first."),
+                choice, "Replace the shared data with this device's",
+                "Every device's copy is replaced. The shared data is backed up on this device first."),
             _ => throw new ArgumentOutOfRangeException(nameof(refusal), choice, "A choice with no text."),
         }).ToList();
     }
@@ -198,7 +198,7 @@ public static class ActionTexts
         {
             case PlanOperation.Revert:
                 title = $"Give this device its own copy of {role}?";
-                sentences.Add("The shared saves are copied here and the link is removed. Other devices keep sharing.");
+                sentences.Add("The shared data is copied here and the link is removed. Other devices keep sharing.");
                 break;
             case PlanOperation.Restore:
                 title = $"Restore the backup into {plan.Target}?";
@@ -237,26 +237,36 @@ public static class ActionTexts
         ArgumentNullException.ThrowIfNull(step);
         return step.Kind switch
         {
-            StepKind.BackUpSource => "Back up this device's saves",
-            StepKind.BackUpTarget => "Back up the shared saves",
+            StepKind.BackUpSource => "Back up this device's data",
+            StepKind.BackUpTarget => "Back up the shared data",
             StepKind.EnsureTarget => "Make sure the shared folder exists",
             StepKind.ClearTarget => "Empty the shared folder",
             StepKind.CopyIntoTarget => step.Entries is { Count: > 0 } entries
                 ? $"Copy {string.Join(", ", entries)} into the shared folder"
-                : "Copy this device's saves into the shared folder",
+                : "Copy this device's data into the shared folder",
             StepKind.RenameAside => "Move the save folder aside",
             StepKind.CreateLink => "Link the save folder to the shared folder",
             StepKind.VerifyLink => "Check the link",
-            StepKind.WriteSeedMarker => "Record this device's saves as the shared copy",
+            StepKind.WriteSeedMarker => "Record this device's data as the shared copy",
             StepKind.SupersedeMarkers => "Mark other devices' shared copies as replaced",
             StepKind.WriteState => "Record what was done",
             StepKind.DeleteAside => "Remove the folder moved aside (it is in the backup)",
-            StepKind.CopyToStaging => "Copy the saves to a new folder beside the save folder",
+            StepKind.CopyToStaging => "Copy the data to a new folder beside the save folder",
             StepKind.RemoveLink => "Remove the link",
             StepKind.RenameIntoPlace => "Put the copy in place of the save folder",
             StepKind.RecreateLinks => "Recreate the links the backup recorded",
             _ => throw new ArgumentOutOfRangeException(nameof(step), step.Kind, "A step with no text."),
         };
+    }
+
+    /// <summary>
+    /// The finished dialog of section 9.3: the result, with the plan's steps kept above it. A run with no plan
+    /// (recover) has no steps, so nothing but the result's sentences is shown.
+    /// </summary>
+    public static (string Title, IReadOnlyList<string> Steps, IReadOnlyList<string> Sentences) FinishedView(Plan? plan, ExecutionResult result, string role, bool recovery = false)
+    {
+        var (title, sentences) = Result(result, role, recovery);
+        return (title, plan is null ? [] : plan.Steps.Select(Step).ToList(), sentences);
     }
 
     /// <summary>A result as section 9.3 shows it.</summary>

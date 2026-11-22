@@ -511,7 +511,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         var added = $"Added {string.Join(", ", mappingIds)}.";
         if (linked.Count == 0)
         {
-            return $"{added} Nothing is linked yet: Apply links each, asking first where this device already has saves.";
+            return $"{added} Nothing is linked yet: Apply links each, asking first where this device already has data.";
         }
 
         // A folder that is already a link needs no Apply (the CLI says the same); whether the link is
@@ -519,7 +519,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         var already = $"Already linked here: {string.Join(", ", linked)}.";
         return toApply.Count == 0
             ? $"{added} {already} There is nothing to apply; the Apps page shows whether each link is healthy."
-            : $"{added} {already} Apply links {string.Join(", ", toApply)}, asking first where this device already has saves.";
+            : $"{added} {already} Apply links {string.Join(", ", toApply)}, asking first where this device already has data.";
     }
 
     public static string FieldLabel(LocationField field) => field switch
