@@ -1,12 +1,13 @@
 // DuckStation (PlayStation 1 emulator). Shipped with SaveTether. The Windows and native Linux folders are
-// DuckStation's defaults; the Flatpak and EmuDeck installs were found on the owner's Steam Deck. Not yet
-// tested with `app add` on hardware (T6). Design 5.2 explains the format.
+// DuckStation's defaults; the Flatpak and EmuDeck installs were found on the owner's Steam Deck. `app add --dry-run` was run on the Deck
+// (2026-11-22) for emudeck, linux-native and linux-flatpak; only the Windows installs are untried. Design 5.2 explains the format.
 {
   "schema": 1,
   "id": "duckstation",
   "name": "DuckStation",
   "kind": "emulator",
   "tier": "verified",
+  "tested_on": ["Steam Deck, EmuDeck (dry run found the card)"],
   "installs": [
     {
       "id": "win-portable",
