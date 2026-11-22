@@ -215,7 +215,7 @@ public sealed class TwoDeviceTests : IDisposable
 
         var run = _pc.Ok("apply", Id, "--no-copy");
 
-        Assert.Contains("the app will see no saves", run.Out, StringComparison.Ordinal);
+        Assert.Contains("the app will see no data", run.Out, StringComparison.Ordinal);
         Assert.Contains("Backup: ", run.Out, StringComparison.Ordinal);
         Assert.True(_pc.IsLinked);
         Assert.Empty(_pc.LocalFiles());

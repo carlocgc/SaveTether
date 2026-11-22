@@ -405,7 +405,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                         plans.Count == 1
                             ? $"Link {roles[plans[0].MappingId]} on this device to its shared folder?"
                             : $"Link {plans.Count} on this device to their shared folders?",
-                        $"{list}\n\nEach is backed up first where it has saves.{intro}",
+                        $"{list}\n\nEach is backed up first where it has data.{intro}",
                         "Apply all", Overlay.OperationDialogTimeout))
                 {
                     return;
@@ -453,8 +453,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         using (session)
         {
-            var result = await RunWithProgressAsync("Recovering", null, progress => session.Recover(progress));
-            await ShowResultAsync(result, result.MappingId ?? "the operation", recovery: true);
+            await RunWithProgressAsync("Recovering", null, progress => session.Recover(progress), "the operation", recovery: true);
         }
     }
 
@@ -560,7 +559,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         body.Children.Add(new TextBlock { Text = ActionTexts.EveryChoiceBacksUp, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
         var cancel = new Button { Content = "Cancel" };
-        var pressed = await overlay.ShowAsync($"{role} on this device already has saves.", body, [cancel, cont], cancel, Overlay.OperationDialogTimeout);
+        var pressed = await overlay.ShowAsync($"{role} on this device already has data.", body, [cancel, cont], cancel, Overlay.OperationDialogTimeout);
         if (pressed != cont || chosen is not { } choice)
         {
             return null;
@@ -595,13 +594,15 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             return null;
         }
 
-        var result = await RunWithProgressAsync(title, plan, progress => session.Run(plan, progress));
-        await ShowResultAsync(result, role);
-        return result;
+        return await RunWithProgressAsync(title, plan, progress => session.Run(plan, progress), role);
     }
 
-    /// <summary>Section 9.3's progress: the steps, each ticked as the executor finishes it. Nothing can be pressed meanwhile.</summary>
-    private async Task<ExecutionResult> RunWithProgressAsync(string title, Plan? plan, Func<IProgress<StepProgress>, ExecutionResult> run)
+    /// <summary>
+    /// Section 9.3's progress: the steps, each ticked as the executor finishes it. Nothing can be pressed meanwhile.
+    /// With <paramref name="role"/>, the finished list stays on screen under the result's title and sentences, with
+    /// an OK button, so the whole flow can be read before it closes.
+    /// </summary>
+    private async Task<ExecutionResult> RunWithProgressAsync(string title, Plan? plan, Func<IProgress<StepProgress>, ExecutionResult> run, string? role = null, bool recovery = false)
     {
         var lines = new StackPanel { Spacing = 4 };
         var marks = new List<TextBlock>();
@@ -620,6 +621,8 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         // The executor reports from its thread at its own speed; the list shows the reports on this thread at a
         // pace that can be read, then holds the finished list (section 9.3). Only the display waits.
         var progress = new PacedProgress();
+        ExecutionResult result;
+        Task<Button>? shown = null;
         using (overlay.ShowBlocking(title, lines))
         {
             var work = Task.Run(() =>
@@ -640,14 +643,41 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                     marks[p.Index].Text = p.Status == StepStatus.Done ? "✓" : "…";
                 }
             });
-            var result = await work;
+            result = await work;
             log.Write($"{result.Operation?.ToString() ?? "recover"} {result.MappingId}: {result.Status}{(result.Error is { } e ? $": {e.Text}" : string.Empty)}");
             if (result.Diagnostic is not null)
             {
                 log.Write($"  {result.Diagnostic}");
             }
-            return result;
+
+            if (role is not null)
+            {
+                // The list moves from the progress layer to the result's, in one step, so nothing flashes between.
+                var (resultTitle, sentences) = ActionTexts.Result(result, role, recovery);
+                var rows = lines.Children.ToList();
+                lines.Children.Clear();
+                var body = new StackPanel { Spacing = 12, Children = { new StackPanel { Spacing = 4, Children = { } } } };
+                foreach (var row in rows)
+                {
+                    ((StackPanel)body.Children[0]).Children.Add(row);
+                }
+
+                if (sentences.Count > 0)
+                {
+                    body.Children.Add(new TextBlock { Text = string.Join("\n\n", sentences), TextWrapping = TextWrapping.Wrap });
+                }
+
+                var ok = new Button { Content = "OK" };
+                shown = overlay.ShowAsync(resultTitle, body, [ok], ok);
+            }
         }
+
+        if (shown is not null)
+        {
+            await shown;
+        }
+
+        return result;
     }
 
     private async Task ShowResultAsync(ExecutionResult result, string role, bool recovery = false)

@@ -83,13 +83,13 @@ public class ActionTests
         Assert.Equal(RefusalKind.ChoiceNeeded, firstDevice.Kind);
         var offered = ActionTexts.Choices(firstDevice, "PPSSPP");
         Assert.Equal(firstDevice.AllowedChoices, offered.Select(c => c.Choice));
-        Assert.Equal(["Share this device's saves", "Start empty"], offered.Select(c => c.Label));
+        Assert.Equal(["Share this device's data", "Start empty"], offered.Select(c => c.Label));
 
         var guard = Planner.Plan(Snap.Guarded(), new ApplyRequest()).Refusal!;
         var guardOffered = ActionTexts.Choices(guard, "PPSSPP");
         Assert.Equal(guard.AllowedChoices, guardOffered.Select(c => c.Choice));
         Assert.DoesNotContain(guardOffered, c => c.Choice == SetupChoice.Copy);
-        Assert.Equal("Use the shared saves", guardOffered.Single(c => c.Choice == SetupChoice.NoCopy).Label);
+        Assert.Equal("Use the shared data", guardOffered.Single(c => c.Choice == SetupChoice.NoCopy).Label);
 
         // The comparison's groups, with the identical ones counted.
         var groups = ActionTexts.ComparisonGroups(guard.Comparison!);

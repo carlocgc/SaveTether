@@ -185,7 +185,7 @@ public class ChoiceTests
         var outcome = Planner.Plan(Snap.WithLocalSaves(), new ApplyRequest(SetupChoice.NoCopy));
 
         Assert.Equal([BackUpSource, EnsureTarget, .. Switch], outcome.Kinds());
-        Assert.Contains(outcome.Plan!.Notes, n => n.Text.Contains("will see no saves", StringComparison.Ordinal));
+        Assert.Contains(outcome.Plan!.Notes, n => n.Text.Contains("will see no data", StringComparison.Ordinal));
         Assert.False(outcome.Plan.NeedsFirstSeedConfirmation);
     }
 

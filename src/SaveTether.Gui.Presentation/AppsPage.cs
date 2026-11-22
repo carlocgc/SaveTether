@@ -199,7 +199,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         "and your sync tool has finished syncing it on every device.";
 
     public static string DeletedText(string role, bool hadBackup) =>
-        $"{role} was deleted from the shared folder." + (hadBackup ? " Its shared saves are backed up on this device; Backups shows them." : string.Empty);
+        $"{role} was deleted from the shared folder." + (hadBackup ? " Its shared data are backed up on this device; Backups shows them." : string.Empty);
 
     /// <summary>Remove's confirmation (section 5).</summary>
     public static string RemoveWarning(string role) =>

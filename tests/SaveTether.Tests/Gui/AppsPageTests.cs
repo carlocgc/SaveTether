@@ -314,7 +314,7 @@ public class AppsPageTests
         Assert.Equal("Delete PPSSPP savedata, orphaned in the shared folder?", AppsPage.DeleteTitle("PPSSPP savedata"));
         Assert.StartsWith("This deletion will sync to all devices.", AppsPage.DeleteText, StringComparison.Ordinal);
         Assert.Contains("make sure all writes to this role's shared folder are complete and your sync tool has finished syncing it on every device", AppsPage.DeleteText, StringComparison.Ordinal);
-        Assert.Equal("PPSSPP savedata was deleted from the shared folder. Its shared saves are backed up on this device; Backups shows them.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: true));
+        Assert.Equal("PPSSPP savedata was deleted from the shared folder. Its shared data are backed up on this device; Backups shows them.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: true));
         Assert.Equal("PPSSPP savedata was deleted from the shared folder.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: false));
         Assert.Equal("before deleting", BackupsPage.Reason(Core.Backup.BackupReason.PreDelete));
     }

@@ -199,7 +199,7 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 | `source-inside-sync-root`, `paths-overlap`, `target-outside-data-root`, `source-unusable`, `target-unusable` | "<role> cannot be linked as it is set up: <fact>." | Details |
 | `not-applied`, `backup-unusable`, `restore-destination-unusable` | Revert and restore only; see 9.6 and 9.7 | |
 
-**The choice dialog** (`choice-needed`). Title: "<Role> on this device already has saves." Then the comparison and the allowed choices.
+**The choice dialog** (`choice-needed`). Title: "<Role> on this device already has data." Then the comparison and the allowed choices.
 
 - **Comparison** (5.4), grouped by entry (5.13's entry depth): "Only on this device", "Only in the shared copy", "On both, different", and a collapsed "On both, the same (*n*)". Each entry expands to its files with size and time. Above the groups: "Newest here: <time>. Newest in the shared copy: <time>."
 - **Choices**, one per `AllowedChoices` value, as a list where nothing is selected at first. Continue is disabled until one is.
@@ -234,6 +234,8 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 *As built (2026-11-18), pacing, asked for by the owner.* An operation takes a few milliseconds, so the step list flashed past, and a quick double click went through a dialog before it could be read. Two minimums now apply, set in `Pacing` (presentation project):
 - **The step list** ticks each step at least 300 ms after the one before, and the finished list stays 800 ms before the result. Only the display waits: the executor runs at its own speed and its journal is closed when it is done; `PacedProgress` replays its reports. A step that really takes longer is ticked as soon as it is done.
 - **Every dialog** ignores its buttons, Escape and Enter for its first 600 ms, then puts focus on the safe button (principle 5). The 10-minute timeout is unchanged.
+
+*As built (2026-11-22), asked for by the owner.* Progress and result are one dialog: when the operation ends, the finished step list stays on screen, the title changes to the result's, the result's sentences (with the backup taken) are added under the list, and an OK button appears. This holds for apply, revert, restore and recover; Apply all still shows a result only for a mapping that did not complete. The dialogs call the contents "data", not "saves", since a role may hold screenshots, BIOS files or textures.
 
 ### 9.4 Apply all
 
