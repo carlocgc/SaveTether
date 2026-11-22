@@ -75,7 +75,7 @@
       "default": false,
       "path": "sdmc",
       "target": "sdmc",
-      "notes": "The emulated SD card: mostly mods laid out for a console (atmosphere/contents)."
+      "notes": "The emulated SD card: mostly mods laid out for a console (atmosphere/contents). Games, updates and DLC installed to the SD card instead of the NAND land in Nintendo/Contents here, and would sync too."
     },
     {
       "id": "screenshots",
