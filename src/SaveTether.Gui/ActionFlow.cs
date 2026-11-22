@@ -414,7 +414,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 foreach (var plan in plans)
                 {
                     var role = roles[plan.MappingId];
-                    var result = await RunWithProgressAsync(ActionTexts.Confirmation(plan, role).Title, plan, progress => session.Run(plan, progress));
+                    var result = await RunWithProgressAsync(ActionTexts.Confirmation(plan, role).Title, plan, progress => session.Run(plan, progress), role, quietOnSuccess: true);
                     if (result.Status == ExecutionStatus.Completed)
                     {
                         linked++;
@@ -422,7 +422,6 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                     else
                     {
                         waiting.Add(role);
-                        await ShowResultAsync(result, role);
                         if (result.Status == ExecutionStatus.RecoveryNeeded)
                         {
                             // Nothing else may run until it is recovered (section 9.3).
@@ -598,9 +597,10 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     /// <summary>
     /// Section 9.3's progress: the steps, each ticked as the executor finishes it. Nothing can be pressed meanwhile.
     /// With <paramref name="role"/>, the finished list stays on screen under the result's title and sentences, with
-    /// an OK button, so the whole flow can be read before it closes.
+    /// an OK button, so the whole flow can be read before it closes. <paramref name="quietOnSuccess"/> shows it only when
+    /// the operation did not complete (Apply all reports its successes in one summary).
     /// </summary>
-    private async Task<ExecutionResult> RunWithProgressAsync(string title, Plan? plan, Func<IProgress<StepProgress>, ExecutionResult> run, string? role = null, bool recovery = false)
+    private async Task<ExecutionResult> RunWithProgressAsync(string title, Plan? plan, Func<IProgress<StepProgress>, ExecutionResult> run, string? role = null, bool recovery = false, bool quietOnSuccess = false)
     {
         var lines = new StackPanel { Spacing = 4 };
         var marks = new List<TextBlock>();
@@ -648,7 +648,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 log.Write($"  {result.Diagnostic}");
             }
 
-            if (role is not null)
+            if (role is not null && !(quietOnSuccess && result.Status == ExecutionStatus.Completed))
             {
                 // The list moves from the progress layer to the result's, in one step, so nothing flashes between.
                 var (resultTitle, steps, sentences) = ActionTexts.FinishedView(plan, result, role, recovery);
@@ -681,12 +681,6 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
 
         return result;
-    }
-
-    private async Task ShowResultAsync(ExecutionResult result, string role, bool recovery = false)
-    {
-        var (title, sentences) = ActionTexts.Result(result, role, recovery);
-        await overlay.InformAsync(title, sentences.Count == 0 ? "Done." : string.Join("\n\n", sentences));
     }
 
     /// <summary>After a revert (section 9.6): take back a Flatpak grant no mapping needs now. Keep is the safe choice.</summary>
