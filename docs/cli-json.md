@@ -255,6 +255,13 @@ Flags:
 | `was_first` | boolean | It was its mapping's first backup, which retention never removes: usually the only copy of the folder from before SaveTether changed it. |
 | `remaining` | number | How many backups of the mapping are left. |
 
+`backup delete --all | --keep-first | --keep-last [--mapping <id>]` deletes many (added 2026-11-22). `--all` without `--confirm-delete` under `--json` deletes nothing and answers with `dry_run` true; the two `--keep-` modes need no flag. `backups_cleaned` object:
+
+| Field | Type | |
+|---|---|---|
+| `removed` | array of objects | The backups deleted, or with `dry_run` the ones that would be, each with the fields of `backups[]` above. |
+| `dry_run` | boolean | True when nothing was deleted. |
+
 ### `uninstall`
 
 `uninstall`, with `--confirm-uninstall`. With `--json` nothing is asked, so without `--confirm-uninstall` it is refused (exit 1) and nothing is removed. Refused (exit 1) when nothing is installed, and on Windows, where the installer's uninstaller does this. Added 2026-11-19.

@@ -406,6 +406,21 @@ Branch `phase-3.6-t2-overview`, commit db48b6e.
 - Tests: `DeviceListTests` (counts, orphan, read-only), the contract, the command table. `dotnet build -warnaserror` clean; 920 tests pass.
 - Hardware check (2026-11-22, commit db48b6e, CLI Debug build, `home-a` and `home-b` on one scratch sync folder; `map add` with a plain folder stands in for `app add`, which T2 does not touch): on a, `apply --copy` of one mapping, then a second `map add` and `map remove` to orphan it; b joined. `device list` and `--json` on Windows and on Mint showed 2 devices (1 mapping each), 2 mappings with 1 linked here, the orphan `solo.saves`, and 1 backup. The sync folder listing agrees (2 device files, 2 mapping files, 1 seed marker). Backup bytes are the saved files' size (10 on Windows, with CRLF; 8 on Mint) and match what was written; `du` of the backup root is larger because it counts the manifest (the plan's "match `du`" is read that way; the flow is in `hardware-testing.md`, "Device list"). `status` of the real setup was the same before and after on both, and the scratch folders are gone.
 
+### T4: backup cleanup — done
+
+Branch `backup-cleanup-t4`, commit 78d6584.
+
+- Core: `BackupCleanup` (`All`, `KeepFirst`, `KeepLast`), `BackupStore.Select` (what a mode would delete, reads only) and `BackupStore.RemoveMany` (deletes through `SafeFs`, also clears `.partial` folders); `Workspace.DescribeBackupCleanup` and `Workspace.CleanUpBackups` (refused while a journal is open).
+- CLI: `backup delete --all | --keep-first | --keep-last [--mapping <id>]`, `--json` as `backups_cleaned` (`removed`, `dry_run`). Decision: the two keep modes always leave a backup, so they need no confirmation (the hardware check in this plan runs them bare); `--all` asks, or needs `--confirm-delete`, or lists only. Mixing a mode with a backup ID or another mode is a usage error (64).
+- Tests: `BackupStoreTests` (modes over 1, 2 and 5, scope, partials, `Select` changes nothing), `BackupDeleteTests` (dry run, flag, keep modes), the contract. Docs: `cli.md`, `cli-json.md`, `json-shapes.txt`.
+- Hardware check (2026-11-22, commit 78d6584, CLI on Windows (Debug) and on Mint (Release, linux-x64, built from a `git archive` of the commit), one scratch home and sync folder each, mappings `x.saves` and `y.saves`): 4 backups of x and 2 of y, made with `apply --copy`, `revert`, then `apply --add-missing` and `revert` again. A second `apply --copy` after a revert stops at the "identical copies" guard and takes no backup, so `--add-missing` is what makes the later cycles. Then, the same on both:
+  1. `--keep-first --mapping x.saves` left x with its oldest backup and y with 2.
+  2. After making x's backups again, `--keep-last --mapping x.saves` left only the newest.
+  3. `--all` with no terminal and no flag deleted nothing and printed "Would delete ..."; with `--json` it gave `dry_run: true`.
+  4. `--all --confirm-delete` left no backup folder in the backup root; `backup list` said "No backups." and the saves were intact.
+
+  `backup list` agreed each time. `status` of the real setup was the same before and after on both, and the scratch folders and the Mint build are gone. A first script looped for ever because it assumed each apply and revert cycle makes backups (see the `--add-missing` note); it was stopped and its processes ended.
+
 ### T3: rename — built, hardware check not run
 
 Branch `phase-3.6-t3-rename` (not committed yet).
