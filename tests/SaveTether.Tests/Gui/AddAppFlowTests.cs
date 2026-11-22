@@ -25,6 +25,13 @@ public class AddAppFlowTests
     private static bool MappingExists(CliDevice device, string id) =>
         File.Exists(Path.Combine(device.SyncRoot, "savetether", ".savetether", "mappings", id + ".json"));
 
+    /// <summary>Page 2 for an app with more than one install to pick from: the install chosen, as the owner would.</summary>
+    private static AddAppView StartAt(AddAppFlow flow, string appId, string installId)
+    {
+        var view = flow.Start(appId);
+        return view.Page == AddAppPage.ChooseInstall ? flow.ChooseInstall(installId) : view;
+    }
+
     [Fact]
     public void Page_1_lists_the_catalog_by_name_filters_as_typed_and_labels_each_app()
     {
@@ -73,7 +80,7 @@ public class AddAppFlowTests
         Assert.True(row.MoreToAdd);
 
         // Page 2: the added folders show ticked and locked; Add is off until a new folder is ticked.
-        var view = flow.Start("testapp");
+        var view = StartAt(flow, "testapp", "native");
         Assert.True(view.Roles.Single(r => r.RoleId == "saves").AlreadyAdded);
         Assert.True(view.Roles.Single(r => r.RoleId == "states").AlreadyAdded);
         var shots = view.Roles.Single(r => r.RoleId == "shots");
@@ -105,7 +112,7 @@ public class AddAppFlowTests
         var data = Path.Combine(deck.Home, "native", "data");
         CliDevice.Write(data, "saves/slot1.sav", "12345");
 
-        var view = flow.Start("testapp");
+        var view = StartAt(flow, "testapp", "native");
 
         Assert.Equal(AddAppPage.Plan, view.Page);
         Assert.Equal("Add Test App", view.Title);
@@ -185,7 +192,7 @@ public class AddAppFlowTests
         CliDevice.Write(Path.Combine(deck.Home, "native", "data"), "saves/slot1.sav", "12345");
         deck.Ok("app", "add", "testapp");
 
-        var view = flow.Start("testapp");
+        var view = StartAt(flow, "testapp", "native");
         view = flow.SetRole("shots", ticked: true);
         Assert.True(view.CanAdd);
         Assert.True(view.Roles.Single(r => r.RoleId == "saves").AlreadyAdded);
@@ -212,7 +219,7 @@ public class AddAppFlowTests
         deck.Ok("apply", "testapp.saves", "--copy");
 
         // Every folder of the app is added now, so the page has nothing new to add; a linked folder says so.
-        var view = flow.Start("testapp");
+        var view = StartAt(flow, "testapp", "native");
         Assert.Equal("already a link", AddAppFlow.SizeOf(view.Roles.Single(r => r.RoleId == "saves").Planned!));
         Assert.False(view.CanAdd);
         Assert.Throws<InvalidOperationException>(() => flow.Add(view));
@@ -230,29 +237,165 @@ public class AddAppFlowTests
     }
 
     [Fact]
-    public void Two_installs_found_are_picked_between_and_never_guessed()
+    public void An_app_with_a_known_and_a_portable_install_opens_on_a_page_to_choose_between_them()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var portable = Path.Combine(deck.Home, "portable");
+        var native = Path.Combine(deck.Home, "native", "data");
+        CliDevice.Write(portable, "app.cfg", "config");
+        Directory.CreateDirectory(native);
+
+        // The installs listed for this system come first: the one found, and the one the owner gives a folder for.
+        var view = flow.Start("testapp");
+        Assert.Equal(AddAppPage.ChooseInstall, view.Page);
+        Assert.Equal(["native", "portable"], view.Candidates.Select(c => c.Id));
+        Assert.Equal(Path.Combine(deck.Home, "native", "data"), view.InstallPaths["native"]);
+        Assert.Equal("<install folder>/saves", view.InstallPaths["portable"]);
+        Assert.Null(flow.Back(view.Page));
+
+        // A known install goes to its plan with no folder to give.
+        var plan = flow.ChooseInstall("native");
+        Assert.Equal(AddAppPage.Plan, plan.Page);
+        Assert.Empty(plan.Fields);
+        Assert.Equal(AddAppPage.ChooseInstall, flow.Back(plan.Page)!.Page);
+
+        // The portable one asks for its folder, with what to select under it, then plans.
+        var folder = flow.ChooseInstall("portable");
+        Assert.Equal(AddAppPage.NeedsLocation, folder.Page);
+        Assert.Equal("Where is Test App installed?", folder.Title);
+        Assert.Equal([(LocationField.InstallFolder, (string?)null)], folder.Fields);
+        Assert.Equal("Select the folder containing \"saves\".", folder.InstallFolderHint);
+        Assert.Equal(AddAppPage.ChooseInstall, flow.Back(folder.Page)!.Page);
+
+        plan = flow.SetLocation(LocationField.InstallFolder, portable);
+        Assert.Equal(AddAppPage.Plan, plan.Page);
+        Assert.Equal(Path.Combine(portable, "saves"), plan.Plan!.Roles.Single().Source);
+        Assert.True(flow.Add(plan).Succeeded);
+        Assert.False(MappingExists(deck, "testapp.states"));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void The_install_used_last_time_does_not_skip_the_page_and_its_folder_can_be_changed()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var first = Path.Combine(deck.Home, "first");
+        var copy = Path.Combine(deck.Home, "copy");
+        CliDevice.Write(first, "app.cfg", "config");
+        CliDevice.Write(copy, "app.cfg", "config");
+        Directory.CreateDirectory(Path.Combine(deck.Home, "native", "data"));
+
+        // The portable install was used last time, and both are found: the page is still there (found on the owner's Cemu).
+        flow.Start("testapp");
+        flow.ChooseInstall("portable");
+        var view = flow.SetLocation(LocationField.InstallFolder, first);
+        Assert.True(flow.Add(view).Succeeded);
+
+        view = flow.Start("testapp");
+        Assert.Equal(AddAppPage.ChooseInstall, view.Page);
+        Assert.Equal("<install folder>/saves", view.InstallPaths["portable"]);
+
+        // The folder given before is filled in, and a copy can be given instead though the first still exists.
+        view = flow.ChooseInstall("portable");
+        Assert.Equal([(LocationField.InstallFolder, (string?)first)], view.Fields);
+        view = flow.SetLocation(LocationField.InstallFolder, copy);
+        Assert.Equal(AddAppPage.Plan, view.Page);
+        Assert.Equal(Path.Combine(copy, "saves"), view.Plan!.Roles.Single().Source);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void The_install_folder_hint_names_the_path_to_the_shared_folder_inside_it()
+    {
+        var cemu = DefinitionLoader.LoadFile(Path.Combine(SaveTether.Tests.Definitions.DefinitionLoaderTests.FindRepositoryRoot(), "definitions", "cemu.jsonc")).Definition!;
+
+        Assert.Equal(
+            "Select the folder containing \"mlc01/usr/save\".",
+            AddAppFlow.InstallFolderHintFor(cemu, cemu.Installs.Where(i => i.Id == "win-portable")));
+
+        // An install that does not use the install folder has no hint.
+        Assert.Null(AddAppFlow.InstallFolderHintFor(cemu, cemu.Installs.Where(i => i.Id == "linux-native")));
+    }
+
+    [Fact]
+    public void A_refusal_for_the_install_found_still_offers_the_page_to_choose_another()
     {
         using var sandbox = new Sandbox();
         var (deck, flow) = NewDevice(sandbox);
         var portable = Path.Combine(deck.Home, "portable");
         CliDevice.Write(portable, "app.cfg", "config");
+        var native = Path.Combine(deck.Home, "native", "data");
+        Directory.CreateDirectory(Path.Combine(native, "saves"));
+        // Another mapping already uses the native install's save folder, so that install's plan is refused.
+        deck.Ok("map", "add", "flash.objects", "--target", "flash/objects", "--source", Path.Combine(native, "saves"));
 
         var view = flow.Start("testapp");
-        Assert.Equal(AddAppPage.NeedsLocation, view.Page);
-        Assert.Equal([(LocationField.InstallFolder, (string?)null)], view.Fields);
-
-        // The native install turns up meanwhile, and the portable one is given: both are found.
-        Directory.CreateDirectory(Path.Combine(deck.Home, "native", "data"));
-        view = flow.SetLocation(LocationField.InstallFolder, portable);
         Assert.Equal(AddAppPage.ChooseInstall, view.Page);
-        Assert.Equal("More than one install of Test App was found.", view.Title);
         Assert.Equal(["native", "portable"], view.Candidates.Select(c => c.Id));
 
-        view = flow.ChooseInstall("portable");
+        var refused = flow.ChooseInstall("native");
+        Assert.Equal(AddAppPage.Refused, refused.Page);
+        Assert.Equal(AddAppPage.ChooseInstall, flow.Back(refused.Page)!.Page);
+
+        Assert.Equal(AddAppPage.NeedsLocation, flow.ChooseInstall("portable").Page);
+        var plan = flow.SetLocation(LocationField.InstallFolder, portable);
+        Assert.Equal(AddAppPage.Plan, plan.Page);
+        Assert.True(flow.Add(plan).Succeeded);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void An_imported_app_keeps_the_older_flow_even_with_a_detected_install_folder()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        var install = Path.Combine(deck.Home, "great-war");
+        Directory.CreateDirectory(Path.Combine(install, "savegame"));
+        deck.Ok("app", "add", "1914-the-great-war", "--install-dir", install);
+
+        // Its install folder is stored and found: the plan, as before, not a page asking for the folder.
+        var view = flow.Start("1914-the-great-war");
         Assert.Equal(AddAppPage.Plan, view.Page);
-        Assert.Equal(Path.Combine(portable, "saves"), view.Plan!.Roles.Single().Source);
-        Assert.True(flow.Add(view).Succeeded);
-        Assert.False(MappingExists(deck, "testapp.states"));
+        Assert.Empty(view.InstallPaths);
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void A_ticked_folder_whose_parent_is_missing_is_warned_about_before_Add()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        AppAddCliTests.ShareDefinition(deck, "testemu", """
+            {
+              "schema": 1, "id": "testemu", "name": "Test Emu", "kind": "emulator",
+              "installs": [{ "id": "portable", "os": "linux", "detect": { "dir": "{install_dir}/mlc01" }, "base": "{install_dir}/mlc01" }],
+              "roles": [{ "id": "save", "class": "save", "default": true, "path": "usr/save", "target": "save" }],
+            }
+            """);
+        var install = Path.Combine(deck.Home, "portable");
+        Directory.CreateDirectory(Path.Combine(install, "mlc01"));
+
+        // mlc01 is there but usr is not: Apply would refuse the folder, whatever the shared copy holds.
+        flow.Start("testemu");
+        var view = flow.SetLocation(LocationField.InstallFolder, install);
+        Assert.Equal(AddAppPage.Plan, view.Page);
+        Assert.Equal(
+            $"The folder {Path.Combine(install, "mlc01", "usr")} does not exist, so Apply will refuse to link save. Check the folder you chose, and that the app is installed.",
+            view.MissingFolderWarning);
+
+        // usr is there but the save folder is not: Apply creates it, so there is nothing to warn about.
+        Directory.CreateDirectory(Path.Combine(install, "mlc01", "usr"));
+        Assert.Null(flow.SetLocation(LocationField.InstallFolder, install).MissingFolderWarning);
+
+        // usr is a link to a folder that is there: Apply follows it, so the warning follows it too.
+        var elsewhere = Path.Combine(deck.Home, "elsewhere", "usr");
+        Directory.CreateDirectory(elsewhere);
+        Directory.Delete(Path.Combine(install, "mlc01", "usr"));
+        Sandbox.Link(Path.Combine(install, "mlc01", "usr"), elsewhere);
+        Assert.Null(flow.SetLocation(LocationField.InstallFolder, install).MissingFolderWarning);
+        sandbox.AssertCanaryIntact();
     }
 
     [Fact]
@@ -262,7 +405,7 @@ public class AddAppFlowTests
         var (deck, flow) = NewDevice(sandbox);
 
         var view = flow.Start("testapp");
-        Assert.Equal("Test App was not found on this device.", view.Title);
+        Assert.Equal("No install of Test App was found.", view.Title);
         Assert.Contains(view.Sentences, s => s.StartsWith("native: No folder at", StringComparison.Ordinal));
 
         // An install that needs a value is said in words, not with the core's token (found on the Deck).
@@ -342,7 +485,7 @@ public class AddAppFlowTests
         var (deck, flow) = NewDevice(sandbox);
         var data = Path.Combine(deck.Home, "native", "data");
         Directory.CreateDirectory(data);
-        var view = flow.Start("testapp");
+        var view = StartAt(flow, "testapp", "native");
 
         // The lock is held (here by this process, so its holder is not named): refused, in the app's words.
         using (OperationLock.Acquire(new LocalStore(deck.LocalFolder), "cli", "apply"))

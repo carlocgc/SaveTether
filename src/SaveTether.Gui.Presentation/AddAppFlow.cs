@@ -91,8 +91,21 @@ public sealed record AddAppView(
     /// <summary>True for an imported definition: converted from the Ludusavi manifest, not tried by hand.</summary>
     public bool Unverified { get; init; }
 
+    /// <summary>For the choose-an-install page: what to show beside an install, by its id (where it was found, or what the owner would enter).</summary>
+    public IReadOnlyDictionary<string, string> InstallPaths { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>Under the Install folder field: which folder to choose, from what the definition looks for inside it. Null when there is no field.</summary>
+    public string? InstallFolderHint { get; init; }
+
     /// <summary>For a plan: a note that some store's copy of the app keeps saves in the cloud too; null when none does.</summary>
     public string? CloudNote { get; init; }
+
+    /// <summary>
+    /// For a plan: a ticked save folder whose parent folder does not exist, so Apply would refuse it ("The folder that should
+    /// contain ... does not exist"). Null when every ticked folder can be linked. A folder that is missing but has a parent is
+    /// fine: Apply creates it from the shared copy.
+    /// </summary>
+    public string? MissingFolderWarning { get; init; }
 
     /// <summary>Add is offered for a plan with at least one role ticked that is not added yet.</summary>
     public bool CanAdd => Plan is not null && Roles.Any(r => r.Ticked && !r.AlreadyAdded);
@@ -124,6 +137,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
 
     private AppAddRequest? _request;
     private AddAppView? _lastPlan;
+    private AddAppView? _chooseView;
 
     /// <summary>Page 1: the catalog's apps, shared definitions over built-in ones, in name order.</summary>
     public IReadOnlyList<CatalogApp> Catalog()
@@ -268,11 +282,105 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     {
         _request = new AppAddRequest(appId);
         _lastPlan = null;
-        return Plan();
+        _chooseView = null;
+        var view = Plan();
+        if (view.Page is not (AddAppPage.Plan or AddAppPage.ChooseInstall or AddAppPage.NeedsLocation or AddAppPage.Refused))
+        {
+            return view;
+        }
+
+        // The installs this system lists for the app: the found ones and, for a definition written by hand, the one that
+        // needs a folder from the owner (a portable copy can be anywhere). With more than one the owner picks first; a
+        // lone portable install goes to its folder page, so the folder it was last given can be changed.
+        var workspace = Open();
+        var entry = workspace.Definitions.Find(appId);
+        if (entry?.Definition is not { } definition || entry.Source == DefinitionSource.Imported)
+        {
+            return view;
+        }
+
+        // Only installs the core looked at: a refusal for the auto-picked install (a folder another mapping uses) still lists
+        // them all, so the chooser is built from the candidates before that install's refusal is shown.
+        var options = definition.Installs
+            .Where(i => i.Os.Contains(environment.Os))
+            .Where(i => view.Candidates.Any(c => c.Id == i.Id && (c.IsDetected || UsesInstallFolder(definition, i))))
+            .ToList();
+        if (options.Count > 1)
+        {
+            _lastPlan = null;
+            _chooseView = view with
+            {
+                Page = AddAppPage.ChooseInstall,
+                Title = $"Choose an install of {view.AppName}.",
+                Sentences = ["Pick the one whose saves this device should share."],
+                Found = null,
+                Candidates = options.Select(i => view.Candidates.First(c => c.Id == i.Id)).ToList(),
+                Fields = [],
+                Roles = [],
+                Quirks = [],
+                Plan = null,
+                InstallFolderHint = null,
+                InstallPaths = options.ToDictionary(
+                    i => i.Id,
+                    // An install that needs a folder always shows what the owner would enter, even when the folder given before
+                    // still holds it: the folder page shows that one.
+                    i => UsesInstallFolder(definition, i) ? ManualPathText(definition, i) : view.Candidates.First(c => c.Id == i.Id).Found ?? string.Empty),
+            };
+            return _chooseView;
+        }
+
+        if (options.Count == 1 && view.Page != AddAppPage.NeedsLocation && UsesInstallFolder(definition, options[0]))
+        {
+            return ChooseInstall(options[0].Id);
+        }
+
+        return view;
+    }
+
+    /// <summary>Where a manual install would hold the saves, as the owner would enter it: "&lt;install folder&gt;/mlc01/usr/save".</summary>
+    private static string ManualPathText(AppDefinition definition, InstallDefinition install)
+    {
+        const string token = "{install_dir}";
+        var baseRelative = install.Base.Path is { } b && b.StartsWith(token, StringComparison.Ordinal) ? b[token.Length..].Trim('/') : string.Empty;
+        var shared = definition.Roles
+            .Where(r => r.Default && r.Paths.ContainsKey(install.Id))
+            .Select(r => string.Join('/', new[] { baseRelative, r.Paths[install.Id] }.Where(part => part.Length > 0)))
+            .ToList();
+        return shared.Count == 0 ? "<install folder>" : string.Join(", ", shared.Select(p => $"<install folder>/{p}"));
+    }
+
+    private static bool UsesInstallFolder(AppDefinition definition, InstallDefinition install)
+    {
+        string?[] texts =
+        [
+            install.Detect.Dir, install.Detect.File, install.Base.Path, install.Base.WinPath, install.Base.Prefix?.Path,
+            .. definition.Roles.Select(r => r.Paths.GetValueOrDefault(install.Id)),
+        ];
+        return texts.Any(t => t?.Contains("{install_dir}", StringComparison.Ordinal) == true);
     }
 
     /// <summary>The install picked when more than one was found.</summary>
-    public AddAppView ChooseInstall(string installId) => Plan(Request with { Install = installId, Roles = null });
+    public AddAppView ChooseInstall(string installId)
+    {
+        var request = Request with { Install = installId, Roles = null };
+        var workspace = Open();
+        var entry = workspace.Definitions.Find(request.AppId);
+        var definition = entry?.Definition;
+        if (entry?.Source != DefinitionSource.Imported
+            && definition?.Installs.FirstOrDefault(i => i.Id == installId) is { } install && UsesInstallFolder(definition, install))
+        {
+            // A portable install: ask for its folder, with the one given or stored before filled in.
+            _request = request;
+            var stored = workspace.Shared.TryReadDevice(workspace.DeviceName)?.Apps?.GetValueOrDefault(request.AppId);
+            return new AddAppView(AddAppPage.NeedsLocation, request.AppId, definition.Name, $"Where is {definition.Name} installed?", [], null, [], [], [], [], null, null)
+            {
+                Fields = [(LocationField.InstallFolder, request.InstallDir ?? stored?.InstallDir)],
+                InstallFolderHint = InstallFolderHintFor(definition, [install]),
+            };
+        }
+
+        return Plan(request);
+    }
 
     /// <summary>A location field changed: the plan is made again with it. Empty clears it.</summary>
     public AddAppView SetLocation(LocationField field, string? path)
@@ -319,7 +427,16 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     }
 
     /// <summary>Back from an outcome that is not a plan: the last plan if there was one, else null for page 1.</summary>
-    public AddAppView? Back() => _lastPlan;
+    public AddAppView? Back(AddAppPage from = AddAppPage.NeedsLocation)
+    {
+        // The install page has nothing before it but page 1. Any other page goes back to it when this add began there.
+        if (from == AddAppPage.ChooseInstall)
+        {
+            return null;
+        }
+
+        return _chooseView ?? (from == AddAppPage.Plan ? null : _lastPlan);
+    }
 
     /// <summary>
     /// Add (section 8): under the operation lock, the plan is made again with the same request and written
@@ -525,8 +642,19 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 })
                 .ToList();
             var found = outcome.Candidates.FirstOrDefault(c => c.Id == plan.Install)?.Found;
+
+            // Apply refuses a folder whose parent is missing, whatever the shared copy holds: say so before Add, not at Apply.
+            var noParent = roles
+                .Where(r => r.Ticked && !r.AlreadyAdded && r.Planned is { Exists: false, IsLink: false })
+                .Select(r => (r.RoleId, Parent: Path.GetDirectoryName(PathRules.Normalize(r.Planned!.Source))))
+                .Where(x => x.Parent is not null && SafeFs.Probe(PathRules.ResolveAll(x.Parent)) != EntryKind.Directory)
+                .ToList();
+            var warning = noParent.Count == 0
+                ? null
+                : $"{string.Join(" ", noParent.Select(x => $"The folder {x.Parent} does not exist, so Apply will refuse to link {x.RoleId}."))} Check the folder you chose, and that the app is installed.";
             return empty with
             {
+                MissingFolderWarning = warning,
                 Page = AddAppPage.Plan,
                 Title = $"Add {name}",
                 Found = found is null ? $"Install: {plan.Install}." : $"Install: {plan.Install}, found at {found}.",
@@ -573,9 +701,10 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 return empty with
                 {
                     Page = AddAppPage.NeedsLocation,
-                    Title = $"{name} was not found on this device.",
+                    Title = $"No install of {name} was found.",
                     Sentences = sentences,
                     Fields = FieldsFor(wanting, definition, request),
+                    InstallFolderHint = InstallFolderHintFor(definition, wanting),
                 };
             }
 
@@ -591,6 +720,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                     Title = "A folder could not be worked out",
                     Sentences = [outcome.Message?.Text ?? "A folder could not be worked out."],
                     Fields = helps ? FieldsFor(installs, definition, request) : [],
+                    InstallFolderHint = helps ? InstallFolderHintFor(definition, installs) : null,
                 };
             }
 
@@ -634,6 +764,38 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         RoleClass.Media => "Off by default: screenshots and recordings, which can be large.",
         _ => "Off by default.",
     };
+
+    /// <summary>
+    /// Says which folder to choose for {install_dir}: the one that contains the folders the definition shares, as the
+    /// definition writes them for this system ("mlc01/usr/save"). Worked out from the definition, so every app with an
+    /// install folder gets it. An install with no default folder to share falls back to what it looks for.
+    /// </summary>
+    public static string? InstallFolderHintFor(AppDefinition? definition, IEnumerable<InstallDefinition> installs)
+    {
+        const string token = "{install_dir}";
+        var hints = new List<string>();
+        foreach (var install in installs)
+        {
+            var detect = install.Detect.Dir ?? install.Detect.File;
+            if (detect is null || !detect.StartsWith(token, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var marker = detect[token.Length..].Trim('/');
+            var baseRelative = install.Base.Path is { } b && b.StartsWith(token, StringComparison.Ordinal) ? b[token.Length..].Trim('/') : string.Empty;
+            var shared = (definition?.Roles ?? [])
+                .Where(r => r.Default && r.Paths.ContainsKey(install.Id))
+                .Select(r => string.Join('/', new[] { baseRelative, r.Paths[install.Id] }.Where(part => part.Length > 0)))
+                .ToList();
+            var contains = shared.Count > 0 ? shared : marker.Length > 0 ? [marker] : [];
+            hints.Add(contains.Count == 0
+                ? "Select the folder the app is installed in."
+                : $"Select the folder containing {string.Join(" or ", contains.Select(p => $"\"{p}\""))}.");
+        }
+
+        return hints.Count == 0 ? null : string.Join(" ", hints.Distinct());
+    }
 
     private List<(LocationField Field, string? Value)> FieldsFor(IEnumerable<InstallDefinition> installs, AppDefinition? definition, AppAddRequest request)
     {

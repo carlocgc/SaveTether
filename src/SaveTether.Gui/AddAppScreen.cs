@@ -472,7 +472,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
     {
         var back = Navigation.BackRow("Back", () =>
         {
-            if (view.Page != AddAppPage.Plan && _flow.Back() is { } last)
+            if (_flow.Back(view.Page) is { } last)
             {
                 Show(last);
             }
@@ -498,12 +498,17 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 {
                     var use = new Button { Content = $"Use {candidate.Id}" };
                     use.Click += (_, _) => _ = PlanAsync(() => _flow.ChooseInstall(candidate.Id));
-                    content.Add(new StackPanel
+                    // The path wraps in the room beside the button: a long one (an SD card's) was cut off at the window's edge on the Deck.
+                    var where = new TextBlock
                     {
-                        Orientation = Orientation.Horizontal,
-                        Spacing = 12,
-                        Children = { use, new TextBlock { Text = candidate.Found ?? string.Empty, Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center } },
-                    });
+                        Text = view.InstallPaths.GetValueOrDefault(candidate.Id) ?? candidate.Found ?? string.Empty,
+                        Opacity = 0.75,
+                        TextWrapping = TextWrapping.Wrap,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(12, 0, 0, 0),
+                    };
+                    Grid.SetColumn(where, 1);
+                    content.Add(new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Children = { use, where } });
                 }
 
                 break;
@@ -515,6 +520,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
                     var (box, row) = PathField(value ?? string.Empty, AddAppFlow.FieldLabel(field));
                     fields.Add((field, box));
                     content.Add(new TextBlock { Text = AddAppFlow.FieldLabel(field), FontWeight = FontWeight.SemiBold });
+                    if (field == LocationField.InstallFolder && view.InstallFolderHint is { } hint)
+                    {
+                        content.Add(new TextBlock { Text = hint, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 });
+                    }
+
                     content.Add(row);
                 }
 
@@ -526,7 +536,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
                 if (fields.Count > 0)
                 {
-                    var look = new Button { Content = "Look again", IsDefault = true };
+                    var look = new Button { Content = "Use folder", IsDefault = true };
                     look.Click += (_, _) =>
                     {
                         // Read here, on the UI thread: a control cannot be read from the planning thread (found on the Deck).
@@ -569,6 +579,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
         if (view.CloudNote is { } cloud)
         {
             yield return new TextBlock { Text = cloud, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 };
+        }
+
+        if (view.MissingFolderWarning is { } missing)
+        {
+            yield return new TextBlock { Text = missing, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Icons.Amber) };
         }
 
         yield return new TextBlock { Text = "Folders to share", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
