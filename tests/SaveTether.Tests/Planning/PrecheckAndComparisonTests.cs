@@ -70,6 +70,16 @@ public class PrecheckTests
     }
 
     [Fact]
+    public void The_home_folder_or_a_folder_holding_it_is_not_a_save_folder()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        foreach (var broad in new[] { home, Path.GetDirectoryName(home)! })
+        {
+            Assert.Equal([PrecheckKind.SourceUnusable], Failures(Snap.WithLocalSaves() with { ResolvedSource = broad }));
+        }
+    }
+
+    [Fact]
     public void A_missing_parent_folder_is_refused_so_a_typo_cannot_create_a_link()
     {
         var snapshot = Snap.Base() with { SourceKind = EntryKind.Missing, SourceParentExists = false };

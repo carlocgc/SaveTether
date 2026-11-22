@@ -116,6 +116,13 @@ jobs:
             cat "$RUNNER_TEMP/report.txt"
             echo '```'
             echo
+            # The bundle is a gzip file, which GitHub cannot show a diff of. Definitions decide which folders get
+            # linked and backed up, so the changed lines are listed here (cut short to fit the body's size limit).
+            echo "Changed definitions: \`<\` removed, \`>\` added (lines cut to 150 characters; the first 300 are shown)."
+            echo '```diff'
+            { diff "$RUNNER_TEMP/old.jsonl" "$RUNNER_TEMP/new.jsonl" || true; } | cut -c1-150 | head -n 300
+            echo '```'
+            echo
             echo "Check the counts against the previous run before merging. CI for a pull request created by a workflow waits for approval: select **Approve workflows to run** when GitHub shows that prompt."
           } > "$RUNNER_TEMP/body.md"
           gh pr create --base development --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/body.md"
