@@ -210,6 +210,13 @@ A throwaway device, and a shared definition in its sync folder's `.savetether/de
 - Rename the install folder, Check now: Folder gone with Find the app again. It opens page 2 with "may have moved" and the old folder prefilled. Give the new one: "already a link". Add, Not now: the row is Linked at the new folder.
 - Choose an install (Cemu, which lists `win-portable`, `win-documents` and on Linux `linux-flatpak`, `linux-native`): Add app, Cemu: with `Documents\mlc01\usr\save` made, "Choose an install of Cemu." lists `win-documents` with its path and `win-portable` as `<install folder>/mlc01/usr/save`. Use win-documents: the plan, no folder field; Back returns to the list. Use win-portable: "Where is Cemu installed?" with "Select the folder containing \"mlc01/usr/save\"." and the stored folder filled in; give a folder holding `mlc01\usr\save` and Use folder: the plan lists that folder. Add it, Remove it on the Apps page, add again: the list is shown again though `win-portable` was used last. Check the page for an imported game found in one place: no list. Give a folder that has `mlc01` but no `usr` (even on a device whose shared folder already has Cemu saves): the plan warns that the `usr` folder does not exist and Apply will refuse; with `usr` made and no `save`, there is no warning.
 
+### A verified definition
+
+Build the CLI on Mint from the branch, copy it to the device, and with a throwaway `SAVETETHER_HOME` (`init --sync-root <scratch>/sync --create-root`; the sync folder must exist first) run `app add <id> --install <install> --dry-run` for each install the device has. It resolves the folders and sizes them without changing anything. Save `savetether status` before and compare after.
+
+- `{emudeck}` reads the Emulation folder from `~/.config/EmuDeck/settings.sh`: on the Deck it is on the SD card (`/run/media/deck/<uuid>/Emulation`), not `~/Emulation`. A scratch `HOME` hides that file, so EmuDeck installs are tried with the real `HOME` (the dry run only reads).
+- Read the emulator's own settings first: on the Deck several emulators point their folders at `~/Sync/...` by hand, so the default folders there hold nothing or old files.
+
 ### Add a folder by hand
 
 Two throwaway devices sharing one throwaway sync folder, set up with the CLI: the "other" device with `map add other-game.saves --target other-game/Saves --source <its folder> --entry-depth 2`, so the device under test has a hand mapping with no definition; and on the device under test, a folder holding a file to add, for example `games/Dolphin/GC/MemoryCardA.USA.raw`.

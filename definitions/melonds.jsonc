@@ -1,13 +1,14 @@
 // melonDS (Nintendo DS emulator). Shipped with SaveTether. Only EmuDeck's install has a fixed save folder: elsewhere melonDS keeps each
 // .sav beside its ROM unless Settings > Path settings names a folder, so those installs are left to "Add a folder by hand". The EmuDeck
-// folders come from EmuDeck's own melonDS script (read on the owner's Steam Deck, 2026-11-22). Design 5.2 explains the format.
+// folders come from EmuDeck's own melonDS script; `app add --dry-run` on the owner's Steam Deck found a save there (2026-11-22). Design 5.2
+// explains the format.
 {
   "schema": 1,
   "id": "melonds",
   "name": "melonDS",
   "kind": "emulator",
   "tier": "verified",
-  "tested_on": ["Steam Deck, EmuDeck paths (dry run; the folder was absent there)"],
+  "tested_on": ["Steam Deck, EmuDeck (dry run found the save)"],
   "installs": [
     {
       "id": "emudeck",
