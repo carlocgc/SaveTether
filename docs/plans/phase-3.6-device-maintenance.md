@@ -15,9 +15,9 @@ Taken by the owner on 2026-11-22.
 | D1 | **Local folders are the user's once they are no longer links.** SaveTether takes care of the data while it makes or undoes a link; after that, the folders belong to the user. Removal turns every link back into a real folder, using the existing revert (copied back and verified). There is no "wipe local saves" option. The result lists the folders that were given back, so the user can delete them (before selling a device, say) |
 | D2 | **No export or import archive.** The stub's T2 and T7 are dropped. Removal leaves the saves as ordinary folders, and a device is added again with setup and Add app |
 | D3 | **Removing another device is in scope**, from Maintenance, for a device that is gone (the old PC). It deletes only that device's file and its seed markers; nobody's links are touched |
-| D4 | **Reset is not a flow of its own.** It is an option of Remove this device: "Delete everything SaveTether keeps in the sync folder". The option is offered only when this is the only device file left. It deletes all of `<sync root>/savetether/`: mappings, the shared save folders, custom definitions and tombstones. Local links are reverted first, as in every removal, so the local copies survive (D1). While other device files exist, the option is shown disabled, with the reason ("2 other devices use this sync folder; remove them first") |
+| D4 | **Reset is not a flow of its own.** It is an option of Remove this device: "Delete everything SaveTether keeps in the sync folder". The option is offered only when this is the only device left. A device file that carries this install's ID, such as one left over from an unfinished rename, counts as this device. It deletes all of `<sync root>/savetether/`: mappings, the shared save folders, custom definitions and tombstones. Local links are reverted first, as in every removal, so the local copies survive (D1). While other device files exist, the option is shown disabled, with the reason ("2 other devices use this sync folder; remove them first") |
 | D5 | **Orphaned mappings.** A mapping is orphaned when no device file has a `Paths` entry for it. Removal lists the mappings that only this device uses, and for each the user chooses one of three:<br>• Keep (the default)<br>• Delete the mapping<br>• Delete the mapping and its save folder<br>The last uses the existing `map delete` path and needs a typed confirmation. A mapping that another device uses is never offered. Maintenance also lists orphans that are already there, with the same actions |
-| D6 | **Tombstones.** A removal writes `.savetether/removed/<device>.json`, holding the name, the install ID and the UTC time. Three checks read it:<br>• **The file comes back:** a device file whose install ID is tombstoned (an offline device's sync tool restored it). `status` and Maintenance flag it<br>• **Removed by another device:** a device finds its own install ID tombstoned while its bootstrap is still there. It shows "This device was removed from the sync folder by <name>", with **Finish removal here** and **Set up again**<br>• **Name reused:** `init` with that name removes the tombstone, since the new install has a new install ID |
+| D6 | **Tombstones.** A removal writes `.savetether/removed/<device>.json`, holding the name, the install ID, the UTC time and `removed_by`, the name of the device that did the removal. Four checks read it:<br>• **The file comes back:** a device file whose install ID is tombstoned (an offline device's sync tool restored it). `status` and Maintenance flag it<br>• **Removal not finished:** a device finds its own install ID tombstoned, its bootstrap still there, and `removed_by` is its own name. It shows "Removal not finished", with **Finish removal**<br>• **Removed by another device:** the same, but `removed_by` is another name. It shows "This device was removed from the sync folder by <removed_by>", with **Finish removal here** and **Set up again**<br>• **Name reused:** `init` with that name removes the tombstone, since the new install has a new install ID |
 | D7 | **Maintenance is a screen** (an `IScreen`, like Backups and Settings). It opens from a **Maintenance** button in the main page's bar, after Settings (`MainWindow.cs`, where the Settings button is made). Screens have no Back to another screen, so it is not reached through Settings |
 | D8 | **Typed confirmations.** The text the user types:<br>• **Remove a device** (this one or another): the device's name<br>• **Delete everything** (D4), or **delete an orphan's save folder:** `delete everything`<br>• **Delete all backups:** a warning first, then `delete all backups`<br>The match ignores case and spaces at either end |
 | D9 | **Backup cleanup** is on the **Backups** screen, as a **Clean up** button beside the list it changes. It covers the app the screen is filtered to, or all apps, in one of three modes: all, all but the first (the copy taken before the first link), or all but the newest. Maintenance shows the backup count and size, with a button that opens Backups |
@@ -57,18 +57,20 @@ What the code has today, and what each flow reuses. The paths are under `src/Sav
 `SeedMarker.SupersededBy` in other devices' markers is left as it is.
 
 **Remove this device.** The removal is a sequence of steps, each safe to run again. It needs no new executor step kind:
-1. **Refuse** when a journal is open (with Recover as the next step), when another process holds the lock, when the sync root cannot be reached, or when a mapping is in a state that revert refuses (name the mapping and its own fix). Then take `OperationLock` for the whole removal.
+1. **Refuse** when a journal is open (with Recover as the next step), when another process holds the lock, when the sync root cannot be reached (a sync root that is there with no `savetether/` folder in it is not this case; see "A crash" below), or when a mapping is in a state that revert refuses (name the mapping and its own fix). Then take `OperationLock` for the whole removal.
 2. **Revert** each mapping linked here, through `Workspace.PlanRevert` and `Workspace.Run`. Each revert is its own journalled operation: back up, copy to staging, verify, remove the link, rename into place (`Planning/Planner.cs` `PlanRevert`). Mappings that are not linked here are skipped. A running app blocks its revert, as it does today.
 3. **Orphans:** carry out the user's choices (D5) through `Workspace.DeleteMapping` (`Operations/Workspace.Delete.cs`). That takes a `PreDelete` backup first, as today.
 4. **Tombstone:** write `.savetether/removed/<device>.json` (D6).
 5. **Shared files:** delete this device's seed markers, then its device file, with `SafeFs.RemoveSharedFile`. Nothing else shared is deleted, except the orphans of step 3.
 6. **Backups:** delete them if the user chose to, with `BackupStore.Remove` for each one.
 7. **Local state:** delete `state.json`, `journal.json` and the lock files, and **`bootstrap.json` last**. That is the commit point: until it goes, the device still counts as set up and a re-run continues where it stopped. `gui.log` stays.
-8. **With D4's option:** between steps 6 and 7, `SafeFs.DeleteTree(<sync root>/savetether, SharedDataDeletion.ExplicitlyConfirmed)`. This is refused when any device file other than this one exists.
+8. **With D4's option:** between steps 6 and 7, `SafeFs.DeleteTree(<sync root>/savetether, SharedDataDeletion.ExplicitlyConfirmed)`. This is refused when any device file exists whose install ID differs from this install's.
 
 **A crash** leaves the bootstrap in place.
 - Mappings that were already reverted are no longer links, so the re-run skips them. A revert that stopped part way is an open journal, which Recover handles.
-- When the device file is gone and this install's tombstone is there, the removal is unfinished. `status` says so, and the app shows a "Removal not finished" banner with **Finish removal**.
+- When the device file is gone and this install's tombstone is there with `removed_by` set to this device's name, the removal is unfinished. `status` says so, and the app shows a "Removal not finished" banner with **Finish removal**. When `removed_by` is another name, another device removed this one (D6).
+- **After Delete everything's tree delete:** the sync root is there but `<sync root>/savetether/` is gone, and with it the tombstone. When `state.json` lists nothing linked here, this is an unfinished removal too. The re-run skips every shared step and does only step 7.
+- **The re-run asks again.** The user's choices (orphans, backups, Delete everything) are not stored. **Finish removal** reopens Remove this device at page 1 with the defaults, so the user chooses again. In the CLI, `device remove` is run again with its flags. Choices that were already carried out show as done: an orphan that is already deleted is no longer listed.
 
 **After the removal,** `StatusCheck.Run` (`Gui.Presentation/OverallState.cs`) finds no bootstrap and returns `NotSetUp`, and `MainWindow` shows `SetupView`, with no restart. The program stays installed: the result says that Settings → Uninstall removes it.
 
@@ -80,13 +82,13 @@ What the code has today, and what each flow reuses. The paths are under `src/Sav
 **Rename.**
 1. **Check:**
    - the name is valid (`Model/Identifiers.cs` `IsValidDeviceName`)
-   - no device file has the name (`SharedStore.ListDeviceNames`)
+   - no device file has the name (`SharedStore.ListDeviceNames`), except one carrying this install's ID: that is this device's own unfinished rename, and the rename carries on
    - no journal is open
 2. **Write the new files:** the device file under the new name with the same install ID, and a copy of each of this device's seed markers under the new name.
 3. **Update `bootstrap.json`** (the commit point).
 4. **Delete the old device file and markers.**
 
-A crash after step 2 leaves two device files with this install ID. A second `device rename <new>` finishes the job, and so does Remove another device on the old name. `status` points at whichever applies.
+A crash after step 2 leaves two device files with this install ID. A second `device rename <new>` finishes the job, and `status` says so. Do not use Remove another device on the old name: it would write a tombstone with this install's ID, and this device would then think it had been removed. A crash after step 3 leaves the old files; a rename to the same name again deletes them.
 
 **Backup cleanup** (D9). `BackupStore.List(mappingId)` is oldest first. For each mapping, the three modes keep nothing, the first backup, or the last one. Each goes through `BackupStore.Remove`. `Prune` (first plus the newest N, after each run) is unchanged.
 
@@ -134,8 +136,8 @@ Actions are disabled, and say why, when the core would refuse them: a journal is
   4. OK opens setup
 
 **Banners and states:**
-- **"Removal not finished"** with **Finish removal**, which runs the same plan again.
-- **"This device was removed from the sync folder by <name>"** in place of the Apps page, with **Finish removal here** and **Set up again** (D6).
+- **"Removal not finished"** (the tombstone's `removed_by` is this device's name), with **Finish removal**. It reopens Remove this device at page 1 with the defaults; the choices are not stored.
+- **"This device was removed from the sync folder by <removed_by>"** (another name), in place of the Apps page, with **Finish removal here** and **Set up again** (D6).
 - **After a rename:** the window title, the tray tooltip and the page show the new name.
 
 **Steam Deck.** In Desktop Mode, text goes in through the on-screen keyboard (Steam+X). The text box must take it, and the dialog must stay clear of the keyboard at the Deck's window size.
@@ -220,7 +222,8 @@ Each check of the app ends with a capture (`spectacle -a` on the Deck, `import -
 - **Tests:**
   - **Rename:** the files have the new names, and the bootstrap is updated.
   - **Refusals:** each one, with nothing changed.
-  - **Re-run:** a crash after the new files are written (a fault hook, or the half-done state made by hand in the test) is finished by a second rename.
+  - **Re-run:** a crash after the new files are written (a fault hook, or the half-done state made by hand in the test) is finished by a second rename. The name check lets it through because the new device file carries this install's ID.
+  - **Taken name:** a name whose device file has another install's ID is still refused.
   - **Health:** `status` stays healthy after a rename.
 - **Verify on hardware: Mint and Windows, CLI, two homes.** On a, `device rename a2`. Afterwards:
   - the sync folder has `devices/a2.json` and `seed/*/a2.json`, and no `a.json` under either
@@ -275,7 +278,7 @@ Each check of the app ends with a capture (`spectacle -a` on the Deck, `import -
     - one mapping linked here and one not
     - a mapping shared with another device, which is never offered as an orphan
   - **Run:** the source folders are real folders with the same files; the shared files and the local state are gone; the backups are kept, or deleted when chosen.
-  - **Fault injection:** a fault at each step leaves nothing shared deleted before every revert is done, and a second run finishes the job.
+  - **Fault injection:** a fault at each step leaves nothing shared deleted before every revert is done. A second run, given the same choices, finishes the job, and a choice already carried out (a deleted orphan) is no longer listed.
   - **Refusals:** an open journal; a running app.
   - **No new deletes outside `SafeFs`:** the existing test enforces it.
 - **Verify on hardware: Mint first, then the Deck (Linux links) and Windows (Windows links), CLI, two homes.** Set up a with two applied mappings: one shared with b, and one that only a uses. Give a some backups, and copy a's source folders through the links to `~/sttest/<task>/before/`.
@@ -289,16 +292,16 @@ Each check of the app ends with a capture (`spectacle -a` on the Deck, `import -
      - the backups are still there
   3. **After:** `status` with a's home says the device is not set up, and `init` with a new name works.
   4. **Running app:** with a process holding a source folder open, `device remove` refuses and names it.
-  5. **Re-run:** kill the CLI after the first revert (a large test folder makes the window wide enough). `device remove --confirm-remove` again finishes the job.
+  5. **Re-run:** kill the CLI after the first revert (a large test folder makes the window wide enough). `device remove` again with the same flags finishes the job.
 
 ### T6: remove another device; tombstone checks (M)
 
 - **Deliver:**
   - In the core, `Workspace.RemoveOtherDevice(string name)`, which is refused for this device's own name.
   - `HealthCheck` and `StatusCheck` gain three conditions, each with a hint:
-    - **removed by another:** this install ID is tombstoned and the bootstrap is still there
+    - **removed by another:** this install ID is tombstoned, the bootstrap is still there, and the tombstone's `removed_by` is another device's name
     - **file came back:** a device file whose install ID is tombstoned
-    - **removal unfinished:** no device file, and this install's tombstone is there
+    - **removal unfinished:** the same as removed by another, but `removed_by` is this device's name. Also unfinished: the sync root is there with no `savetether/` folder, and nothing is linked here (T7)
   - `device remove` on a device that was removed by another finishes the removal locally: the reverts and the local state, with no shared files left to delete.
   - The CLI gets `device remove --other <name> [--confirm-remove]`.
 - **Files:**
@@ -308,18 +311,18 @@ Each check of the app ends with a capture (`spectacle -a` on the Deck, `import -
 - **Tests:**
   - **Remove the other device:** its files go, its tombstone is written, and this device is unchanged.
   - **Own name:** refused.
-  - **Conditions:** each of the three, from a fixture.
+  - **Conditions:** each of the three, from a fixture. The same tombstone with `removed_by` set to this device gives "not finished", and with another name gives "removed by another".
   - **Name reused:** `init` reusing a tombstoned name removes the tombstone.
 - **Verify on hardware: Mint, CLI, two homes.**
   1. **Remove the other device:** from b, `device remove --other a --confirm-remove`. a's device file and markers are gone and its tombstone is there; a's links on disk are untouched.
   2. **Removed by another:** `status` with a's home reports that b removed it. `device remove --confirm-remove` on a finishes the removal: the links become folders, and the local state is gone.
   3. **File came back:** copy a saved `devices/a.json` back by hand. `status` and `device list` on b flag it.
-  4. **Unfinished:** a bootstrap, no device file, and this install's tombstone. `status` says the removal is not finished.
+  4. **Unfinished:** a bootstrap, no device file, and this install's tombstone with `removed_by` set to a. `status` says the removal is not finished, not that another device removed it.
 
 ### T7: delete everything (S)
 
 - **Deliver:** `RemovalChoices.DeleteEverything` and the CLI flag `device remove --delete-everything`.
-  - **Refused** while any other device file exists, naming those devices.
+  - **Refused** while a device file with another install's ID exists, naming those devices. A leftover file with this install's ID (from an unfinished rename) does not count.
   - **The run:** the removal steps, then `SafeFs.DeleteTree` of `<sync root>/savetether` with `SharedDataDeletion.ExplicitlyConfirmed`.
   - **Confirmation:** in a terminal, type the device name, then `delete everything` (D8). From a script, `--confirm-remove` and `--confirm-delete` are both needed.
 - **Files:** `Operations/Workspace.Remove.cs`, the CLI files and docs.
@@ -327,11 +330,13 @@ Each check of the app ends with a capture (`spectacle -a` on the Deck, `import -
   - **Refusal:** another device is named, and nothing changes.
   - **Run:** the `savetether` folder is gone and the local saves are intact.
   - **From scratch:** `init --create-root` on the same sync folder, then adding an app, works with nothing left over.
-  - **Fault injection:** at the tree delete. A second run finishes the job.
+  - **Fault injection:** a fault during the tree delete, and one just after it, before the local steps. In both cases, `status` says the removal is not finished (not "sync root unavailable"), and a second run finishes the job: the shared steps are skipped and the bootstrap goes.
+  - **Leftover from a rename:** a second device file with this install's ID does not block the option.
 - **Verify on hardware: Mint and Windows, CLI, two homes.**
   1. With b registered, `device remove --delete-everything` on a is refused and names b.
   2. Remove b with `--other`, then run it on a. The scratch `savetether/` folder is gone, and a's source folders match `before/` (`diff -r`).
-  3. `init --create-root` on the same sync folder, then `app add`, works. `ls -R` of the sync folder shows only the new files.
+  3. **Crash after the tree delete:** set a up again with one linked mapping and run Delete everything. Then put back its `bootstrap.json` from a copy taken before the run, which gives the state a crash leaves. `status` says the removal is not finished, and `device remove --delete-everything --confirm-remove --confirm-delete` again finishes it: no bootstrap is left.
+  4. `init --create-root` on the same sync folder, then `app add`, works. `ls -R` of the sync folder shows only the new files.
 
 ### T8: the app's logic and texts (M)
 
