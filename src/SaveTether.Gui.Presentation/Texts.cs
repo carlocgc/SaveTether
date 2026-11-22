@@ -36,6 +36,8 @@ public static class Texts
             OverallCondition.Unfinished => "An operation did not finish. Nothing else can be done until it is recovered.",
             OverallCondition.SyncRootUnavailable =>
                 $"The sync folder {status.Report?.SyncRoot} is not available: {status.Detail ?? "it does not exist"}. If it is on a drive or a network share, connect it.",
+            OverallCondition.RemovalUnfinished => RemoveDeviceFlow.UnfinishedBanner,
+            OverallCondition.RemovedByAnother => RemoveDeviceFlow.RemovedByBanner(status.Report?.RemovedBy ?? "another device"),
             OverallCondition.DeviceNameInUse =>
                 $"Another SaveTether install uses the device name '{status.Report?.DeviceName}'. Two machines with one name would apply each other's folders.",
             OverallCondition.CheckFailed => "SaveTether's health checks keep failing. The details are in gui.log in its local folder.",
