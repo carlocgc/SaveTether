@@ -3,7 +3,7 @@ namespace SaveTether.Core.Operations;
 /// <summary>One device in the sync root, as <see cref="Maintenance.Overview"/> reports it.</summary>
 /// <param name="LastActivityUtc">The newest of the device file's write time and its seed markers' times.</param>
 /// <param name="MappingCount">How many mappings the device has a save folder for.</param>
-/// <param name="Tombstoned">False until a removal writes tombstones (phase 3.6, T5).</param>
+/// <param name="Tombstoned">This install's ID is in a tombstone: the device was removed, and its file came back.</param>
 public sealed record DeviceOverview(
     string Name, string InstallId, DateTimeOffset LastActivityUtc, int MappingCount, bool IsThisDevice, bool Tombstoned);
 
@@ -32,6 +32,7 @@ public static class Maintenance
         var shared = workspace.Shared;
         var mappings = shared.ListMappings().Select(m => m.Id).Order(StringComparer.Ordinal).ToList();
 
+        var removed = shared.ReadTombstones().Select(t => t.InstallId).ToHashSet(StringComparer.Ordinal);
         var devices = new List<DeviceOverview>();
         var used = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in shared.ListDeviceNames())
@@ -40,7 +41,7 @@ public static class Maintenance
             used.UnionWith(device.Paths.Keys);
             devices.Add(new DeviceOverview(
                 name, device.InstallId, shared.LastActivityOf(name, mappings), device.Paths.Count,
-                name == workspace.DeviceName, Tombstoned: false));
+                name == workspace.DeviceName, removed.Contains(device.InstallId)));
         }
 
         var backups = workspace.ListBackups();

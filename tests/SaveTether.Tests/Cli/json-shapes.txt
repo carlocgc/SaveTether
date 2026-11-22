@@ -435,6 +435,39 @@ $.exit_code: number
 $.schema: number
 $: object
 
+## device-remove
+$.command: string
+$.exit_code: number
+$.removal.backups_deleted: number
+$.removal.dry_run: boolean
+$.removal.given_back: array
+$.removal.given_back[]: string
+$.removal.not_linked: array
+$.removal.orphans: array
+$.removal.shared_files: array
+$.removal.shared_files[]: string
+$.removal: object
+$.schema: number
+$: object
+
+## device-remove-dry-run
+$.command: string
+$.exit_code: number
+$.removal.backups_deleted: number
+$.removal.dry_run: boolean
+$.removal.given_back: array
+$.removal.given_back[]: string
+$.removal.not_linked: array
+$.removal.orphans: array
+$.removal.orphans[].choice: string
+$.removal.orphans[].mapping_id: string
+$.removal.orphans[]: object
+$.removal.shared_files: array
+$.removal.shared_files[]: string
+$.removal: object
+$.schema: number
+$: object
+
 ## device-rename
 $.command: string
 $.exit_code: number

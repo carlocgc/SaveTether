@@ -151,6 +151,12 @@ internal static class CliApp
           savetether device rename <new-name>
               Give this device a new name, here and in the sync folder.
 
+          savetether device remove [--delete-orphan <mapping>[:saves]]... [--delete-backups] [--confirm-remove]
+              Take this device out of the sync folder: linked folders become real folders again, and this
+              device's files in the sync folder and its local setup are deleted. Without --confirm-remove
+              it asks you to type the device name, or, with no terminal, only lists what it would do.
+              --delete-orphan <mapping> deletes a mapping only this device used; with :saves, its shared saves too.
+
           savetether backup list [<id>]
           savetether backup restore <backup-id> [--confirm-replace] [--assume-closed] [--dry-run]
               Put a backup back where it was taken from. What is there now is backed up first.
@@ -226,6 +232,7 @@ internal static class CliApp
                     {
                         Command = command.Name, ExitCode = ExitSuccess, Renamed = Open().RenameDevice(command.Positionals[0]),
                     },
+                    "device remove" => DeviceRemove(),
                     "apply" => Apply(),
                     "revert" => Revert(),
                     "backup list" => new CliOutput
@@ -610,6 +617,72 @@ internal static class CliApp
 
             var deleted = workspace.DeleteBackup(backupId);
             return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, BackupDeleted = deleted };
+        }
+
+        /// <summary>
+        /// "device remove": the plan, then the removal after the device's name is typed at a terminal or --confirm-remove is given.
+        /// With neither it deletes nothing and lists what it would do.
+        /// </summary>
+        private CliOutput DeviceRemove()
+        {
+            var orphans = new Dictionary<string, OrphanChoice>();
+            foreach (var value in command.Values("--delete-orphan"))
+            {
+                var parts = value.Split(':');
+                if (parts.Length > 2 || (parts.Length == 2 && parts[1] != "saves") || !Identifiers.IsValidMappingId(parts[0]))
+                {
+                    throw new UsageException($"'--delete-orphan' needs a mapping ID, or '<mapping>:saves': '{value}'");
+                }
+
+                orphans[parts[0]] = parts.Length == 2 ? OrphanChoice.DeleteWithSaves : OrphanChoice.DeleteMapping;
+            }
+
+            var workspace = Open();
+            var plan = workspace.PlanDeviceRemoval(new RemovalChoices(orphans, command.Has("--delete-backups")));
+            if (plan.IsRefused)
+            {
+                return Failed(ExitRefused, string.Concat(plan.Refusals.Select(r => PlanRenderer.ToText(new PlanOutcome(null, r)))));
+            }
+
+            DeviceRemovalOutput Summary(bool dryRun, DeviceRemovalResult? done) => new(
+                dryRun, done?.GivenBack ?? plan.GivenBack, plan.NotLinked, done?.OrphansDeleted ?? plan.Orphans,
+                plan.SharedFiles, done?.BackupsDeleted ?? plan.Backups.Count);
+
+            if (!command.Has("--confirm-remove"))
+            {
+                if (!CanAsk)
+                {
+                    return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Removal = Summary(dryRun: true, null) };
+                }
+
+                var question =
+                    $"Remove '{workspace.DeviceName}' from the sync folder? {plan.Reverts.Count} linked folder(s) become real folders again, " +
+                    $"{plan.SharedFiles.Count} shared file(s) of this device are deleted, and this device's local setup goes. " +
+                    (plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves) ? "Shared saves of the mappings named with :saves are deleted. " : string.Empty) +
+                    (plan.DeleteBackups && plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves) ? "The backup taken of them first is deleted too. " : string.Empty) +
+                    $"Type the device name '{workspace.DeviceName}' to go ahead: ";
+                if (!string.Equals(Ask(question), workspace.DeviceName, StringComparison.OrdinalIgnoreCase)
+                    || (plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves)
+                        && !string.Equals(Ask("Type 'delete everything' to delete those shared saves: "), "delete everything", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was changed.");
+                }
+            }
+
+            var result = workspace.RemoveDevice(plan);
+            if (result.Failure is { } failure)
+            {
+                var exit = failure.Status switch
+                {
+                    ExecutionStatus.RolledBack => ExitRolledBack,
+                    ExecutionStatus.RecoveryNeeded => ExitRecoveryNeeded,
+                    _ => ExitRefused,
+                };
+                var error = failure.Error is { } note ? Hints.Compose(note) : "A link could not be reverted, so the device was not removed.";
+                return Failed(exit, error + " Nothing was deleted from the sync folder. Run the command again once that is dealt with.");
+            }
+
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Removal = Summary(dryRun: false, result) };
         }
 
         private BackupCleanup? BulkMode()

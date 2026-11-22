@@ -421,6 +421,16 @@ Branch `backup-cleanup-t4`, commit 78d6584.
 
   `backup list` agreed each time. `status` of the real setup was the same before and after on both, and the scratch folders and the Mint build are gone. A first script looped for ever because it assumed each apply and revert cycle makes backups (see the `--add-missing` note); it was stopped and its processes ended.
 
+### T5: remove this device — built, Mint and Deck checks not run
+
+Branch `phase-3.6-t5-remove-device` (not committed yet).
+
+- Core: `Workspace.PlanDeviceRemoval(RemovalChoices)` (reads only) and `Workspace.RemoveDevice(plan, progress)` in `Operations/Workspace.Remove.cs`. Order: reverts (each its own journalled operation, run through `Workspace.Run`), orphan choices (`Keep`, `DeleteMapping` through `RetireMapping`, `DeleteWithSaves` through `DeleteMapping`), backups if chosen (before anything shared is deleted, so a failing backup root leaves the device re-runnable), tombstone, markers and device file, local files with the bootstrap last. A revert that does not complete returns the failure and nothing shared is deleted. `SharedStore.WriteTombstone`, `ReadTombstones`, `FilesOf`; `LocalStore.DeleteDeviceFiles`; `TombstoneFile` in `Model/Files.cs`. `Maintenance.Overview` now sets `Tombstoned` from the tombstones.
+- Decisions: the lock is taken by the CLI for the whole command (`Workspace.Run` takes none), so there is no double take; a dry run also takes it. A revert refused only because a mapping is not linked is skipped; any other refusal stops the removal and is shown. A choice naming a mapping another device uses is refused; A choice naming a mapping that does not exist is refused as a typo, except when this install's tombstone exists (an earlier run got that far), so a run again with the same flags finishes. Unreadable tombstones are skipped. An orphan's `Paths` entry is dropped from the device file before its delete (a mapping is unused only when no device file has it). On Windows `operation.lock` stays (open while the command runs).
+- CLI: `device remove [--delete-orphan <id>[:saves]]... [--delete-backups] [--confirm-remove]`, `--json` as `removal`. Terminal: type the device name, and `delete everything` when `:saves` is used. No terminal and no flag: dry run. Docs: `cli.md`, `cli-json.md`, `json-shapes.txt`, `hardware-testing.md` ("Device remove").
+- Tests: `DeviceRemoveTests` (dry run, run, mapping-only delete, keep, shared mapping refused, a mistyped mapping ID, running app, open journal, backups, a failing backup step, an unreadable tombstone, a failed revert), the contract, the command table. `dotnet build -warnaserror` clean; 949 tests pass.
+- Hardware check (2026-11-22, Windows, CLI Debug build of the branch, `home-a` and `home-b`, scratch folders removed): steps 1 to 4 of the flow in `hardware-testing.md` behave as described; the folders equal `before/`, junctions became real folders, `status` of the real setup was the same before and after. **Not run:** Mint, the Deck, the running-app check with a real process, and killing the CLI between reverts (the fault-injection test covers a failed revert, not a killed process).
+
 ### T3: rename — built, hardware check not run
 
 Branch `phase-3.6-t3-rename` (not committed yet).

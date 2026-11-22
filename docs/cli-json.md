@@ -163,6 +163,19 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 
 `device rename <new-name>`, no flags. `renamed` object: `old_name` and `new_name` (strings; equal when only files left by an earlier rename were cleared). Exit 3 while an operation is unfinished.
 
+### `device remove`
+
+`device remove [--delete-orphan <mapping>[:saves]]... [--delete-backups] [--confirm-remove]` (added 2026-11-22). Under `--json` without `--confirm-remove` nothing is changed and the answer has `dry_run` true. Exit 1 when a link cannot be reverted (the error says which and why) or a `--delete-orphan` names a mapping another device uses; 2 when a revert failed and was rolled back; 3 while an operation is unfinished. A failed revert leaves everything in the sync folder as it was. `removal` object:
+
+| Field | Type | |
+|---|---|---|
+| `dry_run` | boolean | True when nothing was changed. |
+| `given_back` | array of strings | The save folders that are (or would be) real folders again. |
+| `not_linked` | array of strings | Mapping IDs this device has a folder for that are not linked here, and were skipped. |
+| `orphans` | array of objects | Mappings only this device used: `mapping_id`, and `choice`: `keep`, `delete-mapping` or `delete-with-saves`. After a run, only the ones deleted. |
+| `shared_files` | array of strings | This device's files in the sync folder (its seed markers and its device file). |
+| `backups_deleted` | number | The backups deleted, or with `dry_run` the ones that would be; 0 when they are kept. |
+
 ### `status`
 
 `status [<id>]`, no flags. Exit 3 while an operation is unfinished.
