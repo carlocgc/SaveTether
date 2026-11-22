@@ -117,12 +117,18 @@ jobs:
             echo '```'
             echo
             # The bundle is a gzip file, which GitHub cannot show a diff of. Definitions decide which folders get
-            # linked and backed up, so the changed lines are listed here (cut short to fit the body's size limit).
-            echo "Changed definitions: \`<\` removed, \`>\` added (lines cut to 150 characters; the first 300 are shown)."
-            echo '```diff'
-            # Through a file, and head first: a pipe closed early by head would kill cut, and pipefail would fail the step.
+            # linked and backed up, so each changed definition is listed with its detect folders and role paths.
+            # Through files, and head -c last: a pipe closed early would kill the writer, and pipefail would fail the step.
             diff "$RUNNER_TEMP/old.jsonl" "$RUNNER_TEMP/new.jsonl" > "$RUNNER_TEMP/changes.diff" || true
-            head -n 300 "$RUNNER_TEMP/changes.diff" | cut -c1-150
+            grep -E '^[<>] ' "$RUNNER_TEMP/changes.diff" > "$RUNNER_TEMP/changed-lines.txt" || true
+            jq -R -r '
+              .[0:1] as $side | (.[2:] | try fromjson catch null) as $d
+              | if $d == null then "\($side) (a line that cannot be read)"
+                else "\($side) \($d.id) \($d.name | @json) | detect: \([$d.installs[]?.detect | tostring] | join(" ; ")) | paths: \([$d.roles[]? | .path | tostring] | join(" ; "))" end
+            ' "$RUNNER_TEMP/changed-lines.txt" > "$RUNNER_TEMP/changes.txt"
+            echo "Changed definitions ($(wc -l < "$RUNNER_TEMP/changes.txt")): \`<\` removed, \`>\` added, each with its detect folders and role paths. The first 55000 characters are shown."
+            echo '```diff'
+            head -c 55000 "$RUNNER_TEMP/changes.txt"
             echo '```'
             echo
             echo "Check the counts against the previous run before merging. CI for a pull request created by a workflow waits for approval: select **Approve workflows to run** when GitHub shows that prompt."
