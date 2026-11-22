@@ -183,6 +183,16 @@ A throwaway device whose apply replaced a shared copy, so it has a backup of eac
 
 Mint and Windows, CLI only. Set up two local folders, `home-a` and `home-b`, as two devices on one scratch sync folder (a guarded `SAVETETHER_HOME` for each, `--backup-root` under the scratch folder). On a: `init --create-root`, `map add` and `apply --copy` for one mapping, then `map add` and `map remove` for a second, which leaves it with no device using it. On b: `init`, `map add` of the first mapping. From a, `device list` and `device list --json` must show 2 devices, the shared mapping linked here, the one orphan, and the backups. Compare with `find` (or `Get-ChildItem -Recurse`) of the sync folder. `backup_bytes` is the size of the saved files; `du` of the backup root is larger because it also counts each backup's manifest. Compare `savetether status` of the real setup before and after, in a fresh shell, and remove the scratch folders.
 
+### Device remove (CLI)
+
+Mint, the Deck and Windows, CLI only. Two homes `home-a` and `home-b` on one scratch sync folder, which must exist before `init --create-root` (that creates only `savetether/` in it). On a: two mappings applied with `--copy`, `game.saves` (also added on b with `map add`) and `solo.saves` (only a). Copy a's source folders to `before/`. Then:
+1. `device remove --delete-orphan solo.saves:saves`: a dry run, lists 2 folders, the orphan and 3 files; the sync folder's hash is the same after.
+2. `--delete-orphan game.saves:saves --confirm-remove`: refused (b uses it), nothing changed.
+3. `--delete-orphan solo.saves:saves --confirm-remove`: a's folders are real folders and equal `before/`; `devices/a.json`, a's markers, `solo.saves`' record and its shared folder are gone; `removed/a.json` is there; b's mapping and saves are as before; a's home has no `bootstrap.json`, `state.json` or `journal.json`, and the backups are kept.
+4. `status` on a says not set up; `init --device a2` works; b's `status` still works.
+
+In PowerShell, `cli` is an alias for `Clear-Item`: do not name a helper function `Cli`. Under `$ErrorActionPreference = 'Stop'` the CLI's stderr text ends the script: use `Continue` and join the output as strings. The held `operation.lock` file stays in a's home on Windows (it is open while the command runs); it is empty and harmless.
+
 ### Start with the session
 
 Never test against the real autostart folder. On Linux, export `XDG_CONFIG_HOME` to a folder under the scratch area in the environment file, check it in the same `case` as `SAVETETHER_HOME`, and pass it to `systemd-run` with `-E XDG_CONFIG_HOME`. List `~/.config/autostart` before and after, and compare. On Windows the switch writes the real Run value: test it only with the owner's leave, and check `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` before and after.

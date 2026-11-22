@@ -16,6 +16,7 @@ public sealed class SharedStore
     private const string MappingsFolder = "mappings";
     private const string DevicesFolder = "devices";
     private const string SeedFolder = "seed";
+    private const string RemovedFolder = "removed";
 
     public SharedStore(string syncRoot)
     {
@@ -222,6 +223,58 @@ public sealed class SharedStore
         RequireInitialized();
         RequireDeviceName(deviceName);
         SafeFs.RemoveSharedFile(DataRoot, DevicePathOf(deviceName));
+    }
+
+    /// <summary>The shared files that belong to one device and no one else: its seed markers, then its device file. Only those that exist.</summary>
+    public IReadOnlyList<string> FilesOf(string deviceName)
+    {
+        RequireInitialized();
+        RequireDeviceName(deviceName);
+        var files = ListMappings()
+            .Select(m => Path.Combine(SeedFolderOf(m.Id), deviceName + ".json"))
+            .Where(f => SafeFs.Probe(f) == EntryKind.File)
+            .ToList();
+        if (SafeFs.Probe(DevicePathOf(deviceName)) == EntryKind.File)
+        {
+            files.Add(DevicePathOf(deviceName));
+        }
+
+        return files;
+    }
+
+    /// <summary>
+    /// Every tombstone: the devices that were removed from this sync folder (phase 3.6). One that cannot be read is skipped, so a stray
+    /// file in the folder cannot stop "device list" or a removal.
+    /// </summary>
+    public IReadOnlyList<TombstoneFile> ReadTombstones()
+    {
+        RequireInitialized();
+        var tombstones = new List<TombstoneFile>();
+        foreach (var file in JsonFiles.ListJson(Path.Combine(MetaRoot, RemovedFolder)))
+        {
+            try
+            {
+                tombstones.Add(JsonFiles.Read(file, StorageJsonContext.Default.TombstoneFile, TombstoneFile.CurrentSchema));
+            }
+            catch (StoreException)
+            {
+                // Not one this version can read: left as it is.
+            }
+        }
+
+        return tombstones;
+    }
+
+    public void WriteTombstone(TombstoneFile tombstone)
+    {
+        RequireInitialized();
+        ArgumentNullException.ThrowIfNull(tombstone);
+        RequireDeviceName(tombstone.DeviceName);
+        var folder = Path.Combine(MetaRoot, RemovedFolder);
+        Directory.CreateDirectory(folder);
+        JsonFiles.Write(
+            Path.Combine(folder, tombstone.DeviceName + ".json"),
+            tombstone, StorageJsonContext.Default.TombstoneFile, TombstoneFile.CurrentSchema);
     }
 
     /// <summary>Deletes the device's seed marker for the mapping, if it has one.</summary>

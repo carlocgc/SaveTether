@@ -6,7 +6,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 - [Concepts](#concepts)
 - [Options every command takes](#options-every-command-takes)
-- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [device list](#device-list) · [device rename](#device-rename) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
+- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [device list](#device-list) · [device rename](#device-rename) · [device remove](#device-remove) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
 - [Workflows](#workflows)
 - [Files and environment](#files-and-environment)
 - [Exit codes](#exit-codes)
@@ -202,6 +202,26 @@ Gives this device a new name in the sync folder and on this device: its device f
 
 ```bash
 savetether device rename deck2
+```
+
+## device remove
+
+```
+savetether device remove [--delete-orphan <mapping>[:saves]]... [--delete-backups] [--confirm-remove]
+```
+
+Takes this device out of the sync folder, for a machine that is being sold, wiped or set up again from scratch. In order:
+
+1. Every linked save folder becomes a real folder again, holding a copy of the shared saves (a revert, which backs up first). **These folders are yours from then on**: the result lists them, so you can delete them. SaveTether never deletes local saves.
+2. A mapping only this device uses (an orphan) is kept unless you name it. `--delete-orphan <mapping>` deletes its record; `<mapping>:saves` deletes its shared save folder too, after a backup, as `map delete` does. A mapping another device uses is never deleted: naming one is refused.
+3. A record of the removal is written to the sync folder (`.savetether/removed/<device>.json`), then this device's seed markers and device file are deleted. Nothing else in the sync folder is touched: the other devices and their saves are unaffected.
+4. With `--delete-backups`, every backup of this device is deleted, before anything in the sync folder is. Otherwise they stay. Together with `:saves` this deletes the backup taken of the shared saves too, so no copy of them is left: use one or the other if you want a copy.
+5. This device's local setup (`bootstrap.json`, `state.json`, `journal.json`) is deleted, `bootstrap.json` last. `gui.log` stays. After this, `status` says the device is not set up and `init` sets it up again; the program stays installed (`uninstall` removes it on Linux, Settings, Apps on Windows).
+
+Without `--confirm-remove` at a terminal it lists the plan and asks you to type the device name (and `delete everything` when `:saves` is used); with no terminal, or `--json`, it deletes nothing and only lists what it would do. Refused (exit 1, nothing changed) while an app that uses a linked folder is running, while a link cannot be reverted (the error names the mapping and what to do), and when the sync folder cannot be reached; exit 3 while an operation is unfinished. A revert that fails is rolled back and nothing in the sync folder is deleted. If the command is stopped part way, run it again with the same options: reverted folders are skipped, and a mapping already deleted is no longer listed. A mapping ID that does not exist is refused as a typo, except on such a run again.
+
+```bash
+savetether device remove --delete-orphan only-here.saves:saves --confirm-remove
 ```
 
 ## apply

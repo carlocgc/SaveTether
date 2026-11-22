@@ -225,6 +225,26 @@ public sealed record StateFile
     public static StateFile Empty { get; } = new() { Schema = CurrentSchema };
 }
 
+/// <summary>
+/// Written to <c>.savetether/removed/&lt;device&gt;.json</c> when a device is removed from the sync folder (phase 3.6). It lets a device
+/// whose file comes back, or that was removed by another, find out. Only the install ID, not the name, identifies the removed install.
+/// </summary>
+public sealed record TombstoneFile
+{
+    public const int CurrentSchema = 1;
+
+    public required int Schema { get; init; }
+
+    public required string DeviceName { get; init; }
+
+    public required string InstallId { get; init; }
+
+    public required DateTimeOffset RemovedUtc { get; init; }
+
+    /// <summary>The name of the device that did the removal: this device's own, or another's.</summary>
+    public required string RemovedBy { get; init; }
+}
+
 [JsonSourceGenerationOptions(
     WriteIndented = true,
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
@@ -235,4 +255,5 @@ public sealed record StateFile
 [JsonSerializable(typeof(BootstrapFile))]
 [JsonSerializable(typeof(SeedMarker))]
 [JsonSerializable(typeof(StateFile))]
+[JsonSerializable(typeof(TombstoneFile))]
 internal sealed partial class StorageJsonContext : JsonSerializerContext;

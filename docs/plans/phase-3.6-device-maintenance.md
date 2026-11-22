@@ -421,6 +421,24 @@ Branch `backup-cleanup-t4`, commit 78d6584.
 
   `backup list` agreed each time. `status` of the real setup was the same before and after on both, and the scratch folders and the Mint build are gone. A first script looped for ever because it assumed each apply and revert cycle makes backups (see the `--add-missing` note); it was stopped and its processes ended.
 
+### T5: remove this device — done
+
+Branch `phase-3.6-t5-remove-device`, commit 9f0d9ae.
+
+- Core: `Workspace.PlanDeviceRemoval(RemovalChoices)` (reads only) and `Workspace.RemoveDevice(plan, progress)` in `Operations/Workspace.Remove.cs`. Order: reverts (each its own journalled operation, run through `Workspace.Run`), orphan choices (`Keep`, `DeleteMapping` through `RetireMapping`, `DeleteWithSaves` through `DeleteMapping`), backups if chosen (before anything shared is deleted, so a failing backup root leaves the device re-runnable), tombstone, markers and device file, local files with the bootstrap last. A revert that does not complete returns the failure and nothing shared is deleted. `SharedStore.WriteTombstone`, `ReadTombstones`, `FilesOf`; `LocalStore.DeleteDeviceFiles`; `TombstoneFile` in `Model/Files.cs`. `Maintenance.Overview` now sets `Tombstoned` from the tombstones.
+- Decisions: the lock is taken by the CLI for the whole command (`Workspace.Run` takes none), so there is no double take; a dry run also takes it. A revert refused only because a mapping is not linked is skipped; any other refusal stops the removal and is shown. A choice naming a mapping another device uses is refused; A choice naming a mapping that does not exist is refused as a typo, except when this install's tombstone exists (an earlier run got that far), so a run again with the same flags finishes. Unreadable tombstones are skipped. An orphan's `Paths` entry is dropped from the device file before its delete (a mapping is unused only when no device file has it). On Windows `operation.lock` stays (open while the command runs).
+- CLI: `device remove [--delete-orphan <id>[:saves]]... [--delete-backups] [--confirm-remove]`, `--json` as `removal`. Terminal: type the device name, and `delete everything` when `:saves` is used. No terminal and no flag: dry run. Docs: `cli.md`, `cli-json.md`, `json-shapes.txt`, `hardware-testing.md` ("Device remove").
+- Tests: `DeviceRemoveTests` (dry run, run, mapping-only delete, keep, shared mapping refused, a mistyped mapping ID, running app, open journal, backups, a failing backup step, an unreadable tombstone, a failed revert), the contract, the command table. `dotnet build -warnaserror` clean; 949 tests pass.
+- Hardware check (2026-11-22, commit 9f0d9ae; the same flow on Mint and on the Deck, CLI Release linux-x64 built on Mint from a `git archive` of the commit and copied to the Deck through the PC; Windows ran an earlier build of the branch, CLI Debug). `home-a` and `home-b` on one scratch sync folder under `~/sttest`; a has `game.saves` (shared with b, process `sleepy`, a copy of `sleep`) and `solo.saves`:
+  1. Dry run lists 2 folders, the orphan and 3 files; the sync folder's hash is unchanged.
+  2. `--delete-orphan game.saves:saves` is refused (b uses it); a mistyped ID is refused; both leave the tree unchanged.
+  3. Running app: with a `sleepy` process running, the run is refused and names it, the tree is unchanged and the link is kept.
+  4. Run with `solo.saves:saves --confirm-remove`: both folders are real folders and `diff -r` against copies taken before the apply shows no difference; the sync folder holds only b's device file, `game.saves` with its saves, and `removed/a.json`; a's home is empty; the backups are kept.
+  5. After: `status` on a says not set up, `init --device a2` works, b's `status` is unaffected.
+  6. Killed CLI: 4000 files linked, `device remove` killed with `kill -KILL` during the first revert; the journal was open and the link still there; `recover` undid the revert, and `device remove` again finished (no bootstrap, files back as a real folder).
+  
+  Same results on Mint and the Deck; on Windows steps 1 to 5 (junctions). `status` of the real setup was the same before and after on every machine, and the scratch folders and the copied binary are gone. A first script compared against copies taken after the apply (a link), which proved nothing: the copies are made before it now.
+
 ### T3: rename — built, hardware check not run
 
 Branch `phase-3.6-t3-rename` (not committed yet).
