@@ -277,7 +277,7 @@ public class AppAddCliTests
         Directory.CreateDirectory(Path.Combine(deck.Home, "cemu", "save"));
 
         var list = deck.Ok("app", "list", "--json").Json().GetProperty("apps").EnumerateArray()
-            .Where(a => a.GetProperty("source").GetString() != "imported")
+            .Where(a => a.GetProperty("source").GetString() is "shared") // built-in ones grow with each new definition
             .Select(a => (a.GetProperty("id").GetString(), a.GetProperty("name").GetString(), a.GetProperty("source").GetString()))
             .ToList();
         Assert.Equal([("cemu", "Cemu (mine)", "shared"), ("testapp", "Test App", "shared")], list);
