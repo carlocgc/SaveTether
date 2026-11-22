@@ -199,7 +199,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         "and your sync tool has finished syncing it on every device.";
 
     public static string DeletedText(string role, bool hadBackup) =>
-        $"{role} was deleted from the shared folder." + (hadBackup ? " Its shared saves are backed up on this device; Backups shows them." : string.Empty);
+        $"{role} was deleted from the shared folder." + (hadBackup ? " Its shared data are backed up on this device; Backups shows them." : string.Empty);
 
     /// <summary>Remove's confirmation (section 5).</summary>
     public static string RemoveWarning(string role) =>
@@ -216,19 +216,19 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     }
 
     public static string FirstDeviceTitle(int count, string firstRole) =>
-        count == 1 ? $"{firstRole} has saves only on this device" : $"{count} save folders have saves only on this device";
+        count == 1 ? $"{firstRole} has data only on this device" : $"{count} save folders have data only on this device";
 
-    public const string FirstDeviceShare = "Share these saves";
+    public const string FirstDeviceShare = "Share this data";
     public const string FirstDeviceStartEmpty = "Start empty";
     public const string FirstDeviceLeave = "Leave them";
 
     /// <summary>One question for every mapping with saves only on this device (apply all, section 9.4, as built 2026-11-21).</summary>
     public static string FirstDeviceText(IReadOnlyList<string> roles) =>
         $"{string.Join("\n", roles)}\n\nNothing is shared for {(roles.Count == 1 ? "this" : "these")} yet. One answer applies to {(roles.Count == 1 ? "it" : "all of them")}:\n\n" +
-        $"{FirstDeviceShare}: the saves on this device become the shared copy for every device.\n" +
-        $"{FirstDeviceStartEmpty}: this device's saves are kept in a backup only, and {(roles.Count == 1 ? "it" : "they")} will see no saves until another device shares some.\n\n" +
+        $"{FirstDeviceShare}: the data on this device becomes the shared copy for every device.\n" +
+        $"{FirstDeviceStartEmpty}: this device's data is kept in a backup only, and {(roles.Count == 1 ? "it" : "they")} will see no data until another device shares some.\n\n" +
         "Each is backed up first. If any of these was already set up on another device, leave them and wait until it has synced here; " +
-        "otherwise both devices will make their own saves the shared copy.";
+        "otherwise both devices will make their own data the shared copy.";
 
     /// <summary>Apply all's summary (section 9.4).</summary>
     public static string ApplyAllSummary(int linked, IReadOnlyList<string> needYou) =>

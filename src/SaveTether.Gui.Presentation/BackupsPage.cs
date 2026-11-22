@@ -144,7 +144,7 @@ public static class BackupsPage
     }
 
     /// <summary>The confirmation for a backup of the shared copy (section 9.7), like replace-shared's.</summary>
-    public static string RestoreSharedTitle(string role) => $"Restore the shared saves for {role} on every device?";
+    public static string RestoreSharedTitle(string role) => $"Restore the shared data for {role} on every device?";
 
     public const string RestoreSharedText =
         "What is in the shared folder now is backed up on this device first. Then it is emptied and filled from this backup. " +

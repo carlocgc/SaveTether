@@ -433,7 +433,7 @@ public static class Planner
                 AddSwitchSteps(s, steps);
                 return Planned(
                     s, Classification.FirstDevice, SetupChoice.NoCopy, steps,
-                    ["The shared location is empty, so the app will see no saves after this. This device's saves will be in the backup only."]);
+                    ["The shared location is empty, so the app will see no data after this. This device's data will be in the backup only."]);
             }
 
             default:

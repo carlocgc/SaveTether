@@ -405,7 +405,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                         plans.Count == 1
                             ? $"Link {roles[plans[0].MappingId]} on this device to its shared folder?"
                             : $"Link {plans.Count} on this device to their shared folders?",
-                        $"{list}\n\nEach is backed up first where it has saves.{intro}",
+                        $"{list}\n\nEach is backed up first where it has data.{intro}",
                         "Apply all", Overlay.OperationDialogTimeout))
                 {
                     return;
@@ -414,7 +414,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 foreach (var plan in plans)
                 {
                     var role = roles[plan.MappingId];
-                    var result = await RunWithProgressAsync(ActionTexts.Confirmation(plan, role).Title, plan, progress => session.Run(plan, progress));
+                    var result = await RunWithProgressAsync(ActionTexts.Confirmation(plan, role).Title, plan, progress => session.Run(plan, progress), role, quietOnSuccess: true);
                     if (result.Status == ExecutionStatus.Completed)
                     {
                         linked++;
@@ -422,7 +422,6 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                     else
                     {
                         waiting.Add(role);
-                        await ShowResultAsync(result, role);
                         if (result.Status == ExecutionStatus.RecoveryNeeded)
                         {
                             // Nothing else may run until it is recovered (section 9.3).
@@ -453,8 +452,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         using (session)
         {
-            var result = await RunWithProgressAsync("Recovering", null, progress => session.Recover(progress));
-            await ShowResultAsync(result, result.MappingId ?? "the operation", recovery: true);
+            await RunWithProgressAsync("Recovering", null, progress => session.Recover(progress), "the operation", recovery: true);
         }
     }
 
@@ -528,9 +526,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             foreach (var (group, entries) in ActionTexts.ComparisonGroups(comparison))
             {
                 var list = new TextBlock { Text = string.Join("\n", entries), TextWrapping = TextWrapping.Wrap, FontSize = 13 };
-                body.Children.Add(group.StartsWith("On both, the same", StringComparison.Ordinal)
-                    ? new Expander { Header = group, Content = list, HorizontalAlignment = HorizontalAlignment.Stretch }
-                    : new StackPanel { Spacing = 2, Children = { new TextBlock { Text = group, FontWeight = FontWeight.SemiBold }, list } });
+                body.Children.Add(new Expander { Header = group, Content = list, HorizontalAlignment = HorizontalAlignment.Stretch });
             }
         }
 
@@ -560,7 +556,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         body.Children.Add(new TextBlock { Text = ActionTexts.EveryChoiceBacksUp, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
         var cancel = new Button { Content = "Cancel" };
-        var pressed = await overlay.ShowAsync($"{role} on this device already has saves.", body, [cancel, cont], cancel, Overlay.OperationDialogTimeout);
+        var pressed = await overlay.ShowAsync($"{role} on this device already has data.", body, [cancel, cont], cancel, Overlay.OperationDialogTimeout);
         if (pressed != cont || chosen is not { } choice)
         {
             return null;
@@ -595,13 +591,16 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             return null;
         }
 
-        var result = await RunWithProgressAsync(title, plan, progress => session.Run(plan, progress));
-        await ShowResultAsync(result, role);
-        return result;
+        return await RunWithProgressAsync(title, plan, progress => session.Run(plan, progress), role);
     }
 
-    /// <summary>Section 9.3's progress: the steps, each ticked as the executor finishes it. Nothing can be pressed meanwhile.</summary>
-    private async Task<ExecutionResult> RunWithProgressAsync(string title, Plan? plan, Func<IProgress<StepProgress>, ExecutionResult> run)
+    /// <summary>
+    /// Section 9.3's progress: the steps, each ticked as the executor finishes it. Nothing can be pressed meanwhile.
+    /// With <paramref name="role"/>, the finished list stays on screen under the result's title and sentences, with
+    /// an OK button, so the whole flow can be read before it closes. <paramref name="quietOnSuccess"/> shows it only when
+    /// the operation did not complete (Apply all reports its successes in one summary).
+    /// </summary>
+    private async Task<ExecutionResult> RunWithProgressAsync(string title, Plan? plan, Func<IProgress<StepProgress>, ExecutionResult> run, string? role = null, bool recovery = false, bool quietOnSuccess = false)
     {
         var lines = new StackPanel { Spacing = 4 };
         var marks = new List<TextBlock>();
@@ -620,6 +619,8 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         // The executor reports from its thread at its own speed; the list shows the reports on this thread at a
         // pace that can be read, then holds the finished list (section 9.3). Only the display waits.
         var progress = new PacedProgress();
+        ExecutionResult result;
+        Task<Button>? shown = null;
         using (overlay.ShowBlocking(title, lines))
         {
             var work = Task.Run(() =>
@@ -640,20 +641,46 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                     marks[p.Index].Text = p.Status == StepStatus.Done ? "✓" : "…";
                 }
             });
-            var result = await work;
+            result = await work;
             log.Write($"{result.Operation?.ToString() ?? "recover"} {result.MappingId}: {result.Status}{(result.Error is { } e ? $": {e.Text}" : string.Empty)}");
             if (result.Diagnostic is not null)
             {
                 log.Write($"  {result.Diagnostic}");
             }
-            return result;
-        }
-    }
 
-    private async Task ShowResultAsync(ExecutionResult result, string role, bool recovery = false)
-    {
-        var (title, sentences) = ActionTexts.Result(result, role, recovery);
-        await overlay.InformAsync(title, sentences.Count == 0 ? "Done." : string.Join("\n\n", sentences));
+            if (role is not null && !(quietOnSuccess && result.Status == ExecutionStatus.Completed))
+            {
+                // The list moves from the progress layer to the result's, in one step, so nothing flashes between.
+                var (resultTitle, steps, sentences) = ActionTexts.FinishedView(plan, result, role, recovery);
+                var body = new StackPanel { Spacing = 12 };
+                if (steps.Count > 0)
+                {
+                    var kept = new StackPanel { Spacing = 4 };
+                    foreach (var row in lines.Children.ToList())
+                    {
+                        lines.Children.Remove(row);
+                        kept.Children.Add(row);
+                    }
+
+                    body.Children.Add(kept);
+                }
+
+                if (sentences.Count > 0)
+                {
+                    body.Children.Add(new TextBlock { Text = string.Join("\n\n", sentences), TextWrapping = TextWrapping.Wrap });
+                }
+
+                var ok = new Button { Content = "OK" };
+                shown = overlay.ShowAsync(resultTitle, body, [ok], ok);
+            }
+        }
+
+        if (shown is not null)
+        {
+            await shown;
+        }
+
+        return result;
     }
 
     /// <summary>After a revert (section 9.6): take back a Flatpak grant no mapping needs now. Keep is the safe choice.</summary>

@@ -83,17 +83,17 @@ public class ActionTests
         Assert.Equal(RefusalKind.ChoiceNeeded, firstDevice.Kind);
         var offered = ActionTexts.Choices(firstDevice, "PPSSPP");
         Assert.Equal(firstDevice.AllowedChoices, offered.Select(c => c.Choice));
-        Assert.Equal(["Share this device's saves", "Start empty"], offered.Select(c => c.Label));
+        Assert.Equal(["Share this device's data", "Start empty"], offered.Select(c => c.Label));
 
         var guard = Planner.Plan(Snap.Guarded(), new ApplyRequest()).Refusal!;
         var guardOffered = ActionTexts.Choices(guard, "PPSSPP");
         Assert.Equal(guard.AllowedChoices, guardOffered.Select(c => c.Choice));
         Assert.DoesNotContain(guardOffered, c => c.Choice == SetupChoice.Copy);
-        Assert.Equal("Use the shared saves", guardOffered.Single(c => c.Choice == SetupChoice.NoCopy).Label);
+        Assert.Equal("Use the shared data", guardOffered.Single(c => c.Choice == SetupChoice.NoCopy).Label);
 
-        // The comparison's groups, with the identical ones counted.
+        // The comparison's groups, each counted.
         var groups = ActionTexts.ComparisonGroups(guard.Comparison!);
-        Assert.Contains(groups, g => g.Group == "Only on this device");
+        Assert.Contains(groups, g => g.Group.StartsWith("Only on this device (", StringComparison.Ordinal));
         Assert.All(groups, g => Assert.NotEmpty(g.Entries));
     }
 
@@ -144,6 +144,14 @@ public class ActionTests
             Assert.Equal(ExecutionStatus.Completed, result.Status);
             Assert.Equal($"{Role} is linked.", ActionTexts.Result(result, Role).Title);
             Assert.Equal(plan.Steps.Count * 2, steps.Count);
+
+            // The finished dialog keeps the plan's steps above the result; a run with no plan has none.
+            var finished = ActionTexts.FinishedView(plan, result, Role);
+            Assert.Equal(plan.Steps.Select(ActionTexts.Step), finished.Steps);
+            Assert.Equal($"{Role} is linked.", finished.Title);
+            Assert.Contains(result.BackupIds.Select(id => $"Backup taken: {id}").First(), finished.Sentences);
+            Assert.Empty(ActionTexts.FinishedView(null, result, Role, recovery: true).Steps);
+            Assert.Empty(ActionTexts.FinishedView(plan, new ExecutionResult(ExecutionStatus.Refused, Id, PlanOperation.Apply, [], []), Role).Steps);
         }
 
         Assert.Equal(OverallCondition.AllLinked, StatusCheck.Run(local).Condition);
