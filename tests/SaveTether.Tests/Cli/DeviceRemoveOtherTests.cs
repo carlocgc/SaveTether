@@ -93,6 +93,20 @@ public sealed class DeviceRemoveOtherTests : IDisposable
     }
 
     [Fact]
+    public void A_removal_is_finished_even_when_a_mapping_record_was_deleted_meanwhile()
+    {
+        var (pc, deck) = Devices();
+        deck.Ok("device", "remove", "--other", "pc", "--confirm-remove");
+        deck.DeliverTo(pc, mirror: true);
+        File.Delete(Path.Combine(Meta(pc), "mappings", CliDevice.MappingId + ".json"));
+
+        var o = pc.Ok("device", "remove", "--confirm-remove", "--json").Json().GetProperty("removal");
+
+        Assert.Equal(CliDevice.MappingId, o.GetProperty("not_linked")[0].GetString());
+        Assert.False(File.Exists(Path.Combine(pc.LocalFolder, "bootstrap.json")));
+    }
+
+    [Fact]
     public void A_file_that_comes_back_is_flagged_by_status_and_device_list()
     {
         var (pc, deck) = Devices();

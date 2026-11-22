@@ -45,7 +45,7 @@ public sealed record OrphanRemoval(string MappingId, OrphanChoice Choice);
 
 /// <summary>What "Remove this device" would do. Made without touching the disk.</summary>
 /// <param name="Reverts">The links that become real folders, each a revert plan whose source is the folder given back.</param>
-/// <param name="NotLinked">Mappings this device has a folder for that are not linked here: skipped.</param>
+/// <param name="NotLinked">Mappings this device has a folder for that are not linked here, or whose record is gone: skipped.</param>
 /// <param name="Refusals">Mappings whose revert is refused, each with its own reason and fix. Nothing runs while there are any.</param>
 /// <param name="Orphans">Mappings only this device uses, with the choice for each.</param>
 /// <param name="SharedFiles">The device's own files in the sync folder: its seed markers and its device file.</param>
@@ -81,7 +81,8 @@ public sealed partial class Workspace
         ["state.json", Execution.Journal.FileName, OperationLock.HolderFileName, "bootstrap.json"];
 
     /// <summary>
-    /// "device remove", before asking (phase 3.6, T5). Reads only. Refused (a <see cref="StoreException"/>) when an operation is
+    /// "device remove", before asking (phase 3.6, T5). Reads only, except that on a device another one removed it may create the
+    /// empty default backup folder (see <see cref="RemovedDeviceFile"/>). Refused (a <see cref="StoreException"/>) when an operation is
     /// unfinished, the sync root cannot be read, this device's file belongs to another install, or a choice names a mapping that
     /// another device uses. A mapping whose revert is refused is in <see cref="DeviceRemovalPlan.Refusals"/>.
     /// </summary>
@@ -156,6 +157,14 @@ public sealed partial class Workspace
         var refusals = new List<Refusal>();
         foreach (var id in device.Paths.Keys.Order(StringComparer.Ordinal))
         {
+            // Its record was deleted from the sync folder (after this device was removed, say): there is no shared folder to
+            // copy back from, so the folder is left as it is.
+            if (Shared.TryReadMapping(id) is null)
+            {
+                notLinked.Add(id);
+                continue;
+            }
+
             var outcome = PlanRevert(id, assumeClosed: false);
             if (outcome.Plan is { } plan)
             {
@@ -298,7 +307,7 @@ public sealed partial class Workspace
             return null;
         }
 
-        // A revert refuses a backup folder that is not there; this one only holds what the revert backs up.
+        // A revert, and so the plan, refuses a backup folder that is not there: this empty one is made even for a dry run.
         var backupRoot = Path.Combine(Local.Folder, "backups");
         Directory.CreateDirectory(backupRoot);
         return new DeviceFile

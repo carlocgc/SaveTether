@@ -194,6 +194,11 @@ public class JsonContractTests
         var moved = Path.Combine(deck.Home, "moved");
         CliDevice.Write(moved, "app.cfg", "config");
         RecordOn(deck, "app-add-conflict", 1, "app", "add", "testapp", "--install-dir", moved);
+        var old = new CliDevice(sandbox, "old");
+        deck.DeliverTo(old);
+        old.Ok("init", "--sync-root", old.SyncRoot, "--device", "old");
+        old.DeliverTo(deck);
+        RecordOn(deck, "device-remove-other-dry-run", 0, "device", "remove", "--other", "old");
         RecordOn(deck, "device-rename", 0, "device", "rename", "deck2");
         RecordOn(deck, "device-remove-dry-run", 0, "device", "remove");
         RecordOn(deck, "device-remove", 0, "device", "remove", "--confirm-remove");

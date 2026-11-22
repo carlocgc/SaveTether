@@ -468,6 +468,21 @@ $.removal: object
 $.schema: number
 $: object
 
+## device-remove-other-dry-run
+$.command: string
+$.exit_code: number
+$.removal.backups_deleted: number
+$.removal.dry_run: boolean
+$.removal.given_back: array
+$.removal.not_linked: array
+$.removal.orphans: array
+$.removal.other: string
+$.removal.shared_files: array
+$.removal.shared_files[]: string
+$.removal: object
+$.schema: number
+$: object
+
 ## device-rename
 $.command: string
 $.exit_code: number
