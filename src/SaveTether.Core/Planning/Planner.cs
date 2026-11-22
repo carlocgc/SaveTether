@@ -215,6 +215,12 @@ public static class Planner
         {
             Fail(PrecheckKind.PathsOverlap, $"The save folder '{s.Source}' contains the shared folder '{s.Target}'.");
         }
+        else if (IsTooBroad(s.ResolvedSource))
+        {
+            Fail(
+                PrecheckKind.SourceUnusable,
+                $"'{s.Source}' is a drive root or the home folder, or holds it. Linking it would move far more than a save folder. Check the path for a typing mistake.");
+        }
 
         if (!s.SourceParentExists)
         {
@@ -559,6 +565,14 @@ public static class Planner
         {
             steps.Add(new PlanStep(StepKind.DeleteAside, aside));
         }
+    }
+
+    /// <summary>True for a filesystem root, the user's home folder, or a folder that holds it.</summary>
+    private static bool IsTooBroad(string resolvedSource)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return PathRules.AreSame(resolvedSource, Path.GetPathRoot(resolvedSource) ?? resolvedSource)
+            || (home.Length > 0 && PathRules.IsSameOrInside(PathRules.ResolveAll(home), resolvedSource));
     }
 
     private static void AddArrivalNote(Snapshot s, List<string> notes)

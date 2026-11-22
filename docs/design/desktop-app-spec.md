@@ -199,6 +199,8 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 | `source-inside-sync-root`, `paths-overlap`, `target-outside-data-root`, `source-unusable`, `target-unusable` | "<role> cannot be linked as it is set up: <fact>." | Details |
 | `not-applied`, `backup-unusable`, `restore-destination-unusable` | Revert and restore only; see 9.6 and 9.7 | |
 
+*As built (2026-11-22), `source-unusable`:* it is also the refusal for a save folder that is the user's home folder, a folder holding it, or a drive root (a typo such as `--source ~` would otherwise back up and link a whole profile). The planner reads the home folder from the operating system (`UserProfile`), not from the resolver's environment.
+
 **The choice dialog** (`choice-needed`). Title: "<Role> on this device already has data." Then the comparison and the allowed choices.
 
 - **Comparison** (5.4), grouped by entry (5.13's entry depth): "Only on this device (*n*)", "Only in the shared copy (*n*)", "On both, different (*n*)" and "On both, the same (*n*)", each collapsed (changed 2026-11-22, asked for by the owner: a long list of memory cards filled the dialog). Each entry expands to its files with size and time. Above the groups: "Newest here: <time>. Newest in the shared copy: <time>."

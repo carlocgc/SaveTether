@@ -116,6 +116,21 @@ jobs:
             cat "$RUNNER_TEMP/report.txt"
             echo '```'
             echo
+            # The bundle is a gzip file, which GitHub cannot show a diff of. Definitions decide which folders get
+            # linked and backed up, so each changed definition is listed with its detect folders and role paths.
+            # Through files, and head -c last: a pipe closed early would kill the writer, and pipefail would fail the step.
+            diff "$RUNNER_TEMP/old.jsonl" "$RUNNER_TEMP/new.jsonl" > "$RUNNER_TEMP/changes.diff" || true
+            grep -E '^[<>] ' "$RUNNER_TEMP/changes.diff" > "$RUNNER_TEMP/changed-lines.txt" || true
+            jq -R -r '
+              .[0:1] as $side | (.[2:] | try fromjson catch null) as $d
+              | if $d == null then "\($side) (a line that cannot be read)"
+                else "\($side) \($d.id) \($d.name | @json) | detect: \([$d.installs[]?.detect | tostring] | join(" ; ")) | paths: \([$d.roles[]? | .path | tostring] | join(" ; "))" end
+            ' "$RUNNER_TEMP/changed-lines.txt" > "$RUNNER_TEMP/changes.txt"
+            echo "Changed definitions ($(wc -l < "$RUNNER_TEMP/changes.txt")): \`<\` removed, \`>\` added, each with its detect folders and role paths. The first 55000 characters are shown."
+            echo '```diff'
+            head -c 55000 "$RUNNER_TEMP/changes.txt"
+            echo '```'
+            echo
             echo "Check the counts against the previous run before merging. CI for a pull request created by a workflow waits for approval: select **Approve workflows to run** when GitHub shows that prompt."
           } > "$RUNNER_TEMP/body.md"
           gh pr create --base development --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/body.md"
