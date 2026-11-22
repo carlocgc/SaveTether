@@ -696,6 +696,8 @@ Revised 2026-11-17: the login-time check is not a scheduled job. A scheduled `st
 | seed markers, one file per device per mapping | journal and operation history |
 | personal custom app definitions | backups |
 
+Shared, one more: `removed/<device>.json`, tombstones written when a device is removed (5.15).
+
 **Why device config is shared.** Restoring a wiped device should need almost no typing (5.4), and the Deck's paths can be edited from the Windows keyboard. Each device writes only its own file, so the sync tool never sees two devices edit the same file. Only the owning device reads it, so R4 holds: no device depends on another's paths. The cost is that every device and the sync host can see each device's save-folder paths and name. Nothing shared contains a credential.
 
 **Why state, journal and backups stay local.** They describe this device's disk, not its intended setup; synced, one device would act on another's record. Backups must be outside the sync root (invariant 3), or a deletion that propagates would take them too. State is rebuildable from disk (a link at S that already points at T is recorded again as applied), so losing it costs nothing. Backup history is the one thing a wipe loses, unless that device's `backup_root` is on a disk the wipe does not touch.
@@ -913,6 +915,65 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 - **Avalonia** (MIT) has a tray icon on Windows and on Linux (StatusNotifierItem over D-Bus), real windows, keyboard focus handling, and Native AOT support. It was the GUI choice in 3.2. It is a large dependency: it brings native Skia and HarfBuzz libraries, so the app is about 33 MB in four files. It draws its own controls, so the window's styling is unrestricted; the tray icon's own menu is a plain system menu.
 - **Hand-written per platform**: the Win32 tray and window APIs on Windows, and the StatusNotifierItem protocol on Linux, which needs a D-Bus library or a hand-written client, plus a separate window layer on each. Far more code to write and maintain.
 - On Linux the tray icon shows on KDE (the Deck's Desktop Mode) and Cinnamon (Mint); stock GNOME needs an extension. The window works everywhere.
+
+### 5.15 Device removal, rename and maintenance (phase 3.6)
+
+Status: decided by the owner on 2026-11-22. The tasks, screens and tests are in `docs/plans/phase-3.6-device-maintenance.md`; this section holds the rules they follow.
+
+**Why.** A device must be able to leave the sync folder (sold, decommissioned, set up again), the last device must be able to take everything SaveTether keeps there with it, a device must be renameable, and old backups must be clearable. None of this may cost anyone a save.
+
+**Decisions.**
+
+1. **Local folders belong to the user once they are not links.** Removal turns every link back into a real folder with the existing revert (5.3: copied out, verified, link removed). There is no "wipe local saves" option. The result lists the folders given back.
+2. **No export or import archive.** After a removal a device is added again with setup and Add app.
+3. **Removing another device** (one that is gone) deletes only that device's file and seed markers. Nobody's links are touched.
+4. **Reset is an option of Remove this device**, "Delete everything SaveTether keeps in the sync folder", offered only when no other install's device file exists. A device file carrying this install's ID (a leftover of an unfinished rename) counts as this device. It deletes all of `<sync root>/savetether/`, after the local links are reverted. This is a fourth exception to invariant 2 in 5.3: explicit, typed-confirmed, and the local copies survive because revert ran first.
+5. **Orphaned mappings.** A mapping is orphaned when no device file has a `Paths` entry for it. Removal offers, for each mapping only the removed device uses: keep (default), delete the mapping, or delete the mapping and its save folder (the existing `map delete` path, with its `PreDelete` backup). A mapping another device uses is never offered.
+6. **Typed confirmations.** Removing a device: its name. Delete everything, or deleting an orphan's save folder: `delete everything`. Deleting all backups: a warning, then `delete all backups`. The match ignores case and spaces at either end.
+7. **Backup cleanup** has three modes: all, all but the first (the copy taken before the first link), all but the newest. The per-run `Prune` is unchanged.
+
+**Tombstone.** A removal writes `savetether/.savetether/removed/<device>.json`:
+
+```json
+{ "schema": 1, "device_name": "deck", "install_id": "…", "removed_utc": "2026-11-22T10:00:00Z", "removed_by": "deck" }
+```
+
+`removed_by` is the name of the device that did the removal. Its checks:
+
+| Situation | Reading |
+|---|---|
+| a device file whose install ID is tombstoned | an offline device's sync tool restored it: flagged by `status` and the device list |
+| this install's ID tombstoned, bootstrap still there, `removed_by` is this device's name | removal not finished: run it again |
+| the same, `removed_by` is another name | removed by another device: finish the removal here, or set up again |
+| `init` with a tombstoned name | the tombstone is removed: the new install has a new install ID |
+
+**Remove this device: steps.** Each is safe to run again.
+
+1. Refuse when a journal is open, another process holds the lock, the sync root cannot be reached, or a mapping is in a state revert refuses. Then hold the operation lock throughout.
+2. Revert each mapping linked here, each its own journalled operation. Mappings not linked here are skipped. A running app blocks its revert.
+3. Carry out the orphan choices through `map delete`.
+4. Write the tombstone.
+5. Delete this device's seed markers, then its device file. Nothing else shared goes, except the orphans of step 3.
+6. Delete the backups, if the user chose to.
+7. With "Delete everything": delete the `savetether/` tree (refused while another install's device file exists).
+8. Delete local state: `state.json`, `journal.json`, the lock files, and **`bootstrap.json` last**. That is the commit point: until it goes the device still counts as set up and a re-run continues. `gui.log` stays.
+
+Nothing shared is deleted before every revert is done. After step 8 the app is not set up and starts as on first launch. The program stays installed; uninstalling is a separate act.
+
+**A crash** leaves the bootstrap. Reverted mappings are no longer links, so the re-run skips them; a half-done revert is an open journal, which recover handles. When the device file is gone and the tombstone is there, the removal is unfinished. After "Delete everything" has deleted the tree, the sync root is there without `savetether/`; when nothing is linked here that is also an unfinished removal, not "sync root unavailable", and the re-run does only step 8. The user's choices are not stored: the re-run asks again, and choices already carried out show as done.
+
+**Rename.**
+
+1. Check: the name is valid; no device file has it, except one carrying this install's ID (this device's own unfinished rename); no journal is open.
+2. Write the device file under the new name with the same install ID, and a copy of each of this device's seed markers under it (with `DeviceName` changed).
+3. Update `bootstrap.json` (the commit point).
+4. Delete the old device file and markers.
+
+A crash after step 2 leaves two device files with this install ID; running the rename again finishes it. Remove another device must not be used on the old name: its tombstone would carry this install's ID. `SupersededBy` in other devices' markers is not rewritten, since each device writes only its own files (5.6).
+
+**Not done:** removal while the sync root cannot be reached (a link cannot be copied back from a folder that is not there), open-folder buttons, rewriting other devices' markers, and Maintenance in Game Mode or the Decky plugin.
+
+**Maintenance screen.** An overview (sync folder, devices, mappings, orphans, backup count and size), this device with Rename and Remove, other devices with Remove, and orphans with their delete actions. Actions are disabled, with the reason, when the core would refuse them. The app holds no logic of its own: it calls the core, as the CLI does.
 
 ## 6. Open questions and unknowns
 

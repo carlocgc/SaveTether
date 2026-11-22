@@ -393,4 +393,5 @@ On a throwaway folder shared by the Deck and the Windows PC, each with a test ap
 
 ## Progress
 
-Not started.
+- **T1: written, awaiting the owner's approval (2026-11-22).** Design section 5.15 added to `save-redirection-design.md`, with a line in 5.6 for `removed/`. It restates D1 to D9 as rules, the tombstone format and its four checks, the removal steps with `bootstrap.json` as the commit point, crash handling, and the rename steps. Decision recorded: D4's tree delete is named as a fourth exception to invariant 2 in 5.3 (the text of 5.3 itself is unchanged; 5.15 states it). No hardware check for T1.
+- T2 to T10: not started.
