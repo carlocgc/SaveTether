@@ -259,6 +259,7 @@ A throwaway device, and a shared definition in its sync folder's `.savetether/de
 Build the CLI on Mint from the branch, copy it to the device, and with a throwaway `SAVETETHER_HOME` (`init --sync-root <scratch>/sync --create-root`; the sync folder must exist first) run `app add <id> --install <install> --dry-run` for each install the device has. It resolves the folders and sizes them without changing anything. Save `savetether status` before and compare after.
 
 - `{emudeck}` reads the Emulation folder from `~/.config/EmuDeck/settings.sh`: on the Deck it is on the SD card (`/run/media/deck/<uuid>/Emulation`), not `~/Emulation`. A scratch `HOME` hides that file, so EmuDeck installs are tried with the real `HOME` (the dry run only reads).
+- A role with a new mapping ID whose target another mapping already uses is refused ("already uses the same target"), by `--dry-run` too, so the dry run finds such clashes.
 - Read the emulator's own settings first: on the Deck several emulators point their folders at `~/Sync/...` by hand, so the default folders there hold nothing or old files.
 - EmuDeck's `Emulation/saves/<emulator>/saves` is sometimes only a symlink into `Emulation/storage/<emulator>` (Azahar, xemu). `ls -la` it before writing an install: the definition names the real folder, not the link.
 
