@@ -39,7 +39,9 @@ public enum RemovalKind
 /// <summary>What the owner chose for a removal. The choices are not stored: a run again is given them again.</summary>
 /// <param name="Orphans">A choice per mapping ID; one not named is kept.</param>
 /// <param name="DeleteBackups">Delete every backup of this device too. Kept otherwise.</param>
-public sealed record RemovalChoices(IReadOnlyDictionary<string, OrphanChoice>? Orphans = null, bool DeleteBackups = false);
+/// <param name="DeleteEverything">Also delete the whole SaveTether folder in the sync folder (phase 3.6, D4). Refused while another device is registered.</param>
+public sealed record RemovalChoices(
+    IReadOnlyDictionary<string, OrphanChoice>? Orphans = null, bool DeleteBackups = false, bool DeleteEverything = false);
 
 public sealed record OrphanRemoval(string MappingId, OrphanChoice Choice);
 
@@ -60,7 +62,8 @@ public sealed record DeviceRemovalPlan(
     IReadOnlyList<string> SharedFiles,
     IReadOnlyList<BackupInfo> Backups,
     bool DeleteBackups,
-    IReadOnlyList<string> LocalFiles)
+    IReadOnlyList<string> LocalFiles,
+    bool DeleteEverything = false)
 {
     public bool IsRefused => Refusals.Count > 0;
 
@@ -109,12 +112,28 @@ public sealed partial class Workspace
                 new Note("An earlier operation did not finish. Recover it first.", new NextStep(NextStepKind.Recover)));
         }
 
+        if (SharedTreeGone)
+        {
+            return new DeviceRemovalPlan(DeviceName, [], [], [], [], [], [], false, LocalFilesPresent());
+        }
+
         var device = ReadOwnDevice();
         if (!DeviceIdentity.Matches(Bootstrap, device))
         {
             throw new StoreException(
                 StoreProblem.Conflict,
                 $"The device file '{DeviceName}' belongs to another install, so this device cannot remove it. Run 'status' for what to do.");
+        }
+
+        // A leftover file with this install's ID (an unfinished rename) is not another device.
+        var others = choices.DeleteEverything
+            ? Shared.ListDeviceNames().Where(n => n != DeviceName && Shared.ReadDevice(n).InstallId != Bootstrap.InstallId).ToList()
+            : [];
+        if (others.Count > 0)
+        {
+            throw new StoreException(
+                StoreProblem.Conflict,
+                $"Other devices are still in the sync folder: {string.Join(", ", others)}. Deleting everything would break them. Remove each of them first.");
         }
 
         var usedByOthers = new HashSet<string>(StringComparer.Ordinal);
@@ -181,10 +200,22 @@ public sealed partial class Workspace
         }
 
         var backups = choices.DeleteBackups ? ListBackups() : [];
-        var local = LocalFileNames.Where(f => SafeFs.Probe(Path.Combine(Local.Folder, f)) == EntryKind.File).ToList();
         return new DeviceRemovalPlan(
-            DeviceName, reverts, notLinked, refusals, orphans, Shared.FilesOf(DeviceName), backups, choices.DeleteBackups, local);
+            DeviceName, reverts, notLinked, refusals, orphans, Shared.FilesOf(DeviceName), backups, choices.DeleteBackups, LocalFilesPresent(),
+            choices.DeleteEverything);
     }
+
+    private List<string> LocalFilesPresent() =>
+        LocalFileNames.Where(f => SafeFs.Probe(Path.Combine(Local.Folder, f)) == EntryKind.File).ToList();
+
+    /// <summary>
+    /// Delete everything got as far as deleting the SaveTether folder: the sync root is there and readable without it, and nothing is
+    /// linked here. What is left of the removal is the local state (phase 3.6, T7).
+    /// </summary>
+    private bool SharedTreeGone =>
+        !Shared.IsInitialized && SharedStore.ReadProblem(Shared.SyncRoot) is null
+        && SafeFs.Probe(PathRules.ResolveAll(Shared.SyncRoot)) == EntryKind.Directory
+        && SafeFs.Probe(Shared.DataRoot) == EntryKind.Missing && Local.ReadState().Mappings.Count == 0;
 
     /// <summary>
     /// "device remove": takes this device out of the sync folder (phase 3.6, T5). Each step can be run again, and the bootstrap
@@ -220,6 +251,12 @@ public sealed partial class Workspace
             throw new StoreException(
                 StoreProblem.Conflict,
                 new Note("An earlier operation did not finish. Recover it first.", new NextStep(NextStepKind.Recover)));
+        }
+
+        if (SharedTreeGone)
+        {
+            Local.DeleteDeviceFiles(Shared.SyncRoot);
+            return new DeviceRemovalResult([], [], 0, null);
         }
 
         var device = ReadOwnDevice();
@@ -287,6 +324,17 @@ public sealed partial class Workspace
         if (Shared.TryReadDevice(DeviceName) is not null)
         {
             Shared.DeleteDevice(DeviceName);
+        }
+
+        if (plan.DeleteEverything)
+        {
+            // Re-checked here: a device may have registered since the plan was made.
+            if (Shared.ListDeviceNames().Any(n => Shared.ReadDevice(n).InstallId != Bootstrap.InstallId))
+            {
+                throw new StoreException(StoreProblem.Conflict, "Another device has registered since the plan was made, so the SaveTether folder is not deleted.");
+            }
+
+            new SafeFs(Shared.SyncRoot).DeleteTree(Shared.DataRoot, SharedDataDeletion.ExplicitlyConfirmed);
         }
 
         Local.DeleteDeviceFiles(Shared.SyncRoot);

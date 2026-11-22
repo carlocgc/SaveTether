@@ -244,4 +244,80 @@ public sealed class DeviceRemoveTests : IDisposable
         Assert.False(File.Exists(Path.Combine(Meta(pc), "devices", "pc.json")));
         Assert.Equal("mine", File.ReadAllText(Path.Combine(pc.Source, "GAME1", "save.bin")));
     }
+
+    private static string Tree(CliDevice d) => Path.Combine(d.SyncRoot, "savetether");
+
+    [Fact]
+    public void Delete_everything_is_refused_while_another_device_is_registered()
+    {
+        var (pc, _) = Devices();
+        var shared = CliDevice.FilesIn(pc.SyncRoot);
+
+        var run = pc.Expect(CliApp.ExitRefused, "device", "remove", "--delete-everything", "--confirm-remove", "--confirm-delete");
+
+        Assert.Contains("deck", run.Err, StringComparison.Ordinal);
+        Assert.Equal(shared, CliDevice.FilesIn(pc.SyncRoot));
+        Assert.True(pc.IsLinked);
+    }
+
+    [Fact]
+    public void Delete_everything_needs_both_flags_from_a_script()
+    {
+        var (pc, deck) = Devices();
+        pc.Ok("device", "remove", "--other", "deck", "--confirm-remove");
+
+        pc.Expect(CliApp.ExitRefused, "device", "remove", "--delete-everything", "--confirm-remove");
+
+        Assert.True(Directory.Exists(Tree(pc)));
+        Assert.True(File.Exists(Path.Combine(pc.LocalFolder, "bootstrap.json")));
+    }
+
+    [Fact]
+    public void Delete_everything_removes_the_shared_folder_keeps_local_saves_and_allows_a_fresh_start()
+    {
+        var (pc, _) = Devices();
+        pc.Ok("device", "remove", "--other", "deck", "--confirm-remove");
+
+        pc.Ok("device", "remove", "--delete-everything", "--confirm-remove", "--confirm-delete");
+
+        Assert.False(Directory.Exists(Tree(pc)));
+        Assert.Equal("mine", File.ReadAllText(Path.Combine(pc.Source, "GAME1", "save.bin")));
+        Assert.False(File.Exists(Path.Combine(pc.LocalFolder, "bootstrap.json")));
+
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", "pc", "--create-root");
+        Assert.Empty(Directory.GetFiles(Path.Combine(Meta(pc), "mappings")));
+    }
+
+    [Fact]
+    public void A_crash_after_the_tree_delete_reads_as_unfinished_and_a_run_again_finishes_it()
+    {
+        var (pc, _) = Devices();
+        pc.Ok("device", "remove", "--other", "deck", "--confirm-remove");
+        var bootstrap = Path.Combine(pc.LocalFolder, "bootstrap.json");
+        var copy = File.ReadAllText(bootstrap);
+        pc.Ok("device", "remove", "--delete-everything", "--confirm-remove", "--confirm-delete");
+        File.WriteAllText(bootstrap, copy); // the state a crash after the tree delete leaves
+
+        var status = pc.Run("status");
+        Assert.Contains("did not finish", status.Out + status.Err, StringComparison.Ordinal);
+        Assert.DoesNotContain("not available", status.Out + status.Err, StringComparison.OrdinalIgnoreCase);
+
+        pc.Ok("device", "remove", "--delete-everything", "--confirm-remove", "--confirm-delete");
+        Assert.False(File.Exists(bootstrap));
+    }
+
+    [Fact]
+    public void A_leftover_file_with_this_installs_id_does_not_block_delete_everything()
+    {
+        var (pc, _) = Devices();
+        pc.Ok("device", "remove", "--other", "deck", "--confirm-remove");
+        var devices = Path.Combine(Meta(pc), "devices");
+        File.WriteAllText(
+            Path.Combine(devices, "old.json"),
+            File.ReadAllText(Path.Combine(devices, "pc.json")).Replace("\"device_name\": \"pc\"", "\"device_name\": \"old\"", StringComparison.Ordinal));
+
+        pc.Ok("device", "remove", "--delete-everything", "--confirm-remove", "--confirm-delete");
+
+        Assert.False(Directory.Exists(Tree(pc)));
+    }
 }
