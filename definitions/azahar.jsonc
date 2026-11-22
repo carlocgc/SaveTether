@@ -1,0 +1,75 @@
+// Azahar (Nintendo 3DS emulator, the successor of Citra). Shipped with SaveTether. The Windows, native Linux and Flatpak folders are
+// Azahar's defaults (from its source, common_paths.h and file_util.cpp); the EmuDeck folders come from EmuDeck's own Azahar script, read on
+// the owner's Steam Deck (2026-11-22). Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "azahar",
+  "name": "Azahar",
+  "kind": "emulator",
+  "tier": "verified",
+  "tested_on": ["Steam Deck, EmuDeck and native (dry run; no 3DS saves there yet)"],
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/user/sdmc" },
+      "base": "{install_dir}/user"
+    },
+    {
+      "id": "win-appdata",
+      "os": "windows",
+      "detect": { "dir": "{appdata}/Azahar/sdmc" },
+      "base": "{appdata}/Azahar"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:org.azahar_emu.Azahar}/data/azahar-emu/sdmc" },
+      "base": "{flatpak:org.azahar_emu.Azahar}/data/azahar-emu"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/azahar-emu/sdmc" },
+      "base": "{xdg_data}/azahar-emu"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/storage/azahar/sdmc" },
+      "base": "{emudeck}/storage/azahar"
+    }
+  ],
+  "roles": [
+    {
+      "id": "sdmc",
+      "class": "save",
+      "default": true,
+      "path": "sdmc",
+      "target": "sdmc",
+      "notes": "The emulated SD card: game saves and extra data, and also installed games, updates and DLC, which can be large."
+    },
+    {
+      "id": "nand",
+      "class": "system",
+      "default": false,
+      "path": "nand",
+      "target": "nand",
+      "notes": "The emulated system memory: system saves, system files and the console's own data."
+    },
+    {
+      "id": "states",
+      "class": "state",
+      "default": false,
+      "path": { "win-portable": "states", "win-appdata": "states", "linux-flatpak": "states", "linux-native": "states" },
+      "target": "states",
+      "notes": "Save states: a newer Azahar may not load an older one. Not for EmuDeck, which keeps them in ~/.local/share/azahar-emu/states."
+    }
+  ],
+  "quirks": [
+    "EmuDeck moves sdmc and nand to Emulation/storage/azahar; Emulation/saves/azahar/saves is only a link to that sdmc folder.",
+    "Settings > System > Storage can move sdmc and nand (use_custom_storage in qt-config.ini); Add app follows the default location only.",
+    "An existing Citra or Lime3DS folder is copied into Azahar's on its first start; Citra's own folders are not Azahar's.",
+    "Process name for the running check: azahar.exe on Windows, azahar or the AppImage on Linux."
+  ]
+}
