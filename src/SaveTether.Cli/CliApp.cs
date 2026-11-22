@@ -144,6 +144,9 @@ internal static class CliApp
           savetether revert <id> [--assume-closed] [--dry-run]
               Make the save folder a real folder again, holding a copy of the shared saves.
 
+          savetether device list
+              The devices in the sync folder, the mappings, and this device's backups.
+
           savetether backup list [<id>]
           savetether backup restore <backup-id> [--confirm-replace] [--assume-closed] [--dry-run]
               Put a backup back where it was taken from. What is there now is backed up first.
@@ -192,7 +195,7 @@ internal static class CliApp
                 using var held = Writes ? OperationLock.Acquire(_local, "cli", command.Name) : null;
 
                 // While an operation is unfinished, only looking and recovering are allowed.
-                var readOnly = command.Name is "status" or "backup list" or "recover" or "app list"
+                var readOnly = command.Name is "status" or "backup list" or "recover" or "app list" or "device list"
                     || (command.Name == "app add" && command.Has(ArgParser.DryRun));
                 if (!readOnly && Journal.For(_local).IsOpen)
                 {
@@ -208,6 +211,10 @@ internal static class CliApp
                     "app add" => AppAdd(),
                     "app list" => AppList(),
                     "status" => Status(),
+                    "device list" => new CliOutput
+                    {
+                        Command = command.Name, ExitCode = ExitSuccess, Devices = Maintenance.Overview(Open()),
+                    },
                     "apply" => Apply(),
                     "revert" => Revert(),
                     "backup list" => new CliOutput
@@ -240,7 +247,7 @@ internal static class CliApp
         /// guarded against.
         /// </remarks>
         private bool Writes =>
-            command.Name is not ("status" or "backup list" or "app list" or "uninstall")
+            command.Name is not ("status" or "backup list" or "app list" or "device list" or "uninstall")
             && !command.Has(ArgParser.DryRun)
             && (command.Name != "init" || Directory.Exists(_local.Folder));
 

@@ -144,6 +144,21 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 
 `app list --found` has `found` instead of `apps`: an array of `id`, `name`, `source` (as above), `verified`, `install` (the install ID found), `save_folder` (the folder found) and `newest_write` (when that folder last changed, UTC; absent when it holds no file), newest first. The `--search` filter applies to it.
 
+### `device list`
+
+`device list`, no flags. `devices` object:
+
+| Field | Type | |
+|---|---|---|
+| `sync_root` | string | |
+| `devices[]` | array | `name`, `install_id`, `last_activity_utc` (the newest of its device file and its seed markers), `mapping_count` (mappings it has a save folder for), `is_this_device`, `tombstoned` (always `false` until device removal exists). |
+| `mappings` | array of string | Every mapping ID in the shared list. |
+| `mappings_here` | array of string | Those this device has a save folder for. |
+| `linked_here` | array of string | Those this device has applied. |
+| `orphans` | array of string | Mappings no device has a save folder for. |
+| `backup_count` | number | This device's backups. |
+| `backup_bytes` | number | Their total size. |
+
 ### `status`
 
 `status [<id>]`, no flags. Exit 3 while an operation is unfinished.

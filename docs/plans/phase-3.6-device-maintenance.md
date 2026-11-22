@@ -393,4 +393,15 @@ On a throwaway folder shared by the Deck and the Windows PC, each with a test ap
 
 ## Progress
 
-Not started.
+### T1: design section — done (2026-11-22)
+
+Closed by the owner. Note: design section 5.15 and the 5.6 line for `removed/` were not written in `docs/design/save-redirection-design.md`; the design of the removal, tombstone and rename flows stands in this file (above) until they are moved there.
+
+### T2: overview — done
+
+Branch `phase-3.6-t2-overview`, commit db48b6e.
+
+- `Core/Operations/Maintenance.cs`: `Maintenance.Overview(Workspace)`, read only. `SharedStore.LastActivityOf` takes the newest of the device file's write time and the device's seed markers' `SeededUtc` (not marker file times, which another device's supersede rewrites).
+- `device list` (CLI, `--json` as `devices`), in `docs/cli.md`, `docs/cli-json.md`, `json-shapes.txt`. `Tombstoned` is always false until T5.
+- Tests: `DeviceListTests` (counts, orphan, read-only), the contract, the command table. `dotnet build -warnaserror` clean; 920 tests pass.
+- Hardware check (2026-11-22, commit db48b6e, CLI Debug build, `home-a` and `home-b` on one scratch sync folder; `map add` with a plain folder stands in for `app add`, which T2 does not touch): on a, `apply --copy` of one mapping, then a second `map add` and `map remove` to orphan it; b joined. `device list` and `--json` on Windows and on Mint showed 2 devices (1 mapping each), 2 mappings with 1 linked here, the orphan `solo.saves`, and 1 backup. The sync folder listing agrees (2 device files, 2 mapping files, 1 seed marker). Backup bytes are the saved files' size (10 on Windows, with CRLF; 8 on Mint) and match what was written; `du` of the backup root is larger because it counts the manifest (the plan's "match `du`" is read that way; the flow is in `hardware-testing.md`, "Device list"). `status` of the real setup was the same before and after on both, and the scratch folders are gone.

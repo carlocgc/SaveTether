@@ -272,6 +272,37 @@ public sealed class SharedStore
     }
 
     /// <summary>
+    /// When the device last wrote to the shared folder: the newest of its device file and the seed markers it
+    /// wrote for <paramref name="mappingIds"/>, by their times when they were seeded.
+    /// </summary>
+    public DateTimeOffset LastActivityOf(string deviceName, IEnumerable<string> mappingIds)
+    {
+        RequireInitialized();
+        RequireDeviceName(deviceName);
+        var newest = new DateTimeOffset(File.GetLastWriteTimeUtc(DevicePathOf(deviceName)), TimeSpan.Zero);
+        foreach (var id in mappingIds)
+        {
+            var file = Path.Combine(SeedFolderOf(id), deviceName + ".json");
+            if (SafeFs.Probe(file) != EntryKind.File)
+            {
+                continue;
+            }
+
+            try
+            {
+                var seeded = JsonFiles.Read(file, StorageJsonContext.Default.SeedMarker, SeedMarker.CurrentSchema).SeededUtc;
+                newest = seeded > newest ? seeded : newest;
+            }
+            catch (StoreException)
+            {
+                // Only the device's own marker is read, and an unreadable one just adds nothing: the time is advisory.
+            }
+        }
+
+        return newest;
+    }
+
+    /// <summary>
     /// Deletes a mapping's seed markers and then its mapping file (design 5.3, invariant 2: the tool's own metadata may be retired).
     /// The caller has checked the mapping is unused and dealt with its shared folder. Each delete refuses a link in the way
     /// (<see cref="SafeFs.RemoveSharedFile"/>), and a markers folder that has gained anything is left.
