@@ -634,7 +634,7 @@ internal static class CliApp
         {
             if (command.Value("--other") is { } other)
             {
-                if (command.Has("--delete-backups") || command.Values("--delete-orphan").Any())
+                if (command.Has("--delete-backups") || command.Has("--delete-everything") || command.Has("--confirm-delete") || command.Values("--delete-orphan").Any())
                 {
                     throw new UsageException("'--other' takes no other option than --confirm-remove.");
                 }
@@ -668,7 +668,7 @@ internal static class CliApp
 
             DeviceRemovalOutput Summary(bool dryRun, DeviceRemovalResult? done) => new(
                 dryRun, done?.GivenBack ?? plan.GivenBack, plan.NotLinked, done?.OrphansDeleted ?? plan.Orphans,
-                plan.SharedFiles, done?.BackupsDeleted ?? plan.Backups.Count);
+                plan.SharedFiles, done?.BackupsDeleted ?? plan.Backups.Count, DeleteEverything: plan.DeleteEverything);
 
             // From a script both flags are needed; at a terminal a typed phrase takes the place of --confirm-delete.
             var everythingConfirmed = !plan.DeleteEverything || command.Has("--confirm-delete");
@@ -688,6 +688,7 @@ internal static class CliApp
                     $"Remove '{workspace.DeviceName}' from the sync folder? {plan.Reverts.Count} linked folder(s) become real folders again, " +
                     $"{plan.SharedFiles.Count} shared file(s) of this device are deleted, and this device's local setup goes. " +
                     (plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves) ? "Shared saves of the mappings named with :saves are deleted. " : string.Empty) +
+                    (plan.DeleteEverything ? "The whole SaveTether folder in the sync folder is deleted too. " : string.Empty) +
                     (plan.DeleteBackups && plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves) ? "The backup taken of them first is deleted too. " : string.Empty) +
                     $"Type the device name '{workspace.DeviceName}' to go ahead: ";
                 if (!string.Equals(Ask(question), workspace.DeviceName, StringComparison.OrdinalIgnoreCase)

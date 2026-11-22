@@ -263,7 +263,7 @@ public sealed class DeviceRemoveTests : IDisposable
     [Fact]
     public void Delete_everything_needs_both_flags_from_a_script()
     {
-        var (pc, deck) = Devices();
+        var (pc, _) = Devices();
         pc.Ok("device", "remove", "--other", "deck", "--confirm-remove");
 
         pc.Expect(CliApp.ExitRefused, "device", "remove", "--delete-everything", "--confirm-remove");
@@ -319,5 +319,16 @@ public sealed class DeviceRemoveTests : IDisposable
         pc.Ok("device", "remove", "--delete-everything", "--confirm-remove", "--confirm-delete");
 
         Assert.False(Directory.Exists(Tree(pc)));
+    }
+
+    [Fact]
+    public void The_dry_run_says_the_whole_folder_would_go_and_other_refuses_the_flag()
+    {
+        var (pc, _) = Devices();
+        pc.Ok("device", "remove", "--other", "deck", "--confirm-remove");
+
+        Assert.Contains("whole SaveTether folder", pc.Ok("device", "remove", "--delete-everything").Out, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(Tree(pc)));
+        pc.Expect(CliApp.ExitUsage, "device", "remove", "--other", "x", "--delete-everything");
     }
 }
