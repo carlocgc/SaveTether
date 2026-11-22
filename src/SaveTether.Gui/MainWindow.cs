@@ -24,6 +24,7 @@ internal sealed class MainWindow : Window
     private readonly Ellipse _dot = new() { Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _headline = new() { FontSize = 17, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _checkedAt = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _check = new() { Content = Texts.CheckNow, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _banners = new() { Spacing = 8 };
     private readonly StackPanel _rows = new() { Spacing = 2 };
 
@@ -109,11 +110,10 @@ internal sealed class MainWindow : Window
         FontSize = 15;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        var check = new Button { Content = Texts.CheckNow, VerticalAlignment = VerticalAlignment.Center };
-        check.Click += (_, _) => checkNow();
+        _check.Click += (_, _) => checkNow();
         AutomationProperties.SetName(_headline, "Overall state");
 
-        var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { _dot, _headline, check, _checkedAt } };
+        var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { _dot, _headline, _check, _checkedAt } };
         var header = new StackPanel { Spacing = 4, Children = { _device, _syncRoot, state } };
         var folder = new TextBlock { Text = $"Local folder: {localFolder}", Opacity = 0.6, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         var footer = new DockPanel { MinHeight = 30 };
@@ -192,6 +192,8 @@ internal sealed class MainWindow : Window
         _dot.Fill = new SolidColorBrush(status.IsAmber ? Icons.Amber : Icons.Green);
         _headline.Text = status.Headline;
         _checkedAt.Text = "Checked " + DateTime.Now.ToString("HH:mm", CultureInfo.InvariantCulture);
+        // Nothing to check before setup, and showing the window checks anyway.
+        _check.IsVisible = _checkedAt.IsVisible = status.Condition != OverallCondition.NotSetUp;
 
         // Not set up: the setup pages take the place of the rows (section 6). Made once, so a check in the
         // background does not lose what the owner has typed.
