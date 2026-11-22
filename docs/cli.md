@@ -6,7 +6,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 - [Concepts](#concepts)
 - [Options every command takes](#options-every-command-takes)
-- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [device list](#device-list) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
+- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [device list](#device-list) · [device rename](#device-rename) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
 - [Workflows](#workflows)
 - [Files and environment](#files-and-environment)
 - [Exit codes](#exit-codes)
@@ -190,6 +190,18 @@ Shows what is in the sync folder and on this device: each device (its last activ
 
 ```bash
 savetether device list
+```
+
+## device rename
+
+```
+savetether device rename <new-name>
+```
+
+Gives this device a new name in the sync folder and on this device: its device file, its seed markers and its local setup. Other devices' seed markers that mention the old name are not changed. Refused (exit 1, nothing changed) for a name that is not valid (lowercase letters, digits, `-` and `_`), for a name another device has, and when the sync folder cannot be reached; exit 3 while an operation is unfinished. If a rename stops part way, run `device rename <new-name>` again: it finishes the job, and run with the name this device already has it clears files an earlier rename left.
+
+```bash
+savetether device rename deck2
 ```
 
 ## apply

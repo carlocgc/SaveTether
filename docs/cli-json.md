@@ -159,6 +159,10 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `backup_count` | number | This device's backups. |
 | `backup_bytes` | number | Their total size. |
 
+### `device rename`
+
+`device rename <new-name>`, no flags. `renamed` object: `old_name` and `new_name` (strings; equal when only files left by an earlier rename were cleared). Exit 3 while an operation is unfinished.
+
 ### `status`
 
 `status [<id>]`, no flags. Exit 3 while an operation is unfinished.

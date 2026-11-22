@@ -147,6 +147,9 @@ internal static class CliApp
           savetether device list
               The devices in the sync folder, the mappings, and this device's backups.
 
+          savetether device rename <new-name>
+              Give this device a new name, here and in the sync folder.
+
           savetether backup list [<id>]
           savetether backup restore <backup-id> [--confirm-replace] [--assume-closed] [--dry-run]
               Put a backup back where it was taken from. What is there now is backed up first.
@@ -214,6 +217,10 @@ internal static class CliApp
                     "device list" => new CliOutput
                     {
                         Command = command.Name, ExitCode = ExitSuccess, Devices = Maintenance.Overview(Open()),
+                    },
+                    "device rename" => new CliOutput
+                    {
+                        Command = command.Name, ExitCode = ExitSuccess, Renamed = Open().RenameDevice(command.Positionals[0]),
                     },
                     "apply" => Apply(),
                     "revert" => Revert(),

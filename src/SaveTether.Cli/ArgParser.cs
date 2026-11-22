@@ -68,6 +68,7 @@ internal static class ArgParser
         new("app list", 0, 0, ["--found"], ["--search"], None),
         new("status", 0, 1, None, None, None),
         new("device list", 0, 0, None, None, None),
+        new("device rename", 1, 1, None, None, None),
         new(
             "apply", 0, 1,
             [
