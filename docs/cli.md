@@ -163,7 +163,7 @@ Lists the apps that have a definition, and whether each is built in, shared or i
 savetether status [<id>]
 ```
 
-Shows each mapping's state on this device, or one mapping's. It only reads. It warns when an earlier operation did not finish, when the sync root cannot be used, when this device's name is in use by another install, and when the desktop app's start-with-the-session entry points to a program that is gone.
+Shows each mapping's state on this device, or one mapping's. It only reads. It warns when an earlier operation did not finish, when the sync root cannot be used, when this device's name is in use by another install, and when the desktop app's start-with-the-session entry points to a program that is gone. It also says when another device removed this one from the sync folder, when this device's own removal did not finish (`device remove` finishes it), and when the file of a removed device has come back (`device remove --other <name>` deletes it again).
 
 | State | Meaning | Usually |
 |---|---|---|
@@ -220,9 +220,21 @@ Takes this device out of the sync folder, for a machine that is being sold, wipe
 
 Without `--confirm-remove` at a terminal it lists the plan and asks you to type the device name (and `delete everything` when `:saves` is used); with no terminal, or `--json`, it deletes nothing and only lists what it would do. Refused (exit 1, nothing changed) while an app that uses a linked folder is running, while a link cannot be reverted (the error names the mapping and what to do), and when the sync folder cannot be reached; exit 3 while an operation is unfinished. A revert that fails is rolled back and nothing in the sync folder is deleted. If the command is stopped part way, run it again with the same options: reverted folders are skipped, and a mapping already deleted is no longer listed. A mapping ID that does not exist is refused as a typo, except on such a run again.
 
+Run on a device that **another device removed** (`status` says so), it finishes the removal here: the links become folders again and the local setup is deleted. There is no file of this device left in the sync folder to delete, and the record of the removal is kept as the other device wrote it. The backups are kept, and any taken now go to the default backup folder, since the file that named this device's backup folder is gone. The same run finishes a removal that stopped part way after this device's file was deleted.
+
 ```bash
 savetether device remove --delete-orphan only-here.saves:saves --confirm-remove
 ```
+
+### device remove --other
+
+```
+savetether device remove --other <name> [--confirm-remove]
+```
+
+Removes a device that is gone for good, such as the old PC: its seed markers and its device file are deleted from the sync folder, after a record of the removal is written. Nobody's links are touched, on this device or any other; the removed machine, if it is still alive, finds the record at its next `status` and chooses what to do. Refused for this device's own name, and for a file that carries this install's ID (left by an unfinished rename). No other option goes with it. Without `--confirm-remove` at a terminal it asks you to type the device's name; with no terminal, or `--json`, it deletes nothing and lists the files it would delete (`shared_files` of the `removal` object).
+
+If a device's file comes back after its removal (a sync tool on a machine that was offline puts it back), `status` and `device list` say so.
 
 ## apply
 

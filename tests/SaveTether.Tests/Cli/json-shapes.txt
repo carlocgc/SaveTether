@@ -652,6 +652,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status: object
@@ -672,6 +673,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status: object
@@ -692,6 +694,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status.sync_root_problem: string

@@ -204,6 +204,17 @@ Each check of the app ends with a capture (`spectacle -a` on the Deck, `import -
   - the backups' count and size
   The numbers must match `ls -R` of the sync folder and `du` of the backup root.
 
+### T6: remove another device; tombstone checks — done
+
+Branch `phase-3.6-t6-remove-other`.
+
+- Core: `Workspace.RemoveOtherDevice(name, dryRun)` (tombstone first, then the markers and the file; refused for this device's name, an unknown name, and a file carrying this install's ID). `StatusReport` gains `Removal` (`removed-by-another` or `unfinished`, from this install's tombstone and its `removed_by`), `RemovedBy` and `ReturnedDevices` (device files whose install ID is tombstoned). `Init` clears the tombstone of a name a new install takes. `SharedStore.DeleteTombstone`. `OverallCondition.RemovedByAnother` and `RemovalUnfinished` (headlines only; the banners and their texts are T8).
+- Finishing on a device another removed: `PlanDeviceRemoval` and `RemoveDevice` rebuild the missing device file in memory from `state.json` (the sources of what is linked), with the default backup folder (created if missing: the file that named the real one is gone) and no process names, so a running app is not noticed. The tombstone is not rewritten, so `removed_by` stays the other device's. The same path finishes a removal that stopped after the device file was deleted.
+- CLI: `device remove --other <name> [--confirm-remove]`, `--json` as `removal` with `other` set. Docs: `cli.md`, `cli-json.md`, `json-shapes.txt`, `hardware-testing.md` ("Device remove: another device").
+- Not done here: the "sync root there with no `savetether/` folder, nothing linked" case of an unfinished removal is T7's (it only arises after Delete everything, and an empty mount point looks the same, so it needs T7's care).
+- Tests: `DeviceRemoveOtherTests` (remove other and what stays, refusals, removed by another then finished here with the backup folder gone, a file that comes back, an unfinished removal run again, a reused name). `dotnet build -warnaserror` clean; 955 tests pass (`InstallerTests.The_cli_asks_the_running_installed_app_to_quit_before_removing_it` failed once under load and passes alone).
+- Hardware check (2026-11-22, CLI Release linux-x64 on Mint, built from a `git archive` of the working tree, `home-a` and `home-b` on one scratch sync folder): all four steps of the plan. The first run found a bug: finishing a removal on a device another removed was refused because the default backup folder did not exist; fixed (and a regression step added to the test), then re-run. It also showed the `--other` text saying "this device"; fixed. `status` of the real setup was the same before and after, and the scratch folder is gone. Windows not run.
+
 ### T3: rename (M)
 
 - **Deliver:**

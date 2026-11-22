@@ -155,13 +155,15 @@ internal sealed record CliOutput
 /// <param name="Orphans">Mappings only this device used, with what is done to each.</param>
 /// <param name="SharedFiles">This device's files in the sync folder that go.</param>
 /// <param name="BackupsDeleted">How many backups were (or would be) deleted; 0 when they are kept.</param>
+/// <param name="Other">The name of the device removed with "--other"; null when this device was removed.</param>
 public sealed record DeviceRemovalOutput(
     bool DryRun,
     IReadOnlyList<string> GivenBack,
     IReadOnlyList<string> NotLinked,
     IReadOnlyList<OrphanRemoval> Orphans,
     IReadOnlyList<string> SharedFiles,
-    int BackupsDeleted);
+    int BackupsDeleted,
+    string? Other = null);
 
 /// <summary>"uninstall": the paths removed, and each one left with the reason.</summary>
 public sealed record UninstallOutput(IReadOnlyList<string> Removed, IReadOnlyList<string> Left);
@@ -435,7 +437,7 @@ internal static class OutputWriter
                     : "The sync root is not available. These are the save folders this device linked, from its own record:");
             stderr.WriteLine($"Warning: {problem}");
         }
-        else if (status.Mappings.Count == 0)
+        else if (status.Mappings.Count == 0 && status.Removal is null)
         {
             stdout.WriteLine("No mappings yet. Add one with 'savetether map add'.");
         }
@@ -456,6 +458,24 @@ internal static class OutputWriter
         if (status.JournalOpen)
         {
             stderr.WriteLine("Warning: an earlier operation did not finish. Run 'savetether recover'.");
+        }
+
+        if (status.Removal == RemovalKind.RemovedByAnother)
+        {
+            stderr.WriteLine(
+                $"Warning: this device was removed from the sync folder by '{status.RemovedBy}'. " +
+                "Run 'savetether device remove' to finish the removal here, or set it up again with 'savetether init'.");
+        }
+        else if (status.Removal == RemovalKind.Unfinished)
+        {
+            stderr.WriteLine("Warning: the removal of this device did not finish. Run 'savetether device remove' again.");
+        }
+
+        foreach (var name in status.ReturnedDevices)
+        {
+            stderr.WriteLine(
+                $"Warning: the device '{name}' was removed from the sync folder, but its file came back (a sync tool restored it). " +
+                "Delete it with 'savetether device remove --other " + name + "' if it is gone for good.");
         }
 
         if (status.AutostartMissing is { } program)
@@ -489,6 +509,14 @@ internal static class OutputWriter
 
     private static void WriteRemoval(DeviceRemovalOutput removal, TextWriter stdout)
     {
+        if (removal.Other is { } other)
+        {
+            stdout.WriteLine(removal.DryRun ? $"Would remove the device '{other}' from the sync folder:" : $"Removed the device '{other}' from the sync folder.");
+            stdout.WriteLine($"  Its {removal.SharedFiles.Count} file(s) in the sync folder {(removal.DryRun ? "would be" : "were")} deleted. Nobody's links are touched.");
+            stdout.WriteLine(removal.DryRun ? "Dry run: nothing was changed. Add --confirm-remove to go ahead." : "Its removal is recorded in the sync folder.");
+            return;
+        }
+
         stdout.WriteLine(removal.DryRun ? "Would remove this device from the sync folder:" : "Removed this device from the sync folder.");
         if (removal.GivenBack.Count > 0)
         {

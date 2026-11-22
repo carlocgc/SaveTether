@@ -24,6 +24,18 @@ public enum OrphanChoice
     DeleteWithSaves,
 }
 
+/// <summary>Why this install is flagged as removed (phase 3.6, D6).</summary>
+public enum RemovalKind
+{
+    /// <summary>The tombstone says another device removed this one.</summary>
+    [JsonStringEnumMemberName("removed-by-another")]
+    RemovedByAnother,
+
+    /// <summary>This device started its own removal and it did not finish.</summary>
+    [JsonStringEnumMemberName("unfinished")]
+    Unfinished,
+}
+
 /// <summary>What the owner chose for a removal. The choices are not stored: a run again is given them again.</summary>
 /// <param name="Orphans">A choice per mapping ID; one not named is kept.</param>
 /// <param name="DeleteBackups">Delete every backup of this device too. Kept otherwise.</param>
@@ -76,6 +88,19 @@ public sealed partial class Workspace
     public DeviceRemovalPlan PlanDeviceRemoval(RemovalChoices choices)
     {
         ArgumentNullException.ThrowIfNull(choices);
+        _finishingRemoval = true;
+        try
+        {
+            return PlanRemoval(choices);
+        }
+        finally
+        {
+            _finishingRemoval = false;
+        }
+    }
+
+    private DeviceRemovalPlan PlanRemoval(RemovalChoices choices)
+    {
         if (Journal.IsOpen)
         {
             throw new StoreException(
@@ -163,6 +188,19 @@ public sealed partial class Workspace
     public DeviceRemovalResult RemoveDevice(DeviceRemovalPlan plan, IProgress<StepProgress>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        _finishingRemoval = true;
+        try
+        {
+            return RunRemoval(plan, progress);
+        }
+        finally
+        {
+            _finishingRemoval = false;
+        }
+    }
+
+    private DeviceRemovalResult RunRemoval(DeviceRemovalPlan plan, IProgress<StepProgress>? progress)
+    {
         if (plan.IsRefused)
         {
             throw new StoreException(StoreProblem.Conflict, "A link here cannot be reverted, so the device is not removed. Nothing was changed.");
@@ -219,23 +257,107 @@ public sealed partial class Workspace
         // The backups made by the reverts go too, so what is deleted is what exists now, not what the plan listed.
         var backupsDeleted = plan.DeleteBackups ? OpenBackups(device).RemoveMany(null, BackupCleanup.All).Count : 0;
 
-        Shared.WriteTombstone(new TombstoneFile
+        // Kept as it is when another device (or an earlier run) wrote it: it says who removed this device.
+        if (!Shared.ReadTombstones().Any(t => t.InstallId == Bootstrap.InstallId))
         {
-            Schema = TombstoneFile.CurrentSchema,
-            DeviceName = DeviceName,
-            InstallId = Bootstrap.InstallId,
-            RemovedUtc = (_time ?? TimeProvider.System).GetUtcNow(),
-            RemovedBy = DeviceName,
-        });
+            Shared.WriteTombstone(new TombstoneFile
+            {
+                Schema = TombstoneFile.CurrentSchema,
+                DeviceName = DeviceName,
+                InstallId = Bootstrap.InstallId,
+                RemovedUtc = (_time ?? TimeProvider.System).GetUtcNow(),
+                RemovedBy = DeviceName,
+            });
+        }
 
         foreach (var mapping in Shared.ListMappings())
         {
             Shared.DeleteSeedMarker(mapping.Id, DeviceName);
         }
 
-        Shared.DeleteDevice(DeviceName);
+        if (Shared.TryReadDevice(DeviceName) is not null)
+        {
+            Shared.DeleteDevice(DeviceName);
+        }
 
         Local.DeleteDeviceFiles(Shared.SyncRoot);
         return new DeviceRemovalResult(plan.GivenBack, deleted, backupsDeleted, null);
+    }
+
+    private bool _finishingRemoval;
+
+    /// <summary>
+    /// While a removal is planned or run: this device's file as it was, rebuilt from the local record, when another device removed
+    /// this one (or an earlier run deleted the file) and this install's tombstone says so. The backup root is then the default one,
+    /// since the file that named it is gone; the app's process names are not known, so a running app is not noticed.
+    /// </summary>
+    private DeviceFile? RemovedDeviceFile()
+    {
+        if (!_finishingRemoval || !Shared.ReadTombstones().Any(t => t.InstallId == Bootstrap.InstallId))
+        {
+            return null;
+        }
+
+        // A revert refuses a backup folder that is not there; this one only holds what the revert backs up.
+        var backupRoot = Path.Combine(Local.Folder, "backups");
+        Directory.CreateDirectory(backupRoot);
+        return new DeviceFile
+        {
+            Schema = DeviceFile.CurrentSchema,
+            DeviceName = DeviceName,
+            InstallId = Bootstrap.InstallId,
+            BackupRoot = backupRoot,
+            Paths = Local.ReadState().Mappings.ToDictionary(m => m.Key, m => new DevicePath { Source = m.Value.Source }),
+        };
+    }
+
+    /// <summary>
+    /// "device remove --other": deletes a device that is gone (the old PC): its seed markers and its file, after writing its tombstone.
+    /// Nobody's links are touched. Returns the files deleted (with <paramref name="dryRun"/>, the ones that would be). Refused for this
+    /// device, and for a file that carries this install's ID (left by an unfinished rename: a tombstone for it would make this
+    /// device think it had been removed).
+    /// </summary>
+    public IReadOnlyList<string> RemoveOtherDevice(string name, bool dryRun = false)
+    {
+        if (!Identifiers.IsValidDeviceName(name))
+        {
+            throw new StoreException(StoreProblem.Invalid, $"'{name}' is not a valid device name.");
+        }
+
+        if (name == DeviceName)
+        {
+            throw new StoreException(StoreProblem.Conflict, "That is this device. Remove it without naming it, not as another device.");
+        }
+
+        var device = Shared.TryReadDevice(name)
+            ?? throw new StoreException(StoreProblem.NotFound, $"There is no device '{name}' in the sync folder. Check the name against the devices in the sync folder.");
+        if (device.InstallId == Bootstrap.InstallId)
+        {
+            throw new StoreException(
+                StoreProblem.Conflict,
+                $"'{name}' carries this install's ID, so it is a file left by an unfinished rename, not another device. Renaming this device again clears it.");
+        }
+
+        var files = Shared.FilesOf(name);
+        if (dryRun)
+        {
+            return files;
+        }
+
+        Shared.WriteTombstone(new TombstoneFile
+        {
+            Schema = TombstoneFile.CurrentSchema,
+            DeviceName = name,
+            InstallId = device.InstallId,
+            RemovedUtc = (_time ?? TimeProvider.System).GetUtcNow(),
+            RemovedBy = DeviceName,
+        });
+        foreach (var mapping in Shared.ListMappings())
+        {
+            Shared.DeleteSeedMarker(mapping.Id, name);
+        }
+
+        Shared.DeleteDevice(name);
+        return files;
     }
 }

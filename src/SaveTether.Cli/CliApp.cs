@@ -156,6 +156,11 @@ internal static class CliApp
               device's files in the sync folder and its local setup are deleted. Without --confirm-remove
               it asks you to type the device name, or, with no terminal, only lists what it would do.
               --delete-orphan <mapping> deletes a mapping only this device used; with :saves, its shared saves too.
+              Run on a device that another device removed, it finishes the removal here.
+
+          savetether device remove --other <name> [--confirm-remove]
+              Remove a device that is gone (the old PC): its files in the sync folder are deleted and
+              its removal is recorded. Nobody's links are touched. This device cannot be named.
 
           savetether backup list [<id>]
           savetether backup restore <backup-id> [--confirm-replace] [--assume-closed] [--dry-run]
@@ -625,6 +630,16 @@ internal static class CliApp
         /// </summary>
         private CliOutput DeviceRemove()
         {
+            if (command.Value("--other") is { } other)
+            {
+                if (command.Has("--delete-backups") || command.Values("--delete-orphan").Any())
+                {
+                    throw new UsageException("'--other' takes no other option than --confirm-remove.");
+                }
+
+                return DeviceRemoveOther(other);
+            }
+
             var orphans = new Dictionary<string, OrphanChoice>();
             foreach (var value in command.Values("--delete-orphan"))
             {
@@ -683,6 +698,31 @@ internal static class CliApp
             }
 
             return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Removal = Summary(dryRun: false, result) };
+        }
+
+        private CliOutput DeviceRemoveOther(string name)
+        {
+            var workspace = Open();
+            var files = workspace.RemoveOtherDevice(name, dryRun: true);
+            DeviceRemovalOutput Summary(bool dryRun) => new(dryRun, [], [], [], files, 0, name);
+            if (!command.Has("--confirm-remove"))
+            {
+                if (!CanAsk)
+                {
+                    return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Removal = Summary(dryRun: true) };
+                }
+
+                var question =
+                    $"Remove the device '{name}' from the sync folder? Its {files.Count} file(s) there are deleted; nobody's links are touched. " +
+                    $"Type the device name '{name}' to go ahead: ";
+                if (!string.Equals(Ask(question), name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was changed.");
+                }
+            }
+
+            workspace.RemoveOtherDevice(name);
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Removal = Summary(dryRun: false) };
         }
 
         private BackupCleanup? BulkMode()

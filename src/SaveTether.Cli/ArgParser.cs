@@ -69,7 +69,7 @@ internal static class ArgParser
         new("status", 0, 1, None, None, None),
         new("device list", 0, 0, None, None, None),
         new("device rename", 1, 1, None, None, None),
-        new("device remove", 0, 0, ["--delete-backups", "--confirm-remove"], None, ["--delete-orphan"]),
+        new("device remove", 0, 0, ["--delete-backups", "--confirm-remove"], ["--other"], ["--delete-orphan"]),
         new(
             "apply", 0, 1,
             [
