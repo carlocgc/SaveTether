@@ -406,6 +406,14 @@ Branch `phase-3.6-t2-overview`, commit db48b6e.
 - Tests: `DeviceListTests` (counts, orphan, read-only), the contract, the command table. `dotnet build -warnaserror` clean; 920 tests pass.
 - Hardware check (2026-11-22, commit db48b6e, CLI Debug build, `home-a` and `home-b` on one scratch sync folder; `map add` with a plain folder stands in for `app add`, which T2 does not touch): on a, `apply --copy` of one mapping, then a second `map add` and `map remove` to orphan it; b joined. `device list` and `--json` on Windows and on Mint showed 2 devices (1 mapping each), 2 mappings with 1 linked here, the orphan `solo.saves`, and 1 backup. The sync folder listing agrees (2 device files, 2 mapping files, 1 seed marker). Backup bytes are the saved files' size (10 on Windows, with CRLF; 8 on Mint) and match what was written; `du` of the backup root is larger because it counts the manifest (the plan's "match `du`" is read that way; the flow is in `hardware-testing.md`, "Device list"). `status` of the real setup was the same before and after on both, and the scratch folders are gone.
 
+### T4: backup cleanup — built, hardware check not run
+
+Branch `backup-cleanup-t4` (not committed yet).
+
+- Core: `BackupCleanup` (`All`, `KeepFirst`, `KeepLast`), `BackupStore.Select` (what a mode would delete, reads only) and `BackupStore.RemoveMany` (deletes through `SafeFs`, also clears `.partial` folders); `Workspace.DescribeBackupCleanup` and `Workspace.CleanUpBackups` (refused while a journal is open).
+- CLI: `backup delete --all | --keep-first | --keep-last [--mapping <id>]`, `--json` as `backups_cleaned` (`removed`, `dry_run`). Decision: the two keep modes always leave a backup, so they need no confirmation (the hardware check in this plan runs them bare); `--all` asks, or needs `--confirm-delete`, or lists only. Mixing a mode with a backup ID or another mode is a usage error (64).
+- Tests: `BackupStoreTests` (modes over 1, 2 and 5, scope, partials, `Select` changes nothing), `BackupDeleteTests` (dry run, flag, keep modes), the contract. Docs: `cli.md`, `cli-json.md`, `json-shapes.txt`.
+
 ### T3: rename — built, hardware check not run
 
 Branch `phase-3.6-t3-rename` (not committed yet).

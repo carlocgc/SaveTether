@@ -109,3 +109,14 @@ public sealed class BackupException : IOException
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(BackupManifest))]
 internal sealed partial class BackupJsonContext : JsonSerializerContext;
+
+/// <summary>Which backups a bulk cleanup deletes: all of them, all but the first ever taken, or all but the newest.</summary>
+public enum BackupCleanup
+{
+    All,
+    KeepFirst,
+    KeepLast,
+}
+
+/// <summary>What a bulk cleanup deleted, or with <paramref name="DryRun"/> would delete.</summary>
+public sealed record BackupCleanupResult(IReadOnlyList<BackupInfo> Removed, bool DryRun);

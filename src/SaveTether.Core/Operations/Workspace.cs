@@ -513,6 +513,25 @@ public sealed partial class Workspace
         return OpenBackups(ReadOwnDevice()).Remove(backupId);
     }
 
+    /// <summary>"backup delete --all/--keep-first/--keep-last", before asking: what it would delete. Reads only.</summary>
+    public IReadOnlyList<BackupInfo> DescribeBackupCleanup(string? mappingId, BackupCleanup mode) =>
+        OpenBackups(ReadOwnDevice()).Select(mappingId, mode);
+
+    /// <summary>
+    /// "backup delete" in bulk. Refused while an operation is unfinished, as <see cref="DeleteBackup"/> is.
+    /// Call it under the operation lock, once the owner has confirmed.
+    /// </summary>
+    public IReadOnlyList<BackupInfo> CleanUpBackups(string? mappingId, BackupCleanup mode)
+    {
+        if (Journal.IsOpen)
+        {
+            throw new BackupException(
+                "No backup is deleted while an operation is unfinished: recovering it may need its backups. Recover first.");
+        }
+
+        return OpenBackups(ReadOwnDevice()).RemoveMany(mappingId, mode);
+    }
+
     private Executor NewExecutor(DeviceFile? device)
     {
         BackupStore? backups = null;

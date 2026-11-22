@@ -136,6 +136,9 @@ internal sealed record CliOutput
     /// <summary>"backup delete": the backup removed, whether it was its mapping's first, and how many are left.</summary>
     public BackupDeletion? BackupDeleted { get; init; }
 
+    /// <summary>"backup delete --all/--keep-first/--keep-last": the backups deleted, or with a dry run, the ones that would be.</summary>
+    public BackupCleanupResult? BackupsCleaned { get; init; }
+
     /// <summary>"map delete": the shared folder and record removed, and the backup taken first.</summary>
     public MappingDeletion? MappingDeleted { get; init; }
 
@@ -238,6 +241,17 @@ internal static class OutputWriter
         if (output.BackupDeleted is { } deleted)
         {
             stdout.WriteLine($"Deleted backup {deleted.Backup.Id}. {deleted.Remaining} backup(s) of {deleted.Backup.MappingId} left.");
+        }
+
+        if (output.BackupsCleaned is { } cleaned)
+        {
+            var verb = cleaned.DryRun ? "Would delete" : "Deleted";
+            foreach (var backup in cleaned.Removed)
+            {
+                stdout.WriteLine($"{verb} {backup.Id} ({backup.FileCount} file(s), {FormatBytes(backup.TotalBytes)})");
+            }
+
+            stdout.WriteLine($"{verb} {cleaned.Removed.Count} backup(s).");
         }
 
         if (output.MappingDeleted is { } mappingDeleted)

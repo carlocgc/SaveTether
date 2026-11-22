@@ -331,6 +331,24 @@ $.operations[]: object
 $.schema: number
 $: object
 
+## backup-cleanup
+$.backups_cleaned.dry_run: boolean
+$.backups_cleaned.removed: array
+$.backups_cleaned.removed[].created_utc: string
+$.backups_cleaned.removed[].file_count: number
+$.backups_cleaned.removed[].id: string
+$.backups_cleaned.removed[].location: string
+$.backups_cleaned.removed[].mapping_id: string
+$.backups_cleaned.removed[].reason: string
+$.backups_cleaned.removed[].source_path: string
+$.backups_cleaned.removed[].total_bytes: number
+$.backups_cleaned.removed[]: object
+$.backups_cleaned: object
+$.command: string
+$.exit_code: number
+$.schema: number
+$: object
+
 ## backup-delete
 $.backup_deleted.backup.created_utc: string
 $.backup_deleted.backup.file_count: number

@@ -202,6 +202,43 @@ public sealed class BackupStore
         return deleted;
     }
 
+    /// <summary>The backups <see cref="RemoveMany"/> would delete, oldest first per mapping. Reads only.</summary>
+    public IReadOnlyList<BackupInfo> Select(string? mappingId, BackupCleanup mode) =>
+        List(mappingId)
+            .GroupBy(b => b.MappingId)
+            .SelectMany(g => mode switch
+            {
+                BackupCleanup.All => g,
+                BackupCleanup.KeepFirst => g.Skip(1),
+                _ => g.SkipLast(1),
+            })
+            .ToList();
+
+    /// <summary>
+    /// Deletes backups in bulk, for one mapping or all: everything, all but the first ever taken, or all but the
+    /// newest. A mapping with one backup keeps it in the two "keep" modes. Unfinished backups left by a crash
+    /// are cleared too. Returns the backups it deleted.
+    /// </summary>
+    public IReadOnlyList<BackupInfo> RemoveMany(string? mappingId, BackupCleanup mode)
+    {
+        var doomed = Select(mappingId, mode);
+        foreach (var backup in doomed)
+        {
+            _fs.DeleteTree(backup.Location);
+        }
+
+        var mappingFolders = mappingId is null ? Directory.GetDirectories(_root) : [Path.Combine(_root, mappingId)];
+        foreach (var mappingFolder in mappingFolders.Where(f => SafeFs.Probe(f) == EntryKind.Directory))
+        {
+            foreach (var folder in Directory.GetDirectories(mappingFolder).Where(IsPartial))
+            {
+                _fs.DeleteTree(folder);
+            }
+        }
+
+        return doomed;
+    }
+
     /// <summary>
     /// What deleting <paramref name="backupId"/> would remove, without removing it: the backup, and whether it
     /// is its mapping's first, the one retention always keeps. Refuses an ID that is not a finished backup.

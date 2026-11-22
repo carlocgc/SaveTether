@@ -277,12 +277,19 @@ savetether backup restore cemu.save/20261118T183614Z
 
 ```
 savetether backup delete <backup-id> [--confirm-delete]
+savetether backup delete (--all | --keep-first | --keep-last) [--mapping <id>] [--confirm-delete]
 ```
 
 Deletes one backup. It cannot be undone, so it asks at a terminal, or needs `--confirm-delete`. Deleting a mapping's first backup gets a stronger warning: it is usually the only copy of the folder from before SaveTether changed it. Refused while an operation is unfinished.
 
 ```bash
 savetether backup delete cemu.save/20261118T183614Z
+```
+
+The second form clears many at once, for one mapping (`--mapping`) or all: `--all` deletes every backup, `--keep-first` keeps the first one taken of each mapping (the copy from before SaveTether first changed the folder), `--keep-last` keeps the newest. The two `--keep-` modes always leave a backup, so they go ahead without asking. `--all` asks at a terminal, or needs `--confirm-delete`; without either (a script) it deletes nothing and lists what it would delete. Unfinished backups left by a crash are cleared as well.
+
+```bash
+savetether backup delete --keep-last --mapping cemu.save
 ```
 
 ## recover

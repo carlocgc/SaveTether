@@ -150,6 +150,7 @@ public class JsonContractTests
         var backupId = pc.Ok("backup", "list", "--json").Json().GetProperty("backups")[0].GetProperty("id").GetString()!;
         Record("backup-restore", 0, "backup", "restore", backupId);
         Record("backup-delete", 0, "backup", "delete", backupId, "--confirm-delete");
+        Record("backup-cleanup", 0, "backup", "delete", "--all", "--confirm-delete");
         Record("recover", 0, "recover");
 
         // An install laid out by hand, so the recording does not depend on the system: uninstall removes the files

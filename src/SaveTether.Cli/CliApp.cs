@@ -1,4 +1,5 @@
 using SaveTether.Core;
+using SaveTether.Core.Backup;
 using SaveTether.Core.Diagnostics;
 using SaveTether.Core.Execution;
 using SaveTether.Core.FileSystem;
@@ -156,6 +157,9 @@ internal static class CliApp
               --confirm-replace is needed for a backup of a shared folder.
           savetether backup delete <backup-id> [--confirm-delete]
               Delete one backup. It cannot be undone, so it asks first, or needs --confirm-delete.
+          savetether backup delete (--all | --keep-first | --keep-last) [--mapping <id>] [--confirm-delete]
+              Delete many: all, all but the first ever taken, or all but the newest, for one mapping or all.
+              --all asks first, or needs --confirm-delete; without either it only lists what it would delete.
               The first backup of a folder is usually the only copy from before SaveTether changed it.
 
           savetether recover
@@ -571,6 +575,16 @@ internal static class CliApp
         /// </summary>
         private CliOutput DeleteBackup()
         {
+            if (BulkMode() is { } mode)
+            {
+                return CleanUpBackups(mode);
+            }
+
+            if (command.Positionals.Count != 1)
+            {
+                throw new UsageException("Give a backup ID, or one of --all, --keep-first, --keep-last.");
+            }
+
             var backupId = command.Positionals[0];
             var workspace = Open();
             var deletion = workspace.DescribeBackupDeletion(backupId);
@@ -596,6 +610,48 @@ internal static class CliApp
 
             var deleted = workspace.DeleteBackup(backupId);
             return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, BackupDeleted = deleted };
+        }
+
+        private BackupCleanup? BulkMode()
+        {
+            var modes = new[] { ("--all", BackupCleanup.All), ("--keep-first", BackupCleanup.KeepFirst), ("--keep-last", BackupCleanup.KeepLast) }
+                .Where(m => command.Has(m.Item1)).ToList();
+            if (modes.Count > 1 || (modes.Count == 1 && command.Positionals.Count > 0) || (modes.Count == 0 && command.Value("--mapping") is not null))
+            {
+                throw new UsageException("Give a backup ID, or one of --all, --keep-first, --keep-last (with --mapping), not a mix.");
+            }
+
+            return modes.Count == 1 ? modes[0].Item2 : null;
+        }
+
+        /// <summary>
+        /// "backup delete" in bulk. The two keep modes always leave a backup, so they go ahead. --all needs a yes
+        /// or --confirm-delete; with neither it deletes nothing and lists what it would.
+        /// </summary>
+        private CliOutput CleanUpBackups(BackupCleanup mode)
+        {
+            var mappingId = command.Value("--mapping");
+            var workspace = Open();
+            var found = workspace.DescribeBackupCleanup(mappingId, mode);
+            if (mode == BackupCleanup.All && found.Count > 0 && !command.Has("--confirm-delete"))
+            {
+                var bytes = OutputWriter.FormatBytes(found.Sum(b => b.TotalBytes));
+                if (!CanAsk)
+                {
+                    return new CliOutput
+                    {
+                        Command = command.Name, ExitCode = ExitSuccess, BackupsCleaned = new BackupCleanupResult(found, DryRun: true),
+                    };
+                }
+
+                if (!Confirm($"Delete all {found.Count} backup(s) ({bytes}), including the first of each folder, which is usually the only copy from before SaveTether changed it?\nIt cannot be undone."))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was deleted.");
+                }
+            }
+
+            var removed = workspace.CleanUpBackups(mappingId, mode);
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, BackupsCleaned = new BackupCleanupResult(removed, DryRun: false) };
         }
 
         /// <summary>
