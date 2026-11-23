@@ -18,7 +18,8 @@ def key(name):
     xt.XTestFakeKeyEvent(d, kc, 1, 0); xt.XTestFakeKeyEvent(d, kc, 0, 0); x11.XFlush(d)
 def press(keysym, shift):
     kc = x11.XKeysymToKeycode(d, x11.XStringToKeysym(keysym.encode()))
-    sh = x11.XKeysymToKeycode(d, x11.XStringToKeysym(b"Shift_L"))
+    if kc == 0: sys.exit(f"xinput.py cannot type {keysym!r}")
+    sh =x11.XKeysymToKeycode(d, x11.XStringToKeysym(b"Shift_L"))
     if shift: xt.XTestFakeKeyEvent(d, sh, 1, 0)
     xt.XTestFakeKeyEvent(d, kc, 1, 0); xt.XTestFakeKeyEvent(d, kc, 0, 0)
     if shift: xt.XTestFakeKeyEvent(d, sh, 0, 0)
