@@ -107,6 +107,11 @@ public sealed partial class Workspace
     public static string NetworkSyncRootMessage(string syncRoot) =>
         $"'{syncRoot}' is on a network share. {SymlinkCapability.DeveloperModeFix}";
 
+    /// <summary>Design 5.16, D8: shown wherever a share is chosen as the sync folder (the app's step 1, "init"). Does not block.</summary>
+    public const string NetworkShareWarning =
+        "Not recommended: if the share is disconnected, games and emulators that save here can fail or misbehave. " +
+        "A folder on this device, kept in step by a sync tool, is safer.";
+
     /// <summary>The device names that have a file in the sync root, for "init" to offer.</summary>
     public static IReadOnlyList<string> ExistingDevices(string syncRoot)
     {
@@ -224,7 +229,7 @@ public sealed partial class Workspace
     /// Refuses a share this device cannot link to: one that does not answer, one Windows policy will not follow
     /// links to, or one this process cannot make a symlink to (no Developer Mode, not elevated). Design 5.16.
     /// </summary>
-    private static void RequireLinkableShare(string syncRoot)
+    public static void RequireLinkableShare(string syncRoot)
     {
         var share = ShareOf(syncRoot);
         if (!NetworkPaths.IsReachable(share))

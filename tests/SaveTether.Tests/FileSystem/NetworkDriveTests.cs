@@ -1,5 +1,6 @@
 using SaveTether.Cli;
 using SaveTether.Core.FileSystem;
+using SaveTether.Core.Operations;
 using SaveTether.Core.Storage;
 using SaveTether.Gui.Presentation;
 using SaveTether.Tests.Cli;
@@ -102,7 +103,7 @@ public class NetworkDriveTests
     }
 
     [Fact]
-    public void Setup_stops_at_its_first_step_on_a_network_folder_on_windows()
+    public void Setup_step_1_says_a_share_that_does_not_answer_is_missing_on_windows()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -114,11 +115,30 @@ public class NetworkDriveTests
 
         var check = flow.CheckSyncFolder(Share);
 
-        Assert.Equal(SyncFolderFinding.NetworkDrive, check.Finding);
+        Assert.Equal(SyncFolderFinding.Missing, check.Finding);
         Assert.False(check.CanContinue);
-        Assert.False(check.OffersFirstDevice);
-        Assert.Contains("Developer Mode", check.Sentence, StringComparison.Ordinal);
+        Assert.Contains("does not answer", check.Sentence, StringComparison.Ordinal);
         Assert.Null(flow.SyncFolder);
+    }
+
+    [Fact]
+    public void Setup_step_1_goes_on_with_a_share_it_can_link_to_and_warns_that_it_is_not_recommended()
+    {
+        using var sandbox = new Sandbox();
+        if (LocalAdminShare(sandbox.At("sync")) is not { } share)
+        {
+            return; // Not Windows, no admin share, or neither Developer Mode nor elevation.
+        }
+
+        Directory.CreateDirectory(sandbox.At("sync"));
+        var flow = new SetupFlow(new LocalStore(sandbox.At("local")), sandbox.At("local", "backups"), "PC");
+
+        var check = flow.CheckSyncFolder(share);
+
+        Assert.Equal(SyncFolderFinding.NotSetUp, check.Finding);
+        Assert.True(check.OffersFirstDevice);
+        Assert.StartsWith(Workspace.NetworkShareWarning, check.Sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("Not recommended", flow.CheckSyncFolder(sandbox.At("sync")).Sentence, StringComparison.Ordinal);
     }
 
     [Fact]

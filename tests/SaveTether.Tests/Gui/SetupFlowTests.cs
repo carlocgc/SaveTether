@@ -9,10 +9,9 @@ namespace SaveTether.Tests.Gui;
 public class SetupFlowTests
 {
     [Fact]
-    public void Step_1_suggests_a_network_share_only_where_setup_accepts_one()
+    public void Step_1_suggests_a_network_share_everywhere()
     {
-        // Windows refuses a share at setup (docs/sharing.md), so its text must not offer one.
-        Assert.Equal(!OperatingSystem.IsWindows(), SetupFlow.SyncFolderIntro.Contains("network share", StringComparison.Ordinal));
+        Assert.Contains("network share", SetupFlow.SyncFolderIntro, StringComparison.Ordinal);
     }
 
     [Fact]

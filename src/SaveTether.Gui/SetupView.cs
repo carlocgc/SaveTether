@@ -49,10 +49,15 @@ internal sealed class SetupView : UserControl
         var firstDevice = new Button { Content = "This is my first device", IsVisible = false };
         var next = new Button { Content = "Next", IsDefault = true };
 
-        void Check()
+        async void Check()
         {
-            var check = _flow.CheckSyncFolder(path.Field.Text ?? string.Empty);
+            // A share is asked with a time limit (up to 5 s): off the UI thread, as step 3's Set up is.
+            next.IsEnabled = false;
+            var typed = path.Field.Text ?? string.Empty;
+            var check = await Task.Run(() => _flow.CheckSyncFolder(typed));
+            next.IsEnabled = true;
             finding.Text = check.Sentence;
+            next.Content = check.Finding == SyncFolderFinding.NetworkDrive ? "Check again" : "Next";
             firstDevice.IsVisible = check.OffersFirstDevice;
             if (check.CanContinue)
             {
