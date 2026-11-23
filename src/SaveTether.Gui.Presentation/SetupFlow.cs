@@ -34,7 +34,7 @@ public enum SyncFolderFinding
 }
 
 /// <summary>Step 1's result, with the sentence the page shows.</summary>
-public sealed record SyncFolderCheck(SyncFolderFinding Finding, string Path, IReadOnlyList<string> Devices, string Sentence)
+public sealed record SyncFolderCheck(SyncFolderFinding Finding, string Path, IReadOnlyList<string> Devices, string Sentence, string? Warning = null)
 {
     /// <summary>True when Next may go on without more from the owner.</summary>
     public bool CanContinue => Finding == SyncFolderFinding.AlreadySetUp;
@@ -119,6 +119,7 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
         // A share (Windows only; a mount on Linux is not detected) is stored as UNC (D4) and checked first: one that
         // is not there can stall, and linking to it needs a symlink (design 5.16). It is allowed, with the D8 warning.
         var shareNote = string.Empty;
+        string? warning = null;
         if (PathRules.IsOnNetworkDrive(path))
         {
             var typedPath = path;
@@ -133,8 +134,8 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
                 return _syncFolder = new SyncFolderCheck(finding, path, [], e.Message);
             }
 
-            shareNote = (path == typedPath ? string.Empty : $"Using {Path.GetPathRoot(path)} (the drive {typedPath[..2]} points to). ")
-                + Workspace.NetworkShareWarning + " ";
+            shareNote = path == typedPath ? string.Empty : $"Using {Path.GetPathRoot(path)} (the drive {typedPath[..2]} points to). ";
+            warning = Workspace.NetworkShareWarning;
         }
 
         if (SharedStore.ReadProblem(path) is { } problem)
@@ -152,12 +153,12 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
         var shared = new SharedStore(path);
         if (!shared.IsInitialized)
         {
-            return _syncFolder = new SyncFolderCheck(SyncFolderFinding.NotSetUp, path, [], shareNote + "This sync folder is not set up for SaveTether yet.");
+            return _syncFolder = new SyncFolderCheck(SyncFolderFinding.NotSetUp, path, [], shareNote + "This sync folder is not set up for SaveTether yet.", warning);
         }
 
         var devices = Workspace.ExistingDevices(path);
         var on = devices.Count == 0 ? "no device yet" : string.Join(", ", devices);
-        return _syncFolder = new SyncFolderCheck(SyncFolderFinding.AlreadySetUp, path, devices, shareNote + $"This sync folder is already set up for SaveTether, on: {on}.");
+        return _syncFolder = new SyncFolderCheck(SyncFolderFinding.AlreadySetUp, path, devices, shareNote + $"This sync folder is already set up for SaveTether, on: {on}.", warning);
     }
 
     /// <summary>Step 1, after the "first device" confirmation.</summary>

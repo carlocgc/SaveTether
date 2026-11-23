@@ -137,8 +137,8 @@ public class NetworkDriveTests
 
         Assert.Equal(SyncFolderFinding.NotSetUp, check.Finding);
         Assert.True(check.OffersFirstDevice);
-        Assert.StartsWith(Workspace.NetworkShareWarning, check.Sentence, StringComparison.Ordinal);
-        Assert.DoesNotContain("Not recommended", flow.CheckSyncFolder(sandbox.At("sync")).Sentence, StringComparison.Ordinal);
+        Assert.Equal(Workspace.NetworkShareWarning, check.Warning);
+        Assert.Null(flow.CheckSyncFolder(sandbox.At("sync")).Warning);
     }
 
     [Fact]
