@@ -1,7 +1,8 @@
 // Eden (Nintendo Switch emulator, a yuzu fork). Shipped with SaveTether. The folders come from Eden's source (common/fs/path_util.cpp
 // and fs_paths.h: a user folder beside the program, else AppData/Roaming/eden or ~/.local/share/eden), read 2026-11-22. The EmuDeck
 // folders come from EmuDeck's Eden script and the owner's Steam Deck, where nand, sdmc, load and screenshots are moved to
-// Emulation/storage/eden. Not yet tried with `app add`. Design 5.2 explains the format.
+// Emulation/storage/eden. linux-portable: PathManagerImpl::Reinitialize's Linux branch uses a "user" folder in the current working
+// directory when one exists (path_util.cpp, read 2026-11-23). Not yet tried with `app add`. Design 5.2 explains the format.
 {
   "schema": 1,
   "id": "eden",
@@ -26,6 +27,12 @@
       "os": "linux",
       "detect": { "dir": "{xdg_data}/eden/nand" },
       "base": "{xdg_data}/eden"
+    },
+    {
+      "id": "linux-portable",
+      "os": "linux",
+      "detect": { "dir": "{install_dir}/user/nand" },
+      "base": "{install_dir}/user"
     },
     {
       "id": "emudeck",
@@ -57,7 +64,7 @@
       "id": "play_time",
       "class": "save",
       "default": false,
-      "path": { "win-portable": "play_time", "win-appdata": "play_time", "linux-native": "play_time" },
+      "path": { "win-portable": "play_time", "win-appdata": "play_time", "linux-native": "play_time", "linux-portable": "play_time" },
       "target": "play_time",
       "notes": "Play time per game. Not for EmuDeck, which keeps it in ~/.local/share/eden."
     },
@@ -89,13 +96,14 @@
       "id": "keys",
       "class": "system",
       "default": false,
-      "path": { "win-portable": "keys", "win-appdata": "keys", "linux-native": "keys" },
+      "path": { "win-portable": "keys", "win-appdata": "keys", "linux-native": "keys", "linux-portable": "keys" },
       "target": "keys",
       "notes": "Keys dumped from your own console (prod.keys, title.keys). Not for EmuDeck, which keeps them in ~/.local/share/eden."
     }
   ],
   "quirks": [
     "The config folder (or ~/.config/eden), shader and cache stay on each device. Installed games, updates and DLC (nand/user/Contents) are not shared.",
+    "Portable on Linux: Eden uses a user folder in the folder it is started from (the working directory), not beside the program, so it must always be started from there. Give that folder.",
     "Settings > Filesystem can move nand, sdmc, load and screenshots; EmuDeck moves them to Emulation/storage/eden. Add app follows the default location and EmuDeck's only.",
     "On EmuDeck both the EmuDeck install and ~/.local/share/eden are found; pick the EmuDeck one for saves.",
     "Eden copies an existing yuzu, Citron, Sudachi or Suyu folder on its first start; theirs are not Eden's.",

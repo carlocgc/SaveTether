@@ -251,9 +251,10 @@ public class AppAddCliTests
 
         Assert.Equal("not-installed", json.GetProperty("app").GetProperty("problem").GetString());
         var candidates = json.GetProperty("app").GetProperty("candidates").EnumerateArray().ToList();
-        Assert.Equal(["linux-flatpak", "linux-native"], candidates.Select(c => c.GetProperty("id").GetString()));
+        Assert.Equal(["linux-flatpak", "linux-native", "linux-portable"], candidates.Select(c => c.GetProperty("id").GetString()));
         var candidate = candidates.Single(c => c.GetProperty("id").GetString() == "linux-native");
         Assert.Contains("No folder at", candidate.GetProperty("reason").GetString(), StringComparison.Ordinal);
+        Assert.Equal("needs-value", candidates.Single(c => c.GetProperty("id").GetString() == "linux-portable").GetProperty("problem").GetString());
         Assert.Equal(before, DeviceFile(deck).ToString());
         Assert.False(MappingExists(deck, "cemu.save"));
     }
@@ -721,10 +722,29 @@ public class AppAddCliTests
         using var sandbox = new Sandbox();
         var deck = NewDevice(sandbox);
 
-        var run = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu");
+        // PPSSPP's Linux installs all have fixed folders: nothing for the owner to give.
+        var run = deck.Expect(CliApp.ExitRefused, "app", "add", "ppsspp");
 
-        Assert.Contains("No install of Cemu was found on this device.", run.Err, StringComparison.Ordinal);
+        Assert.Contains("No install of PPSSPP was found on this device.", run.Err, StringComparison.Ordinal);
         Assert.DoesNotContain("--install-dir", run.Err, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_linux_portable_copy_is_found_once_its_folder_is_given()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        // Cemu keeps a portable copy's data in a "portable" folder beside the AppImage (CemuApp::DeterminePaths).
+        var install = Path.Combine(deck.Home, "Apps", "Cemu");
+        CliDevice.Write(Path.Combine(install, "portable", "mlc01", "usr", "save"), "00050000/101c9500/game.sav", "zelda");
+
+        Assert.Contains("--install-dir", deck.Expect(CliApp.ExitRefused, "app", "add", "cemu").Err, StringComparison.Ordinal);
+        deck.Ok("app", "add", "cemu", "--install-dir", install);
+
+        Assert.Equal(
+            Path.Combine(install, "portable", "mlc01", "usr", "save"),
+            DeviceFile(deck).GetProperty("paths").GetProperty("cemu.save").GetProperty("source").GetString());
+        Assert.Equal("linux-portable", DeviceFile(deck).GetProperty("apps").GetProperty("cemu").GetProperty("install").GetString());
     }
 
     [Fact]

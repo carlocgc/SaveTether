@@ -1,7 +1,8 @@
 // Dolphin (GameCube and Wii emulator). Shipped with SaveTether; replaces the Ludusavi entry, which shares the whole user folder.
 // The folders come from Dolphin's source (UICommon.cpp SetUserDirectory, CommonPaths.h), read 2026-11-22; the Flatpak folder was
-// read on the owner's Steam Deck, where EmuDeck links Emulation/saves/dolphin to it. Not yet tried with `app add`. Design 5.2
-// explains the format.
+// read on the owner's Steam Deck, where EmuDeck links Emulation/saves/dolphin to it. linux-portable: SetUserDirectory's non-Windows
+// branch looks for portable.txt beside the program (FileUtil.cpp GetExePath, /proc/self/exe) and then uses "user" there, lowercase on
+// Linux (CommonPaths.h PORTABLE_USER_DIR), read 2026-11-23. Not yet tried with `app add`. Design 5.2 explains the format.
 {
   "schema": 1,
   "id": "dolphin",
@@ -44,6 +45,12 @@
       "os": "linux",
       "detect": { "dir": "{home}/.dolphin-emu" },
       "base": "{home}/.dolphin-emu"
+    },
+    {
+      "id": "linux-portable",
+      "os": "linux",
+      "detect": { "file": "{install_dir}/portable.txt" },
+      "base": "{install_dir}/user"
     }
   ],
   "roles": [
@@ -98,7 +105,8 @@
   ],
   "quirks": [
     "Config, Cache and Dump stay on each device: they hold graphics, controller and path settings.",
-    "Dolphin picks its folder in this order: portable.txt beside Dolphin.exe, then Documents/Dolphin Emulator if it exists, then AppData/Roaming/Dolphin Emulator. On Linux: ~/.dolphin-emu if it exists, else ~/.local/share/dolphin-emu.",
+    "Dolphin picks its folder in this order: portable.txt beside Dolphin.exe, then Documents/Dolphin Emulator if it exists, then AppData/Roaming/Dolphin Emulator. On Linux: portable.txt beside the program (its user folder, lowercase, beside it), then ~/.dolphin-emu if it exists, else ~/.local/share/dolphin-emu.",
+    "A Linux portable copy must be an unpacked build: inside an AppImage the program's folder is the read-only image, so portable.txt cannot be put beside it.",
     "EmuDeck keeps Dolphin's own Flatpak folder and only links Emulation/saves/dolphin to it, so use the Flatpak install there.",
     "Process name for the running check: Dolphin.exe on Windows, dolphin-emu on Linux."
   ]
