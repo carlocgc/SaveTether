@@ -125,12 +125,12 @@ public class NetworkDriveTests
     public void Setup_step_1_goes_on_with_a_share_it_can_link_to_and_warns_that_it_is_not_recommended()
     {
         using var sandbox = new Sandbox();
+        Directory.CreateDirectory(sandbox.At("sync"));
         if (LocalAdminShare(sandbox.At("sync")) is not { } share)
         {
             return; // Not Windows, no admin share, or neither Developer Mode nor elevation.
         }
 
-        Directory.CreateDirectory(sandbox.At("sync"));
         var flow = new SetupFlow(new LocalStore(sandbox.At("local")), sandbox.At("local", "backups"), "PC");
 
         var check = flow.CheckSyncFolder(share);
