@@ -38,55 +38,50 @@ public static class ActionTexts
 {
     public const string EveryChoiceBacksUp = "This device's data is backed up first, whichever you choose.";
 
+    // Wording (desktop-app-spec.md, principle 8): the sync folder may be a plain folder on one device. Other devices are
+    // named only when another is registered ("others"); a sync tool only where a dialog cannot happen without one.
+
     public const string MaybeArriving =
-        "The shared copy may still be arriving: it lacks files a device shared. Wait for the sync tool, or confirm it has finished.";
+        "The shared copy lacks files another device shared. If you use a sync tool, let it finish, then check again.";
 
+    public const string NotArrivedEmpty =
+        "Another device shared this, but the shared folder here is empty. If you use a sync tool, it may not have arrived yet.";
+
+    public const string SharedFolderMissing =
+        "The link is in place, but its shared folder is missing. If you use a sync tool, it may not have arrived yet.";
+
+    /// <summary>Part of the refusal that offers "is closed": the dialog that used to follow it is gone.</summary>
     public static string AssumeClosedWarning(string app) =>
-        $"SaveTether thinks {app} is running. Linking while it runs can lose the data it writes on exit. Go ahead only if it is closed.";
+        $"Changing the folder while {app} runs can lose what it writes on exit. Say it is closed only if it is.";
 
+    /// <summary>Part of the refusal that offers "were deleted": the dialog that used to follow it is gone.</summary>
     public const string AssumeSyncedWarning =
-        "Go ahead only if the shared data was deleted on purpose. If the sync tool is still delivering them, wait instead: " +
-        "going ahead now would start this device from an empty shared folder.";
+        "Go ahead only if those files were deleted on purpose. If they are still arriving, this device would start from an incomplete shared copy.";
 
-    public static string ReplaceTitle(string role) => $"Replace the shared data for {role} in the sync folder?";
+    /// <summary>Added where a change to the shared copy reaches other devices, when there are any.</summary>
+    public const string OthersGetChange = "Other devices that use the sync folder get this change too.";
 
-    public const string ReplaceText =
-        "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's data. " +
-        "Any other devices that use the sync folder will see the replacement.";
+    public static string ReplaceTitle(string role) => $"Replace the shared copy of {role}?";
 
-    /// <summary>Typed to confirm replacing the shared data, as for every other deletion of saves.</summary>
+    public const string ReplaceText = "The shared copy is backed up on this device, then replaced with this device's data.";
+
+    /// <summary>Typed to confirm replacing the shared copy, as for every other deletion of saves.</summary>
     public const string ReplacePhrase = "replace shared data";
 
     /// <summary>
-    /// Added to the replace dialog when the owner overrode "the shared copy may still be arriving": files another
-    /// device shared are not here, so this device has no backup of them and the replacement can remove them elsewhere.
+    /// Added when the owner overrode "the shared copy lacks files": those files are not here, so this device has
+    /// no backup of them and the replacement can remove them elsewhere.
     /// </summary>
-    public const string ReplaceAnywayText =
-        "Files another device shared have not reached this device, so they are not in this device's backup. " +
-        "Replacing the shared copy can remove them from the other device, and this device has no backup of them.";
-
-    /// <summary>The last dialog before a plan that empties the shared folder runs: what it says, its button, and the phrase to type.</summary>
-    public sealed record SharedDeletionGuardView(string Title, string Text, string Button, string Phrase);
-
-    /// <summary>The typed guard for a plan, or null when it does not delete what the shared folder holds (no ClearTarget step).</summary>
-    public static SharedDeletionGuardView? SharedDeletionGuard(Plan plan, string role, bool assumedSynced = false)
-    {
-        ArgumentNullException.ThrowIfNull(plan);
-        if (!plan.Steps.Any(s => s.Kind == StepKind.ClearTarget))
-        {
-            return null;
-        }
-
-        return plan.Operation == PlanOperation.Restore
-            ? new(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore to the sync folder", BackupsPage.RestoreSharedPhrase)
-            : assumedSynced
-                ? new(ReplaceTitle(role), $"{ReplaceText}\n\n{ReplaceAnywayText}", "Replace in the sync folder", ReplacePhrase)
-                : new(ReplaceTitle(role), ReplaceText, "Replace in the sync folder", ReplacePhrase);
-    }
+    public const string ReplaceAnywayText = "Files another device shared that have not arrived here are not in the backup and can be lost.";
 
     public static string FirstSeed(string role) =>
-        $"If {role} was already set up on another device, cancel and make sure no other device is still writing to the sync folder. " +
-        "Otherwise both devices will make their own data the shared copy.";
+        $"If {role} is set up on another device, cancel until that device's data has arrived here. Otherwise both become the shared copy.";
+
+    /// <summary>
+    /// The one dialog before a plan runs. <see cref="Phrase"/> is set when the plan empties the shared folder (a ClearTarget
+    /// step): then the same dialog asks for the phrase, so there is no confirmation followed by a second, typed one.
+    /// </summary>
+    public sealed record ConfirmationView(string Title, IReadOnlyList<string> Sentences, string Button, string? Phrase);
 
     /// <summary>Section 9.2's precondition table: one sentence for each kind.</summary>
     /// <param name="role">The mapping, as the row names it: "Eden saves".</param>
@@ -98,9 +93,9 @@ public static class ActionTexts
         {
             PrecheckKind.SyncRootNotInitialized => "The sync folder is not available.",
             PrecheckKind.UnfinishedOperation => "An earlier operation did not finish. Recover it first.",
-            PrecheckKind.AppRunning => failure.Processes is { } p
-                ? $"Close {app} first. SaveTether looked for: {string.Join(", ", p.LookedFor)}."
-                : $"Close {app} first.",
+            PrecheckKind.AppRunning => (failure.Processes is { } p
+                ? $"Close {app} first. SaveTether looked for: {string.Join(", ", p.LookedFor)}. "
+                : $"Close {app} first. ") + AssumeClosedWarning(app),
             PrecheckKind.SandboxCannotReach =>
                 $"{app} is a Flatpak and cannot write to the shared folder. SaveTether can give it access to the SaveTether folder in the sync folder, and nothing else.",
             PrecheckKind.SourceParentMissing =>
@@ -140,10 +135,8 @@ public static class ActionTexts
                 PreconditionActions(refusal, sandboxGrantPossible),
                 details),
             RefusalKind.NotArrived => new RefusalView(
-                "The shared data has not arrived",
-                [refusal.AssumeSyncedWouldHelp && refusal.Comparison is not null
-                    ? MaybeArriving
-                    : "A device has shared this data, but the shared folder here is still empty. The sync tool has probably not delivered it yet."],
+                "The shared copy has not arrived",
+                [refusal.AssumeSyncedWouldHelp && refusal.Comparison is not null ? MaybeArriving : NotArrivedEmpty, AssumeSyncedWarning],
                 [RefusalAction.CheckAgain, RefusalAction.AssumeSynced],
                 details),
             RefusalKind.ForeignLink => new RefusalView(
@@ -153,10 +146,10 @@ public static class ActionTexts
                 details),
             RefusalKind.BrokenLink => new RefusalView(
                 "Shared folder missing",
-                ["The link is in place, but the shared folder is missing. It may not have synced yet."],
+                [SharedFolderMissing],
                 [RefusalAction.CheckAgain],
                 details),
-            RefusalKind.ChoiceNeeded => new RefusalView($"{role} on this device already has data.", [refusal.Message.Text], [], details),
+            RefusalKind.ChoiceNeeded => new RefusalView(ChoiceTitle(role), [refusal.Message.Text], [], details),
             RefusalKind.ConfirmationNeeded => new RefusalView(ReplaceTitle(role), [ReplaceText], [], details),
             RefusalKind.ChoiceNotAllowed => new RefusalView(
                 "Something went wrong", ["SaveTether offered a choice the core does not allow here. Nothing was changed."], [], details),
@@ -164,23 +157,26 @@ public static class ActionTexts
         };
     }
 
+    public static string ChoiceTitle(string role) => $"{role} already has data on this device";
+
     /// <summary>The choice dialog's options: exactly the allowed choices, in the core's order, worded per section 9.2.</summary>
-    public static IReadOnlyList<ChoiceOption> Choices(Refusal refusal, string app)
+    /// <param name="others">Another device is registered, so replacing the shared copy reaches it.</param>
+    public static IReadOnlyList<ChoiceOption> Choices(Refusal refusal, string app, bool others)
     {
         ArgumentNullException.ThrowIfNull(refusal);
         var sharedHasData = refusal.Comparison?.Entries.Any(e => e.Presence != EntryPresence.OnlyLocal) == true;
         return refusal.AllowedChoices.Select(choice => choice switch
         {
-            SetupChoice.Copy => new ChoiceOption(choice, "Share this device's data", "This data becomes the shared copy in the sync folder."),
+            SetupChoice.Copy => new ChoiceOption(choice, "Share this device's data", "This device's data becomes the shared copy."),
             SetupChoice.NoCopy => sharedHasData
-                ? new ChoiceOption(choice, "Use the shared data", $"This device's data is kept in a backup only. {app} will see the shared data.")
-                : new ChoiceOption(choice, "Start empty", $"This device's data is kept in a backup only. {app} will see no data until another device shares some."),
+                ? new ChoiceOption(choice, "Use the shared copy", $"{app} uses the shared copy. This device's data is kept only in the backup.")
+                : new ChoiceOption(choice, "Start empty", $"{app} starts with no data. This device's data is kept only in the backup."),
             SetupChoice.AddMissing => new ChoiceOption(
-                choice, "Use the shared data, and add games only this device has",
-                "Copies entries the shared copy does not have. Nothing in the shared copy is changed or deleted."),
+                choice, "Use the shared copy, and add what only this device has",
+                "Nothing in the shared copy is changed or deleted."),
             SetupChoice.ReplaceShared => new ChoiceOption(
-                choice, "Replace the shared data with this device's",
-                "The shared data in the sync folder is replaced, so any other devices that use it will see this device's data. It is backed up on this device first."),
+                choice, "Replace the shared copy with this device's data",
+                others ? $"The shared copy is replaced. {OthersGetChange}" : "The shared copy is replaced."),
             _ => throw new ArgumentOutOfRangeException(nameof(refusal), choice, "A choice with no text."),
         }).ToList();
     }
@@ -218,28 +214,56 @@ public static class ActionTexts
         return $"Newest here: {When(comparison.LocalNewestUtc)}. Newest in the shared copy: {When(comparison.SharedNewestUtc)}.";
     }
 
-    /// <summary>The confirmation before a plan runs (sections 9.2, 9.6).</summary>
-    public static (string Title, IReadOnlyList<string> Sentences) Confirmation(Plan plan, string role)
+    /// <summary>The core's notes that the confirmation already says in its own words.</summary>
+    private static readonly HashSet<string> Restated = new(StringComparer.Ordinal)
+    {
+        Planner.RevertLeavesSharedNote, Planner.AlreadyAppliedReplaceNote, Planner.ReplaceSharedNote, RestorePlanner.SharedChangesNote,
+    };
+
+    /// <summary>The one dialog before a plan runs (sections 9.2, 9.6, 9.7). The backup is said once, here.</summary>
+    /// <param name="others">Another device is registered in the sync folder: only then are other devices mentioned.</param>
+    /// <param name="assumedSynced">The owner overrode "the shared copy lacks files".</param>
+    public static ConfirmationView Confirmation(Plan plan, string role, bool others, bool assumedSynced = false)
     {
         ArgumentNullException.ThrowIfNull(plan);
         var sentences = new List<string>();
-        string title;
+        var clears = plan.Steps.Any(s => s.Kind == StepKind.ClearTarget);
+        string title, button;
+        string? phrase = null;
         switch (plan.Operation)
         {
             case PlanOperation.Revert:
-                title = $"Give this device its own copy of {role}?";
-                sentences.Add("The shared data is copied here and the link is removed. Other devices keep sharing.");
+                (title, button) = ($"Give this device its own copy of {role}?", "Revert");
+                sentences.Add("This device gets its own copy and the link is removed. The shared copy is not changed.");
+                break;
+            case PlanOperation.Restore when clears:
+                (title, button, phrase) = (BackupsPage.RestoreSharedTitle(role), "Restore", BackupsPage.RestoreSharedPhrase);
+                sentences.Add(others ? $"{BackupsPage.RestoreSharedText} {OthersGetChange}" : BackupsPage.RestoreSharedText);
+                sentences.Add($"Shared folder: {plan.Target}");
                 break;
             case PlanOperation.Restore:
-                title = $"Restore the backup into {plan.Target}?";
+                (title, button) = ($"Restore the backup into {plan.Target}?", "Restore");
                 break;
             default:
-                title = plan.Classification == Classification.AlreadyApplied && plan.Choice == SetupChoice.ReplaceShared
-                    ? "Make this device's copy the shared copy?"
-                    : $"Link {role} on this device to the shared folder?";
-                if (plan.Classification == Classification.AlreadyApplied && plan.Choice == SetupChoice.ReplaceShared)
+                if (clears)
                 {
-                    sentences.Add("No files change; the other devices' claims are marked as replaced.");
+                    (title, button, phrase) = (ReplaceTitle(role), "Replace", ReplacePhrase);
+                    sentences.Add(others ? $"{ReplaceText} {OthersGetChange}" : ReplaceText);
+                    if (assumedSynced)
+                    {
+                        sentences.Add(ReplaceAnywayText);
+                    }
+                }
+                else if (plan.Classification == Classification.AlreadyApplied && plan.Choice == SetupChoice.ReplaceShared)
+                {
+                    // Offered only when other devices also claim the shared copy (a double seed), so they are named.
+                    (title, button) = ("Make this device's copy the shared copy?", "Use this copy");
+                    sentences.Add("No files change: the shared folder as it is becomes the shared copy, and other devices' claims are set aside. " +
+                        "Do this only if it holds the data to keep.");
+                }
+                else
+                {
+                    (title, button) = ($"Link {role} on this device to the shared folder?", "Apply");
                 }
 
                 sentences.Add($"Save folder: {plan.Source}");
@@ -247,18 +271,20 @@ public static class ActionTexts
                 break;
         }
 
-        if (plan.Steps.Any(s => s.Kind is StepKind.BackUpSource or StepKind.BackUpTarget))
+        // The replace and restore texts already say the backup.
+        if (!clears && plan.Steps.Any(s => s.Kind is StepKind.BackUpSource or StepKind.BackUpTarget))
         {
             sentences.Add("A backup is taken first.");
         }
 
-        if (plan.NeedsFirstSeedConfirmation)
+        // With no other device registered, nothing else can be making its data the shared copy.
+        if (plan.NeedsFirstSeedConfirmation && others)
         {
             sentences.Add(FirstSeed(role));
         }
 
-        sentences.AddRange(plan.Notes.Select(n => n.Text));
-        return (title, sentences);
+        sentences.AddRange(plan.Notes.Select(n => n.Text).Where(t => !Restated.Contains(t)));
+        return new ConfirmationView(title, sentences, button, phrase);
     }
 
     /// <summary>One step in plain words, for "Show steps" and the progress list.</summary>
@@ -268,7 +294,7 @@ public static class ActionTexts
         return step.Kind switch
         {
             StepKind.BackUpSource => "Back up this device's data",
-            StepKind.BackUpTarget => "Back up the shared data",
+            StepKind.BackUpTarget => "Back up the shared copy",
             StepKind.EnsureTarget => "Make sure the shared folder exists",
             StepKind.ClearTarget => "Empty the shared folder",
             StepKind.CopyIntoTarget => step.Entries is { Count: > 0 } entries

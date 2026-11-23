@@ -24,6 +24,26 @@ public sealed class OperationSession : IDisposable
 
     public Workspace Workspace { get; }
 
+    private bool? _hasOtherDevices;
+
+    /// <summary>
+    /// True when another device is registered in the sync folder. Only then do the dialogs mention other devices:
+    /// the sync folder may be a plain folder for one device. True when it cannot be read, so a warning is never lost.
+    /// </summary>
+    public bool HasOtherDevices => _hasOtherDevices ??= OtherDevicesRegistered();
+
+    private bool OtherDevicesRegistered()
+    {
+        try
+        {
+            return Workspace.Shared.ListDeviceNames().Any(n => !string.Equals(n, Workspace.DeviceName, StringComparison.Ordinal));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or StoreException)
+        {
+            return true;
+        }
+    }
+
     /// <summary>Takes the lock and opens the device. On a refusal, says why in the app's words; nothing is held then.</summary>
     public static (OperationSession? Session, string? Refused) Begin(
         LocalStore local, string command, IProcessLister processes, FlatpakCheck? flatpak, IFaultHook? faults = null)

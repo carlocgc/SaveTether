@@ -81,7 +81,7 @@ public class BackupsPageTests
         using (restore)
         {
             var plan = restore!.PlanRestore(row.Info.Id, new RestoreRequest()).Plan!;
-            Assert.Equal($"Restore the backup into {pc.Source}?", ActionTexts.Confirmation(plan, Role).Title);
+            Assert.Equal($"Restore the backup into {pc.Source}?", ActionTexts.Confirmation(plan, Role, others: false).Title);
             var result = restore.Run(plan, null);
             Assert.Equal(ExecutionStatus.Completed, result.Status);
             Assert.Equal("The backup is restored.", ActionTexts.Result(result, Role).Title);
@@ -111,7 +111,7 @@ public class BackupsPageTests
         }
 
         Assert.Equal("theirs", pc.SharedFiles()["GAME1/save.bin"]);
-        Assert.Equal($"Restore the shared data for {Role} into the sync folder?", BackupsPage.RestoreSharedTitle(Role));
+        Assert.Equal($"Restore the shared copy of {Role}?", BackupsPage.RestoreSharedTitle(Role));
         sandbox.AssertCanaryIntact();
     }
 

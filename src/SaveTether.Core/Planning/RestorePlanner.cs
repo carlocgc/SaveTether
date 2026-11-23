@@ -17,6 +17,9 @@ namespace SaveTether.Core.Planning;
 /// </summary>
 public static class RestorePlanner
 {
+    /// <summary>A note the desktop app says in its own words, so it leaves it out of its confirmation.</summary>
+    public const string SharedChangesNote = "The shared folder will change, and any other devices that use it will see that.";
+
     public static PlanOutcome Plan(
         BackupStore backups, SharedStore shared, string backupId, RestoreRequest request,
         IReadOnlyList<string> processNames, IProcessLister processes, bool journalOpen)
@@ -105,7 +108,7 @@ public static class RestorePlanner
             steps.Add(new PlanStep(StepKind.EnsureTarget, destination));
             steps.Add(new PlanStep(StepKind.ClearTarget, destination));
             steps.Add(new PlanStep(StepKind.CopyIntoTarget, data, destination));
-            notes.Add("The shared folder will change, and any other devices that use it will see that.");
+            notes.Add(SharedChangesNote);
         }
         else
         {
