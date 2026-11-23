@@ -2,7 +2,7 @@
 
 Section 5c of the [implementation plan](implementation-plan.md) points here. This file holds the whole phase: the goal, the owner's decisions, the design, the app's changes, the tasks (T1 to T8), the exit test, and each task's progress. A delegated task needs only this file and the files it names.
 
-Planned 2026-11-23 by the owner and the agent. Nothing is built yet.
+Planned 2026-11-23 by the owner and the agent. T1 (design) is done; nothing else is built yet.
 
 **Goal.** A Windows device can use `\\server\share\...`, or a mapped drive that points at one, as its sync folder. Save folders are linked there with symlinks, where Windows lets SaveTether make one. Where it does not, setup says exactly how to enable it. SaveTether never elevates itself. The user is told, where they choose it, that a share is not recommended.
 
@@ -181,6 +181,8 @@ See T7.
 
 ## Progress
 
-Not started. One entry per task, as in phase 3.6.
+**T1 (done 2026-11-23).** Design section 5.16 written (D1 to D8, capability order, link, refusal text, offline). "No admin" lines amended: design R5, 5.12 link type, 5.14 distribution; README (two lines); spec section 11. Design line 66 (the symlink row of the comparison table) now says a network share is the exception. Left as they were, because they stay true: design lines 11 (junctions need no admin) and 900 (autostart needs none). The refusal text in 5.16 is proposed wording; T4 sets the final text. Design 5.15 (phase 3.6) was never written, so 5.16 follows 5.14. No hardware check (docs only).
+
+T2 to T8: not started. One entry per task, as in phase 3.6.
 
 Not verified yet: that a Developer Mode symlink to a UNC target opens for a normal process, and the default of `SymlinkLocalToRemoteEvaluation`. T2 and T3 prove both on the PC first.

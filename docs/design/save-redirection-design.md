@@ -24,7 +24,7 @@ Labels used throughout: **[V]** verified by a source I checked today, **[K]** fr
 | R2 | Every operation is idempotent, journaled and reversible | weakness 2 |
 | R3 | When both the device and the sync folder hold data, the tool never picks a winner silently | weakness 3 |
 | R4 | No device depends on another device's paths. Shared files read by every device (the mapping list) contain no machine paths; a device's own paths live only in that device's own file | weakness 4 |
-| R5 | No admin on Windows, no root on SteamOS | weakness 5 |
+| R5 | No admin on Windows (except to link a network share without Developer Mode, 5.16), no root on SteamOS | weakness 5 |
 | R6 | Only saves, plus what is needed to resume, are synced. NAND system folders are allowed | weakness 6 |
 | R7 | A replaced, broken or re-pointed link is detected and reported | weakness 7 |
 | R8 | No credentials in the sync folder or any shared file | weakness 8 |
@@ -63,7 +63,7 @@ Direction matters more than link type. **[V]** Syncthing never follows symlinks,
 | Mechanism | Privilege | Works for | Sync tool | App behaviour | Verdict |
 |---|---|---|---|---|---|
 | Symlink (Linux) | none | dirs and files, any filesystem | fine (data is real in the sync folder) | transparent. Wine and Proton resolve host symlinks below the prefix normally **[K]** | default on Linux |
-| Directory symlink (Windows) | admin, or Developer Mode | dirs and files | fine | transparent | avoid; junctions do the same job for directories |
+| Directory symlink (Windows) | admin, or Developer Mode | dirs and files | fine | transparent | avoid for local targets, where junctions do the same job; used for a network share, which a junction cannot reach (5.16) |
 | Junction (Windows) | none | directories on local volumes, cross-drive allowed, absolute target only | fine | transparent to almost everything | default on Windows |
 | Config redirect | none | apps with a save-path setting (RetroArch, Dolphin, PCSX2, DuckStation) | fine | the most robust: nothing to be replaced on disk | deferred on 2026-11-12 (5.13): links cover the same apps, and this means editing files the app owns |
 | Bind mount | root, and a persistent unit on SteamOS | anything | fine | transparent | rejected: needs root, fragile across SteamOS updates |
@@ -840,7 +840,7 @@ Local, `state.json`: per mapping, the resolved source and target, the link type 
 
 **Replacing shared data.** `apply --replace-shared` is the one case covered by the exception in invariant 2. It requires `--confirm-replace` as well, backs up the shared target locally first, and reports that the deletion will propagate to every device.
 
-**Link type.** Linux: symlink. Windows: junction. `apply` never needs elevation; if a junction cannot be created (target on a network volume), the precheck refuses and says why.
+**Link type.** Linux: symlink. Windows: junction. `apply` never needs elevation, except to link a sync folder on a network share without Developer Mode (5.16); a save folder or backup location on a network volume is refused, and the precheck says why.
 
 **Suggested code layout.** A core library with no console or UI code; a CLI project that only parses arguments, calls the core and formats output; a test project that runs against real temporary directories. The safe filesystem layer is the only place allowed to delete, rename or create links, which makes invariant 1 checkable by a code search.
 
@@ -903,7 +903,7 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 **Distribution.** No installer at first.
 
 - Each release archive holds both binaries: `savetether` and `savetether-gui` (`.exe` on Windows), for win-x64, linux-x64 and linux-arm64. The CLI stays a small Native AOT binary with no UI code; the app carries the UI toolkit.
-- The expected place is per user and needs no admin rights: `~/.local/bin` on Linux and SteamOS (on `PATH` on Mint and SteamOS), `%LOCALAPPDATA%\Programs\SaveTether` on Windows. On first run the app offers to move both binaries there and to set up starting with the session.
+- The expected place is per user and needs no admin rights (except 5.16): `~/.local/bin` on Linux and SteamOS (on `PATH` on Mint and SteamOS), `%LOCALAPPDATA%\Programs\SaveTether` on Windows. On first run the app offers to move both binaries there and to set up starting with the session.
 - Anything that records the app's path (the autostart entry) stops working if the binaries are moved or deleted, and it fails silently because the binary that would report it is the one that is gone. So the app re-writes the autostart entry with its current path whenever it starts with the setting on, and `status` warns when the autostart entry points to a missing binary.
 - Updating is replacing the files in place. On Windows the running app locks its `.exe`, so the app must be quit first; the app should say so if an update is attempted while it runs.
 - An installer, code signing (SmartScreen warns on unsigned Windows binaries), winget or Scoop manifests, and an AppImage belong to phase 5, when other people use it. Flatpak stays ruled out (3.3).
@@ -913,6 +913,38 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 - **Avalonia** (MIT) has a tray icon on Windows and on Linux (StatusNotifierItem over D-Bus), real windows, keyboard focus handling, and Native AOT support. It was the GUI choice in 3.2. It is a large dependency: it brings native Skia and HarfBuzz libraries, so the app is about 33 MB in four files. It draws its own controls, so the window's styling is unrestricted; the tray icon's own menu is a plain system menu.
 - **Hand-written per platform**: the Win32 tray and window APIs on Windows, and the StatusNotifierItem protocol on Linux, which needs a D-Bus library or a hand-written client, plus a separate window layer on each. Far more code to write and maintain.
 - On Linux the tray icon shows on KDE (the Deck's Desktop Mode) and Cinnamon (Mint); stock GNOME needs an extension. The window works everywhere.
+
+### 5.16 Sync folder on a network share (Windows)
+
+There is no section 5.15: phase 3.6 planned it for device removal, rename and maintenance, but it was never written (the design of those flows stands in `docs/plans/phase-3.6-device-maintenance.md`).
+
+Status: planned with the owner on 2026-11-23; built in phase 3.7 (`docs/plans/phase-3.7-network-share.md`, which holds the tasks and progress).
+
+**Why.** A junction cannot point at a network path, so a share was refused. A directory symlink can. On Windows it needs an elevated process or Developer Mode; .NET's `Directory.CreateSymbolicLink` passes `SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE`, so with Developer Mode on it needs no elevation. Only creating the link needs this (Apply, Add app, Recover). Using the link, Revert, backups, health checks, the tray and autostart need none.
+
+**Decisions.**
+
+- **D1** No elevation code in SaveTether. A share is allowed when a test symlink can be made. Otherwise the app refuses with the fix. SaveTether never turns Developer Mode on.
+- **D2** Two ways to enable it, both the user's: Developer Mode (Settings, System, For developers), or the CLI run from an elevated terminal for the one-off Apply. The refusal names both.
+- **D3** No installer admin option and no run-as-admin flag. The installer stays per user. Every "no admin" promise reads "except to link a network share without Developer Mode".
+- **D4** A mapped drive letter is stored as UNC (`\server\share\x`), resolved with WNetGetConnection at setup, and the screen says so. A symlink to `Z:\` resolves per logon session and breaks under an elevated shell.
+- **D5** Only the sync folder may be a share. A save folder or backup location on a network drive stays refused.
+- **D6** No copy fallback. If the link cannot be made, nothing is linked.
+- **D7** The elevated helper is deferred (phase 3.7, T8). An always-elevated app is rejected: UAC on every launch, the `Run` key skips elevated programs, no drag and drop from Explorer, mapped drives invisible to the elevated process.
+- **D8** A share is allowed but not recommended, and the user is warned where they choose it (setup step 1, `init`), on Windows and Linux alike. It does not block. Text: "Not recommended: if the share is disconnected, games and emulators that save here can fail or misbehave. A folder on this device, kept in step by a sync tool, is safer." It shows once more on the first Apply to a share.
+
+**Capability order,** wherever a share is chosen or linked:
+
+1. The path is a share (UNC, a mapped letter, or a `subst` of one). A mapped letter becomes UNC (D4).
+2. Windows evaluates local-to-remote symlinks (`SymlinkLocalToRemoteEvaluation`; on by default, can be turned off by policy). If not, refuse and name the policy.
+3. A test symlink is made in a scratch folder under the backup root, to the share, and removed through `SafeFs`. If it works, the share is allowed.
+4. If it fails with Win32 error 1314 (`ERROR_PRIVILEGE_NOT_HELD`), refuse with the Developer Mode steps and the elevated-terminal alternative.
+
+**The link.** On Windows `CreateDirectoryLink` makes a junction for a local target and a symlink for a network target, verified as a symlink with the same target; the link type is recorded as `symlink`. A device can hold both kinds.
+
+**Refusal text** (proposed wording; the final text is set in phase 3.7, T4). "Linking a network share needs permission Windows has not given SaveTether. Either turn on Developer Mode (Settings, System, For developers), then choose Check again; or run `savetether` from an administrator terminal for this one step."
+
+**Offline shares.** Probes time out (5 s by default). An offline share is the `SyncRootUnavailable` health state. Two devices on one share have no sync tool between them and write one live copy, so playing the same game on both at once can corrupt a save.
 
 ## 6. Open questions and unknowns
 

@@ -48,7 +48,7 @@ flowchart LR
 
 ## What it does
 
-- **Links, not copies:** a junction on Windows, a symbolic link on Linux. No administrator or root rights.
+- **Links, not copies:** a junction on Windows, a symbolic link on Linux. No administrator or root rights, except to link a network share on Windows without Developer Mode.
 - **Backs up first.** Every change is preceded by a verified copy outside the synced folder, which can be restored.
 - **Never picks a winner silently.** When a device and the synced folder both hold saves, it compares them game by game and asks which to keep.
 - **Survives interruption.** Operations are journalled; a crash part way is finished or undone with Recover.
@@ -71,7 +71,7 @@ Download your platform's package from the [latest release](https://github.com/ca
 | Linux x64, including the Steam Deck | `savetether-<version>-linux-x64.tar.gz` |
 | Linux ARM64 | `savetether-<version>-linux-arm64.tar.gz` |
 
-Each holds the desktop app (`savetether-gui`) and the command line (`savetether`). Neither needs administrator rights.
+Each holds the desktop app (`savetether-gui`) and the command line (`savetether`). Neither needs administrator rights (except to link a network share without Developer Mode).
 
 - **Windows:** the installer puts SaveTether in `%LOCALAPPDATA%\Programs\SaveTether` with a Start menu entry; uninstall it from Settings > Apps. From the `.zip`, keep the files together.
 - **Linux:** unpack it anywhere and start `savetether-gui`. The first run offers to install it for your user (into `~/.local` and the app menu); Settings > Uninstall removes it.
