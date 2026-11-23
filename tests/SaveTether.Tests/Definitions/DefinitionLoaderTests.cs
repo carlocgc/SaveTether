@@ -421,11 +421,12 @@ public partial class DefinitionLoaderTests
     /// Flatpak ones come from the Ludusavi manifest.
     /// </summary>
     [Fact]
-    public void The_shipped_cemu_definition_has_its_four_installs()
+    public void The_shipped_cemu_definition_has_its_five_installs()
     {
         var definition = DefinitionLoader.LoadFile(Path.Combine(FindRepositoryRoot(), "definitions", "cemu.jsonc")).Definition!;
 
-        Assert.Equal(["win-portable", "win-documents", "linux-flatpak", "linux-native"], definition.Installs.Select(i => i.Id));
+        Assert.Equal(["win-portable", "win-documents", "linux-flatpak", "linux-native", "linux-portable"], definition.Installs.Select(i => i.Id));
+        Assert.Equal("{install_dir}/portable/mlc01", definition.Installs.Single(i => i.Id == "linux-portable").Base.Path);
         Assert.Equal("{documents}/mlc01", definition.Installs.Single(i => i.Id == "win-documents").Base.Path);
         Assert.Equal("{flatpak:info.cemu.Cemu}/data/Cemu/mlc01", definition.Installs.Single(i => i.Id == "linux-flatpak").Base.Path);
         Assert.All(definition.Roles, r => Assert.True(definition.Installs.All(i => r.Paths.ContainsKey(i.Id))));
