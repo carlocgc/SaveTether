@@ -424,6 +424,21 @@ internal sealed class MainWindow : Window
         Add(grid, 3, text);
 
         var role = $"{mapping.AppName} {mapping.Role}";
+
+        // In the not-here list Add takes More's column, so Delete and More share the column to its left.
+        var beside = withApp ? new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center } : null;
+        void AddBeside(int column, Control control)
+        {
+            if (beside is null)
+            {
+                Add(grid, column, control);
+            }
+            else
+            {
+                beside.Children.Add(control);
+            }
+        }
+
         if (row.Main is { } main)
         {
             var button = new Button { Content = AppsPage.Label(main), IsEnabled = Allowed(main, actionsAllowed), Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -434,14 +449,14 @@ internal sealed class MainWindow : Window
             Add(grid, withApp ? 5 : 4, button);
         }
 
-        // An action that deletes for good is its own red button, apart from More (the owner asked for red). Such a row has no More.
+        // An action that deletes for good is its own red button, apart from More (the owner asked for red).
         if (row.Destructive is { } destructive)
         {
             var delete = new Button { Content = AppsPage.Label(destructive), IsEnabled = Allowed(destructive, actionsAllowed), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             Danger.Style(delete);
             AutomationProperties.SetName(delete, $"{AppsPage.Label(destructive)} from the shared folder: {role}");
             delete.Click += (_, _) => Do(destructive, row);
-            Add(grid, 4, delete);
+            AddBeside(4, delete);
         }
 
         if (row.Others.Count > 0)
@@ -456,7 +471,12 @@ internal sealed class MainWindow : Window
 
             var more = new Button { Content = "More", Flyout = menu, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             AutomationProperties.SetName(more, $"More actions: {role}");
-            Add(grid, 5, more);
+            AddBeside(5, more);
+        }
+
+        if (beside is { Children.Count: > 0 })
+        {
+            Add(grid, 4, beside);
         }
 
         return grid;
