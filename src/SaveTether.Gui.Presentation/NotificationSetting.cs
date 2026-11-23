@@ -15,7 +15,21 @@ public sealed class NotificationSetting(string localFolder)
 
     private string File => Path.Combine(localFolder, FileName);
 
-    public bool IsOn => SafeFs.Probe(File) != EntryKind.File || System.IO.File.ReadAllText(File).Trim() != Off;
+    /// <summary>On unless the file says off. A file that cannot be read (locked mid-write, say) counts as on, the default.</summary>
+    public bool IsOn
+    {
+        get
+        {
+            try
+            {
+                return SafeFs.Probe(File) != EntryKind.File || System.IO.File.ReadAllText(File).Trim() != Off;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return true;
+            }
+        }
+    }
 
     /// <summary>The switch turned on or off. Answers why it failed, or null.</summary>
     public string? Set(bool on)

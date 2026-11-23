@@ -30,33 +30,39 @@ internal sealed class SettingsScreen : UserControl, IScreen
             },
         };
 
-        page.Children.Add(Heading("Start with the session"));
-        if (session.Available)
+        // An on/off switch whose change is saved by set; on a problem it is logged, shown, and the switch put back.
+        ToggleSwitch Switch(string name, Func<bool> isOn, Func<bool, string?> set)
         {
-            var toggle = new ToggleSwitch { IsChecked = session.IsOn, OnContent = "On", OffContent = "Off" };
-            AutomationProperties.SetName(toggle, "Start with the session");
-            var applying = false;
+            var toggle = new ToggleSwitch { IsChecked = isOn(), OnContent = "On", OffContent = "Off" };
+            AutomationProperties.SetName(toggle, name);
+            var reverting = false;
             toggle.IsCheckedChanged += async (_, _) =>
             {
-                if (applying)
+                if (reverting)
                 {
                     return;
                 }
 
                 var on = toggle.IsChecked == true;
-                if (session.Set(on) is { } problem)
+                if (set(on) is { } problem)
                 {
                     App.Options.Log.Write(problem);
-                    applying = true;
-                    toggle.IsChecked = session.IsOn;
-                    applying = false;
+                    reverting = true;
+                    toggle.IsChecked = isOn();
+                    reverting = false;
                     await overlay.InformAsync("Nothing was changed", problem);
                     return;
                 }
 
-                App.Options.Log.Write($"start with the session: {(on ? "on" : "off")}");
+                App.Options.Log.Write($"{name.ToLowerInvariant()}: {(on ? "on" : "off")}");
             };
-            page.Children.Add(toggle);
+            return toggle;
+        }
+
+        page.Children.Add(Heading("Start with the session"));
+        if (session.Available)
+        {
+            page.Children.Add(Switch("Start with the session", () => session.IsOn, session.Set));
             page.Children.Add(Note(
                 "SaveTether starts in the tray when you log in, and checks your save folders in the background. " +
                 "While this is on, the entry is updated with SaveTether's location each time it starts."));
@@ -68,30 +74,7 @@ internal sealed class SettingsScreen : UserControl, IScreen
 
         page.Children.Add(Heading("Desktop notifications"));
         var notifications = new NotificationSetting(localFolder);
-        var notify = new ToggleSwitch { IsChecked = notifications.IsOn, OnContent = "On", OffContent = "Off" };
-        AutomationProperties.SetName(notify, "Desktop notifications");
-        var reverting = false;
-        notify.IsCheckedChanged += async (_, _) =>
-        {
-            if (reverting)
-            {
-                return;
-            }
-
-            var on = notify.IsChecked == true;
-            if (notifications.Set(on) is { } problem)
-            {
-                App.Options.Log.Write(problem);
-                reverting = true;
-                notify.IsChecked = notifications.IsOn;
-                reverting = false;
-                await overlay.InformAsync("Nothing was changed", problem);
-                return;
-            }
-
-            App.Options.Log.Write($"desktop notifications: {(on ? "on" : "off")}");
-        };
-        page.Children.Add(notify);
+        page.Children.Add(Switch("Desktop notifications", () => notifications.IsOn, notifications.Set));
         page.Children.Add(Note(
             "SaveTether tells you when a save folder needs attention. With this off, only the tray icon's colour shows it."));
 
