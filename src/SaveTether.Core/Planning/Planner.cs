@@ -521,7 +521,7 @@ public static class Planner
                     return Refuse(
                         s, RefusalKind.ConfirmationNeeded, Classification.Guard,
                         new Note(
-                            "Replacing the shared saves deletes them on every device once it syncs. " +
+                            "Replacing the shared saves deletes them from the sync folder, which other devices may use. " +
                             "The shared copy is backed up on this device first.",
                             new NextStep(NextStepKind.ConfirmReplace, s.MappingId)),
                         allowed: GuardChoices, comparison: comparison);
@@ -542,7 +542,7 @@ public static class Planner
                 AddSwitchSteps(s, steps, StepKind.WriteSeedMarker, StepKind.SupersedeMarkers);
                 return Planned(
                     s, Classification.Guard, SetupChoice.ReplaceShared, steps,
-                    ["The shared saves will be replaced on every device once this syncs. They are backed up on this device first."]);
+                    ["The shared saves in the sync folder will be replaced. They are backed up on this device first."]);
             }
         }
     }

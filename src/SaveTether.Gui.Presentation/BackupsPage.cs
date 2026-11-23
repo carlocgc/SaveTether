@@ -144,11 +144,14 @@ public static class BackupsPage
     }
 
     /// <summary>The confirmation for a backup of the shared copy (section 9.7), like replace-shared's.</summary>
-    public static string RestoreSharedTitle(string role) => $"Restore the shared data for {role} on every device?";
+    public static string RestoreSharedTitle(string role) => $"Restore the shared data for {role} into the sync folder?";
 
     public const string RestoreSharedText =
         "What is in the shared folder now is backed up on this device first. Then it is emptied and filled from this backup. " +
-        "The change reaches every device through the sync tool.";
+        "Any other devices that use the sync folder will see the change.";
+
+    /// <summary>Typed to confirm restoring the shared copy, as for every other deletion of saves.</summary>
+    public const string RestoreSharedPhrase = "restore shared data";
 
     /// <summary>
     /// A local restore's confirmation sentence, above the plan's. The plan's own sentences say a backup is

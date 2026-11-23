@@ -300,7 +300,7 @@ public class ChoiceTests
                 WriteSeedMarker, SupersedeMarkers, WriteState, DeleteAside,
             ],
             outcome.Kinds());
-        Assert.Contains(outcome.Plan!.Notes, n => n.Text.Contains("every device", StringComparison.Ordinal));
+        Assert.Contains(outcome.Plan!.Notes, n => n.Text.Contains("in the sync folder will be replaced", StringComparison.Ordinal));
     }
 
     [Fact]

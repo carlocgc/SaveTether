@@ -88,7 +88,7 @@ internal static class Hints
         SetupChoice.Copy => "this device's saves become the shared copy",
         SetupChoice.NoCopy => "use the shared saves; this device's stay in the backup",
         SetupChoice.AddMissing => "also add what the shared copy lacks; nothing is overwritten",
-        _ => "this device's saves replace the shared copy on every device",
+        _ => "this device's saves replace the shared copy in the sync folder",
     };
 
     /// <summary>"a or b", or "a, b, or c".</summary>

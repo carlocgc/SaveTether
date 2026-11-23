@@ -1,5 +1,7 @@
 using SaveTether.Core.Backup;
+using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
+using SaveTether.Core.Planning;
 using SaveTether.Gui.Presentation;
 
 namespace SaveTether.Tests.Gui;
@@ -65,6 +67,39 @@ public class MaintenancePageTests
         Assert.Null(MaintenancePage.TypedPhraseProblem("  Delete Everything ", "delete everything"));
         Assert.NotNull(MaintenancePage.TypedPhraseProblem("delete  everything", "delete everything"));
         Assert.NotNull(MaintenancePage.TypedPhraseProblem("", "deck"));
+    }
+
+    [Fact]
+    public void Replacing_shared_data_needs_its_typed_phrase()
+    {
+        Assert.Null(MaintenancePage.TypedPhraseProblem(" Replace Shared Data ", ActionTexts.ReplacePhrase));
+        Assert.NotNull(MaintenancePage.TypedPhraseProblem("replace", ActionTexts.ReplacePhrase));
+        Assert.NotNull(MaintenancePage.TypedPhraseProblem("", ActionTexts.ReplacePhrase));
+        Assert.Null(MaintenancePage.TypedPhraseProblem("Restore shared data", BackupsPage.RestoreSharedPhrase));
+        Assert.NotNull(MaintenancePage.TypedPhraseProblem(ActionTexts.ReplacePhrase, BackupsPage.RestoreSharedPhrase));
+    }
+
+    [Theory]
+    [InlineData(PlanOperation.Apply, "replace shared data")]
+    [InlineData(PlanOperation.Restore, "restore shared data")]
+    public void A_plan_that_empties_the_shared_folder_ends_with_its_typed_phrase(PlanOperation operation, string phrase)
+    {
+        Plan PlanOf(params StepKind[] kinds) => new("g.saves", Classification.Guard, SetupChoice.ReplaceShared, "s", "t",
+            [.. kinds.Select(k => new PlanStep(k, "t"))], [], false, operation);
+
+        Assert.Equal(phrase, ActionTexts.SharedDeletionGuard(PlanOf(StepKind.BackUpTarget, StepKind.ClearTarget), "game")?.Phrase);
+        Assert.Null(ActionTexts.SharedDeletionGuard(PlanOf(StepKind.BackUpSource, StepKind.CreateLink), "game"));
+    }
+
+    [Fact]
+    public void Replacing_after_the_arriving_override_says_what_has_no_backup()
+    {
+        var plan = new Plan("g.saves", Classification.Guard, SetupChoice.ReplaceShared, "s", "t",
+            [new PlanStep(StepKind.ClearTarget, "t")], [], false);
+
+        var guard = ActionTexts.SharedDeletionGuard(plan, "game", assumedSynced: true)!;
+        Assert.Equal(ActionTexts.ReplacePhrase, guard.Phrase);
+        Assert.Contains(ActionTexts.ReplaceAnywayText, guard.Text, StringComparison.Ordinal);
     }
 
     [Fact]

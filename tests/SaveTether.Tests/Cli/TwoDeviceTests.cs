@@ -167,7 +167,7 @@ public sealed class TwoDeviceTests : IDisposable
         _pc.Ok("backup", "restore", pcBackup);
         Assert.Equal("pc-1", _pc.LocalFiles()["GAME1/save.bin"]);
         var replaced = _pc.Ok("apply", Id, "--replace-shared", "--confirm-replace");
-        Assert.Contains("replaced on every device", replaced.Out, StringComparison.Ordinal);
+        Assert.Contains("in the sync folder will be replaced", replaced.Out, StringComparison.Ordinal);
 
         _pc.DeliverTo(_deck, mirror: true);
         AssertState("ok", _pc);
