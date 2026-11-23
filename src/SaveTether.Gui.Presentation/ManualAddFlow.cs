@@ -105,10 +105,12 @@ public sealed class ManualAddFlow(LocalStore local)
         }
 
         var slash = mapping.Target.IndexOf('/', StringComparison.Ordinal);
+        // The app's name as the Apps page shows it, for the dialogs after Add: a definition's own ("DuckStation"), else the shared folder's app part.
+        var (name, defined) = AppNames.Resolve(workspace.Definitions, mappingId.Split('.', 2)[0]);
         return new ManualAddStart(
             $"Folder for {mappingId}",
             sentences,
-            new ManualAddInput(own?.Source, mapping.Target[..slash], mapping.Target[(slash + 1)..], string.Join(", ", own?.ProcessNames ?? []), mapping.Depth),
+            new ManualAddInput(own?.Source, defined ? name : mapping.Target[..slash], mapping.Target[(slash + 1)..], string.Join(", ", own?.ProcessNames ?? []), mapping.Depth),
             mappingId,
             mapping.Target,
             setUpOn);

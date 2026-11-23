@@ -168,6 +168,20 @@ public class ManualAddFlowTests
     }
 
     [Fact]
+    public void A_definitions_folder_chosen_by_hand_is_named_after_the_app()
+    {
+        using var sandbox = new Sandbox();
+        var (pc, _) = NewDevice(sandbox, "pc", createRoot: true);
+        pc.Ok("map", "add", "ppsspp.savedata", "--target", "ppsspp/SAVEDATA", "--source", sandbox.Dir("pc", "home", "SAVEDATA"));
+        var deck = new CliDevice(sandbox, "deck");
+        pc.DeliverTo(deck, metadataOnly: true);
+        deck.Ok("init", "--sync-root", deck.SyncRoot, "--device", "deck");
+
+        // "Choose the folder myself": the dialogs after Add say "PPSSPP", not the mapping ID (found on Mint with DuckStation).
+        Assert.Equal("PPSSPP", new ManualAddFlow(new LocalStore(deck.LocalFolder)).StartJoin("ppsspp.savedata").Input.AppName);
+    }
+
+    [Fact]
     public void Another_device_adds_the_same_folder_by_its_row_or_by_the_same_names()
     {
         using var sandbox = new Sandbox();
@@ -186,6 +200,7 @@ public class ManualAddFlowTests
         Assert.Equal(["pc"], join.SetUpOn);
         Assert.Equal(3, join.Input.EntryDepth);
         Assert.Null(join.Input.SaveFolder);
+        Assert.Equal("some-game", join.Input.AppName);
         var folder = sandbox.Dir("deck", "home", "Saves");
         var joined = deckFlow.Add(join.Input with { SaveFolder = folder, EntryDepth = 1 }, joinAccepted: false);
         Assert.True(joined.Succeeded, joined.Refused);
