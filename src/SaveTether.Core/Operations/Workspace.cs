@@ -109,7 +109,7 @@ public sealed partial class Workspace
 
     /// <summary>Design 5.16, D8: shown wherever a share is chosen as the sync folder (the app's step 1, "init"). Does not block.</summary>
     public const string NetworkShareWarning =
-        "Not recommended: if the share is disconnected, games and emulators that save here can fail or misbehave. " +
+        "Not recommended: if the share is disconnected, applications that write data here can fail or misbehave. " +
         "A folder on this device, kept in step by a sync tool, is safer.";
 
     /// <summary>The device names that have a file in the sync root, for "init" to offer.</summary>

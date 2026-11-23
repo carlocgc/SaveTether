@@ -25,7 +25,7 @@ A directory **symlink** can point at a share. On Windows it needs an elevated pr
 | D5 | **Only the sync folder may be a share.** A save folder or backup location on a network drive stays refused (`SourceNotLocal`) |
 | D6 | **No copy fallback.** If the link cannot be made, nothing is linked |
 | D7 | **The elevated helper is deferred** (T8, not built). It is built only if Developer Mode proves too much of a hurdle and the owner decides on code signing. Always-elevated is rejected: UAC on every launch, `Run` key autostart skipped for elevated programs, no drag and drop from Explorer, mapped drives invisible to the elevated process |
-| D8 | **A share is allowed but not recommended, and the user is warned where they choose it:** setup step 1, `init`, on Windows and Linux alike. It does not block. The text, terse: "Not recommended: if the share is disconnected, games and emulators that save here can fail or misbehave. A folder on this device, kept in step by a sync tool, is safer." The same warning is in `docs/sharing.md` and shows once more on the first Apply to a share |
+| D8 | **A share is allowed but not recommended, and the user is warned where they choose it:** setup step 1, `init`, on Windows and Linux alike. It does not block. The text, terse: "Not recommended: if the share is disconnected, applications that write data here can fail or misbehave. A folder on this device, kept in step by a sync tool, is safer." The same warning is in `docs/sharing.md` and shows once more on the first Apply to a share |
 
 Not in this phase: any elevation, helper or prompt batching; save folders or backups on a network drive; share credentials (Windows holds them); a copy fallback; Game Mode.
 
