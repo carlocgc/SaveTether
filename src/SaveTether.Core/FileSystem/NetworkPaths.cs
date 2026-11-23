@@ -42,7 +42,7 @@ internal static unsafe partial class NetworkPaths
         var buffer = stackalloc char[BufferChars];
         var length = (uint)BufferChars;
         // A remembered drive whose share is down answers ConnectionUnavailable and still names the share.
-        return WNetGetConnection(driveLetter, buffer, ref length) is NoError or ConnectionUnavailable ? new string(buffer) : null;
+        return WNetGetConnection(driveLetter, buffer, ref length) is NoError or ConnectionUnavailable && new string(buffer) is { Length: > 0 } share ? share : null;
     }
 
     /// <summary>The <c>\\server\share</c> a <c>subst</c> letter ("Z:") stands for, or null when it is not a subst of a share.</summary>
