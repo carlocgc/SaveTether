@@ -79,7 +79,7 @@ public sealed class ManualAddFlow(LocalStore local)
             []);
     }
 
-    /// <summary>The form for a mapping that has no definition: this device's folder for it, new or again.</summary>
+    /// <summary>The form for one mapping: this device's folder for it, new or again, given by hand.</summary>
     public ManualAddStart StartJoin(string mappingId)
     {
         ArgumentNullException.ThrowIfNull(mappingId);
