@@ -1,5 +1,7 @@
 using SaveTether.Core.Backup;
+using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
+using SaveTether.Core.Planning;
 using SaveTether.Gui.Presentation;
 
 namespace SaveTether.Tests.Gui;
@@ -75,6 +77,18 @@ public class MaintenancePageTests
         Assert.NotNull(MaintenancePage.TypedPhraseProblem("", ActionTexts.ReplacePhrase));
         Assert.Null(MaintenancePage.TypedPhraseProblem("Restore shared data", BackupsPage.RestoreSharedPhrase));
         Assert.NotNull(MaintenancePage.TypedPhraseProblem(ActionTexts.ReplacePhrase, BackupsPage.RestoreSharedPhrase));
+    }
+
+    [Theory]
+    [InlineData(PlanOperation.Apply, "replace shared data")]
+    [InlineData(PlanOperation.Restore, "restore shared data")]
+    public void A_plan_that_empties_the_shared_folder_ends_with_its_typed_phrase(PlanOperation operation, string phrase)
+    {
+        Plan PlanOf(params StepKind[] kinds) => new("g.saves", Classification.Guard, SetupChoice.ReplaceShared, "s", "t",
+            [.. kinds.Select(k => new PlanStep(k, "t"))], [], false, operation);
+
+        Assert.Equal(phrase, ActionTexts.SharedDeletionGuard(PlanOf(StepKind.BackUpTarget, StepKind.ClearTarget), "game")?.Phrase);
+        Assert.Null(ActionTexts.SharedDeletionGuard(PlanOf(StepKind.BackUpSource, StepKind.CreateLink), "game"));
     }
 
     [Fact]

@@ -217,7 +217,7 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 - When `AssumeSyncedWouldHelp`, `add-missing` and `replace-shared` are shown disabled with: "The shared copy may still be arriving: it lacks files a device shared. Wait for the sync tool, or confirm it has finished." and a checkbox "It has finished syncing", which re-plans with `AssumeSynced`.
 - `replace-shared` leads to the replace confirmation.
 
-**The replace confirmation.** Its own dialog, never combined with the choice: "Replace the shared saves for <role> on every device?" then: "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. The deletion reaches every device through the sync tool." Buttons: Cancel, **Replace on every device**. *As built (2026-11-23), asked for by the owner:* the dialog asks for the typed phrase "replace shared data", like every other deletion of saves, because the shared saves are deleted on every device; the button stays disabled until it matches. Restoring a backup of the shared copy asks for "restore shared data" the same way.
+**The replace confirmation.** *As built (2026-11-23), asked for by the owner:* it is the last dialog before the run, after the choice and the plan's confirmation ("Link <role> on this device to the shared folder?", with its steps), so every text-guarded action ends the same way. It asks for the typed phrase "replace shared data", like every other deletion of saves, because the shared saves are deleted on every device. Title: "Replace the shared saves for <role> on every device?" then: "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. The deletion reaches every device through the sync tool." Buttons: Cancel, **Replace on every device**, disabled until the phrase matches. The dialog is asked for any plan with a step that clears the shared folder (`ClearTarget`), so "Use this device's copy", which deletes nothing, has none. Restoring a backup of the shared copy asks for "restore shared data" the same way, after its "Restore the backup into ...?" confirmation, and only when the shared folder holds saves to be emptied.
 
 **Double seed.** "Use this device's copy" runs `PlanApply` with `replace-shared`. On a device where the folder is already the link (classification row 1) the confirmation instead says: "Make this device's copy the one every device keeps? No files change; the other devices' claims are marked as replaced." Where the sync tool kept the other device's files and this device's should win, the route is revert, restore and replace (5.3); the dialog says so and links to Backups.
 
@@ -287,7 +287,7 @@ After a revert, when the core says a Flatpak grant is no longer needed (`Sandbox
 
 - A list grouped by mapping: time, reason (`pre-apply` "before linking", `pre-revert` "before reverting", `pre-restore` "before restoring", `baseline` "first backup", `snapshot` "snapshot"), whether it is of this device's folder or of the shared copy, size and file count. A filter by app. "Open folder" opens the backup's data folder: a backup is a plain tree (5.12) and can always be copied back by hand.
 - **Restore**: `PlanRestore`. A refusal of kind `restore-destination-unusable` because the folder is a link: "<Role> is linked, so restoring would write into the shared copy. Revert first." with **Revert**. `backup-unusable`: "This backup is incomplete or damaged, so it cannot be restored." The first backup of a mapping is marked "Kept" (retention never removes it, 5.12).
-- A backup of the shared copy needs a confirmation like the replace confirmation: "Restore the shared saves for <role> on every device?"
+- A backup of the shared copy needs the typed confirmation of the replace confirmation, last before the run: "Restore the shared saves for <role> on every device?"
 
 *As built (2026-11-18).* `BackupsPage` (presentation project) groups and words the list; `BackupsScreen` (the app) shows it in place of the Apps page, opened by the page's **Backups** button or a row's More → **Backups**, which starts filtered to that row's app. The app filter is shown only when more than one app has backups. Restore runs through `ActionFlow.RestoreAsync`, an operation like Apply; the list is read again after it, since a restore takes a backup of what it replaces.
 
@@ -502,10 +502,9 @@ flowchart LR
   RUN -- "Check again" --> P
   GR -- "Give access" --> P
   NA -- "Check again" --> P
-  CD -- "replace" --> RC(["Replace confirmation<br/>Cancel focused"])
-  CD -- "other choice" --> CF
-  RC -- "Replace on every device" --> GO
+  CD -- "choice" --> CF
   CF -- "Apply" --> GO["Run: progress<br/>step by step"]
+  CF -- "Apply, replacing shared data" --> RC(["Type replace shared data<br/>the last dialog"]) --> GO
   GO --> RES{"Result"}
   RES -- "completed" --> OK(["Linked, backup ID"])
   RES -- "rolled back" --> RB(["Failed and undone,<br/>nothing changed"])
@@ -544,5 +543,6 @@ flowchart TD
   K -- "this device's folder" --> L{"Folder linked?"}
   L -- yes --> RF(["Revert first"]) --> A
   L -- no --> C2(["Confirm restore"]) --> R2["Run with progress"]
-  K -- "the shared copy" --> C3(["Restore on every device?<br/>type restore shared data"]) --> R2
+  K -- "the shared copy" --> C2
+  C2 -- "shared folder has saves" --> C3(["Type restore shared data<br/>the last dialog"]) --> R2
 ```

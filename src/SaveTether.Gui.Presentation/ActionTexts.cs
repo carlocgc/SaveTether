@@ -57,6 +57,23 @@ public static class ActionTexts
     /// <summary>Typed to confirm replacing the shared data, as for every other deletion of saves.</summary>
     public const string ReplacePhrase = "replace shared data";
 
+    /// <summary>The last dialog before a plan that empties the shared folder runs: what it says, its button, and the phrase to type.</summary>
+    public sealed record SharedDeletionGuardView(string Title, string Text, string Button, string Phrase);
+
+    /// <summary>The typed guard for a plan, or null when it does not delete what the shared folder holds (no ClearTarget step).</summary>
+    public static SharedDeletionGuardView? SharedDeletionGuard(Plan plan, string role)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (!plan.Steps.Any(s => s.Kind == StepKind.ClearTarget))
+        {
+            return null;
+        }
+
+        return plan.Operation == PlanOperation.Restore
+            ? new(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device", BackupsPage.RestoreSharedPhrase)
+            : new(ReplaceTitle(role), ReplaceText, "Replace on every device", ReplacePhrase);
+    }
+
     public static string FirstSeed(string role) =>
         $"If {role} was already set up on another device, cancel and wait until it has synced here. " +
         "Otherwise both devices will make their own data the shared copy.";

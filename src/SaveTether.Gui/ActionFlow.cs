@@ -101,11 +101,6 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                         continue;
 
                     case RefusalKind.ConfirmationNeeded:
-                        if (!await ConfirmReplaceAsync(role))
-                        {
-                            return;
-                        }
-
                         request = request with { ConfirmReplace = true };
                         continue;
                 }
@@ -142,13 +137,6 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         ArgumentNullException.ThrowIfNull(row);
         var mapping = new Subject(row.Info.MappingId, appName, roleName);
         var role = mapping.Name;
-        if (row.OfSharedCopy && await overlay.AskTextAsync(
-                BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device",
-                typed => MaintenancePage.TypedPhraseProblem(typed, BackupsPage.RestoreSharedPhrase), danger: true) is null)
-        {
-            return;
-        }
-
         var session = await BeginAsync("backup restore");
         if (session is null)
         {
@@ -172,12 +160,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 log.Write($"backup restore {row.Info.Id} refused: {refusal.Kind}: {refusal.Message.Text}");
                 if (refusal.Kind == RefusalKind.ConfirmationNeeded)
                 {
-                    if (await overlay.AskTextAsync(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device",
-                        typed => MaintenancePage.TypedPhraseProblem(typed, BackupsPage.RestoreSharedPhrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null)
-                    {
-                        return;
-                    }
-
+                    // The typed phrase comes last, after the plan (ConfirmAndRunAsync).
                     request = request with { ConfirmReplace = true };
                     continue;
                 }
@@ -767,13 +750,8 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             return null;
         }
 
-        // Replacing the shared saves has its own dialog, never combined with the choice.
-        return choice == SetupChoice.ReplaceShared && !await ConfirmReplaceAsync(role) ? null : choice;
+        return choice;
     }
-
-    private async Task<bool> ConfirmReplaceAsync(string role) =>
-        await overlay.AskTextAsync(ActionTexts.ReplaceTitle(role), ActionTexts.ReplaceText, "Replace on every device",
-            typed => MaintenancePage.TypedPhraseProblem(typed, ActionTexts.ReplacePhrase), danger: true, timeout: Overlay.OperationDialogTimeout) is not null;
 
     /// <summary>The plan's confirmation with its steps under "Show steps", then the run and its result. Null when cancelled.</summary>
     private async Task<ExecutionResult?> ConfirmAndRunAsync(OperationSession session, Plan plan, string role, string? lead = null)
@@ -793,6 +771,13 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             _ => "Apply",
         };
         if (!await overlay.ConfirmAsync(title, string.Join("\n\n", sentences), go, Overlay.OperationDialogTimeout, steps))
+        {
+            return null;
+        }
+
+        // A plan that deletes what the shared folder holds ends with the typed phrase, the last dialog before it runs.
+        if (ActionTexts.SharedDeletionGuard(plan, role) is { } guard
+            && await overlay.AskTextAsync(guard.Title, guard.Text, guard.Button, typed => MaintenancePage.TypedPhraseProblem(typed, guard.Phrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null)
         {
             return null;
         }
