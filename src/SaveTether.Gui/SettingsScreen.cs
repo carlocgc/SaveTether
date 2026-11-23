@@ -10,7 +10,7 @@ namespace SaveTether.Gui;
 
 /// <summary>
 /// The Settings page (desktop-app-spec.md, section 11), in place of the Apps page while open. Built so far:
-/// Start with the session, and About. The backup location and This device come later.
+/// Start with the session, Desktop notifications, and About. The backup location and This device come later.
 /// </summary>
 internal sealed class SettingsScreen : UserControl, IScreen
 {
@@ -65,6 +65,35 @@ internal sealed class SettingsScreen : UserControl, IScreen
         {
             page.Children.Add(Note("This desktop has no place for programs that start with the session."));
         }
+
+        page.Children.Add(Heading("Desktop notifications"));
+        var notifications = new NotificationSetting(localFolder);
+        var notify = new ToggleSwitch { IsChecked = notifications.IsOn, OnContent = "On", OffContent = "Off" };
+        AutomationProperties.SetName(notify, "Desktop notifications");
+        var reverting = false;
+        notify.IsCheckedChanged += async (_, _) =>
+        {
+            if (reverting)
+            {
+                return;
+            }
+
+            var on = notify.IsChecked == true;
+            if (notifications.Set(on) is { } problem)
+            {
+                App.Options.Log.Write(problem);
+                reverting = true;
+                notify.IsChecked = notifications.IsOn;
+                reverting = false;
+                await overlay.InformAsync("Nothing was changed", problem);
+                return;
+            }
+
+            App.Options.Log.Write($"desktop notifications: {(on ? "on" : "off")}");
+        };
+        page.Children.Add(notify);
+        page.Children.Add(Note(
+            "SaveTether tells you when a save folder needs attention. With this off, only the tray icon's colour shows it."));
 
         // Linux, in the installed copy only (section 11, "Installing"). On Windows, Settings > Apps uninstalls what the installer put there.
         if (InstallOffer.ForSystem(localFolder, AppContext.BaseDirectory, Program.Version) is { CanUninstall: true } installed)
