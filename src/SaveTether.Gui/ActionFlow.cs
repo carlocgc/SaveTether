@@ -142,8 +142,9 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         ArgumentNullException.ThrowIfNull(row);
         var mapping = new Subject(row.Info.MappingId, appName, roleName);
         var role = mapping.Name;
-        if (row.OfSharedCopy && !await overlay.ConfirmAsync(
-                BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device"))
+        if (row.OfSharedCopy && await overlay.AskTextAsync(
+                BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device",
+                typed => MaintenancePage.TypedPhraseProblem(typed, BackupsPage.RestoreSharedPhrase), danger: true) is null)
         {
             return;
         }
