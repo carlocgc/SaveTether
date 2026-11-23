@@ -63,7 +63,7 @@ Direction matters more than link type. **[V]** Syncthing never follows symlinks,
 | Mechanism | Privilege | Works for | Sync tool | App behaviour | Verdict |
 |---|---|---|---|---|---|
 | Symlink (Linux) | none | dirs and files, any filesystem | fine (data is real in the sync folder) | transparent. Wine and Proton resolve host symlinks below the prefix normally **[K]** | default on Linux |
-| Directory symlink (Windows) | admin, or Developer Mode | dirs and files | fine | transparent | avoid; junctions do the same job for directories |
+| Directory symlink (Windows) | admin, or Developer Mode | dirs and files | fine | transparent | avoid for local targets, where junctions do the same job; used for a network share, which a junction cannot reach (5.16) |
 | Junction (Windows) | none | directories on local volumes, cross-drive allowed, absolute target only | fine | transparent to almost everything | default on Windows |
 | Config redirect | none | apps with a save-path setting (RetroArch, Dolphin, PCSX2, DuckStation) | fine | the most robust: nothing to be replaced on disk | deferred on 2026-11-12 (5.13): links cover the same apps, and this means editing files the app owns |
 | Bind mount | root, and a persistent unit on SteamOS | anything | fine | transparent | rejected: needs root, fragile across SteamOS updates |
@@ -916,6 +916,8 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 
 ### 5.16 Sync folder on a network share (Windows)
 
+There is no section 5.15: phase 3.6 planned it for device removal, rename and maintenance, but it was never written (the design of those flows stands in `docs/plans/phase-3.6-device-maintenance.md`).
+
 Status: planned with the owner on 2026-11-23; built in phase 3.7 (`docs/plans/phase-3.7-network-share.md`, which holds the tasks and progress).
 
 **Why.** A junction cannot point at a network path, so a share was refused. A directory symlink can. On Windows it needs an elevated process or Developer Mode; .NET's `Directory.CreateSymbolicLink` passes `SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE`, so with Developer Mode on it needs no elevation. Only creating the link needs this (Apply, Add app, Recover). Using the link, Revert, backups, health checks, the tray and autostart need none.
@@ -940,7 +942,7 @@ Status: planned with the owner on 2026-11-23; built in phase 3.7 (`docs/plans/ph
 
 **The link.** On Windows `CreateDirectoryLink` makes a junction for a local target and a symlink for a network target, verified as a symlink with the same target; the link type is recorded as `symlink`. A device can hold both kinds.
 
-**Refusal text.** "Linking a network share needs permission Windows has not given SaveTether. Either turn on Developer Mode (Settings, System, For developers), then choose Check again; or run `savetether` from an administrator terminal for this one step."
+**Refusal text** (proposed wording; the final text is set in phase 3.7, T4). "Linking a network share needs permission Windows has not given SaveTether. Either turn on Developer Mode (Settings, System, For developers), then choose Check again; or run `savetether` from an administrator terminal for this one step."
 
 **Offline shares.** Probes time out (5 s by default). An offline share is the `SyncRootUnavailable` health state. Two devices on one share have no sync tool between them and write one live copy, so playing the same game on both at once can corrupt a save.
 
