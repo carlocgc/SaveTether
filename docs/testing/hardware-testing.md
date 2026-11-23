@@ -143,6 +143,9 @@ Set up a throwaway device with the CLI: `init --create-root`, `map add`, a save 
 - Replace the link with a real folder holding a file, and check (second copy, or Check now): amber, "1 app needs attention", and a notification.
 - Move the sync folder away and check: banner B3. Move it back.
 - Close the window: the app stays in the tray. `kill -9` it and start again: it starts, despite the stale lock and socket.
+- Settings, Desktop notifications off: close the window again from a fresh start; no notification. On again: it shows.
+
+On Windows, check first that notifications are on at all: `HKCU\Software\Microsoft\Windows\CurrentVersion\PushNotifications`, `ToastEnabled` 0 means every toast is dropped silently, and the PowerShell that sends them still exits 0 (found 2026-11-23: why none had ever been seen). The first close to the tray raises one, so it is the quickest check. Who sent it: the installed copy, started from its Start menu entry's program, sends as that entry and shows SaveTether's name and icon; any other copy (a build, an unpacked package) sends as `SaveTether`, registered under `HKCU\Software\Classes\AppUserModelId`, and shows the name without an icon. Windows 11 ignored an `IconUri` there (PNG or ICO, with or without `IconBackgroundColor`).
 
 ### First-run setup
 

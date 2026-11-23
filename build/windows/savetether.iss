@@ -242,5 +242,7 @@ begin
     if RegQueryStringValue(HKCU, RunKey, 'SaveTether', Started)
       and (Pos(Uppercase(ExpandConstant('{app}') + '\'), Uppercase(Started)) > 0) then
       RegDeleteValue(HKCU, RunKey, 'SaveTether');
+    { The app ID the app registers for its notifications' name and icon. }
+    RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\AppUserModelId\SaveTether');
   end;
 end;
