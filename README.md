@@ -53,7 +53,7 @@ flowchart LR
 - **Never picks a winner silently.** When a device and the synced folder both hold saves, it compares them game by game and asks which to keep.
 - **Survives interruption.** Operations are journalled; a crash part way is finished or undone with Recover.
 - **Keeps watch.** The app sits in the tray and turns amber when a link is replaced or broken, for example by an emulator update.
-- **Finds save folders for you:** 27 emulators and frontends built in, and thousands of PC games from the [Ludusavi manifest](https://github.com/mtkennerly/ludusavi-manifest), refreshed monthly. It looks inside Flatpak sandboxes, Wine and Proton prefixes, EmuDeck and SD cards. Any other folder can be added by path.
+- **Finds save folders for you:** popular emulators and frontends built in, and thousands of PC games from the [Ludusavi manifest](https://github.com/mtkennerly/ludusavi-manifest), refreshed monthly. It looks inside Flatpak sandboxes, Wine and Proton prefixes, EmuDeck and SD cards. Any other folder can be added by path.
 
 ## Limits
 
