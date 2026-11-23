@@ -195,7 +195,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     /// says where.
     /// </summary>
     public const string DeleteText =
-        "This deletion will sync to all devices. Before confirming, make sure all writes to this role's shared folder are complete " +
+        "Any other devices that use the sync folder will see this deletion. Before confirming, make sure all writes to this role's shared folder are complete " +
         "and the sync folder is up to date on every device that uses it.";
 
     public static string DeletedText(string role, bool hadBackup) =>
