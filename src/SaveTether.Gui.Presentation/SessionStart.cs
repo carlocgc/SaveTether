@@ -52,12 +52,21 @@ public sealed class SessionStart(IAutostartStore? store, string program)
     /// At each start: while the switch is on and the entry names another program, it is written again with this
     /// one (section 11, so a moved app keeps starting). Answers a line for the log when it did, or null.
     /// </summary>
-    public string? RefreshAtStart()
+    /// <param name="ownLocalFolder">
+    /// This copy uses a local folder of its own (SAVETETHER_HOME): the entry is left alone, since it starts the program with the
+    /// default one. A test copy took the owner's entry this way, and its uninstaller then deleted it (found on Windows).
+    /// </param>
+    public string? RefreshAtStart(bool ownLocalFolder = false)
     {
         var current = Autostart.Check(store).Program;
         if (current is null || string.Equals(current, program, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
         {
             return null;
+        }
+
+        if (ownLocalFolder)
+        {
+            return $"autostart entry left at {current}: this copy uses its own local folder";
         }
 
         return Set(on: true) is { } problem
