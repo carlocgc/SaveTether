@@ -24,6 +24,7 @@ public enum NetworkKind
 internal static unsafe partial class NetworkPaths
 {
     private const uint NoError = 0;
+    private const uint ConnectionUnavailable = 1201;
     private const int BufferChars = 1024;
     private const string SubstUncPrefix = @"\??\UNC\";
     private const string SubstPrefix = @"\??\";
@@ -40,7 +41,8 @@ internal static unsafe partial class NetworkPaths
 
         var buffer = stackalloc char[BufferChars];
         var length = (uint)BufferChars;
-        return WNetGetConnection(driveLetter, buffer, ref length) == NoError ? new string(buffer) : null;
+        // A remembered drive whose share is down answers ConnectionUnavailable and still names the share.
+        return WNetGetConnection(driveLetter, buffer, ref length) is NoError or ConnectionUnavailable ? new string(buffer) : null;
     }
 
     /// <summary>The <c>\\server\share</c> a <c>subst</c> letter ("Z:") stands for, or null when it is not a subst of a share.</summary>
