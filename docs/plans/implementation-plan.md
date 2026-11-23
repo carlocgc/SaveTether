@@ -543,9 +543,9 @@ Progress: not started.
 
 Planned 2026-11-23. Goal: a Windows device can use a network share as its sync folder, linked with symlinks where Windows allows one (Developer Mode or an elevated shell), with a terse "not recommended" warning where the user chooses it. SaveTether never elevates itself; no installer admin option.
 
-Everything else is in [phase-3.7-network-share.md](phase-3.7-network-share.md): decisions, design, tasks T1 to T8 with the model for each and a hardware check before each, and progress.
+Everything else is in [phase-3.7-network-share.md](phase-3.7-network-share.md): decisions, design, tasks T1 to T8 with the model for each and a hardware check before each, and progress. The design is section 5.16 of the design document.
 
-Progress: not started.
+Progress: T1 done (design 5.16 and the "no admin" lines); T2 next.
 
 ## 6. Phase 4: Decky plugin
 
