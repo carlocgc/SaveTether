@@ -340,6 +340,8 @@ The screen behind the **Maintenance** button (after Settings), and the dialogs i
 
 *As built (2026-11-18): Start with the session, banner B5, and About.* The core's `Startup.Autostart` writes, reads and removes the entry; `SessionStart` (presentation project) holds the switch, the rewrite at start and B5's sentence; `SettingsScreen` (the app) is the Settings page, opened by a **Settings** button beside Add app and Backups.
 
+*As built (2026-11-23): a copy with its own local folder leaves the entry alone.* The rewrite at start is skipped when `SAVETETHER_HOME` is set, and the log says "autostart entry left at <path>": the entry starts the program with the default local folder, so a copy with another one has no claim to it. Found on Windows: a test copy, installed into a scratch folder and run with a throwaway local folder, took the owner's entry, and its uninstaller then deleted it as pointing into its folder.
+
 Choices made while building:
 - **The Linux entry** is `savetether.desktop` in `$XDG_CONFIG_HOME/autostart` (`~/.config/autostart` when unset or not absolute), with `Exec="<path>" --minimized`. The path is always quoted and escaped as the Desktop Entry Specification says, so a path with spaces, quotes or `$` survives. It is written atomically and removed through `SafeFs.RemoveFile`, which removes a regular file and refuses a link, so something SaveTether did not write is never deleted through.
 - **The Windows entry** is the value `SaveTether` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, `"<path>" --minimized`. Tests use a key of their own, never the real Run key.

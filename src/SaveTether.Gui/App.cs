@@ -166,9 +166,9 @@ internal sealed class App : Application
         _started = true;
         _monitor = HealthMonitor.For(new LocalStore(Options.LocalFolder));
 
-        // While starting with the session is on, the entry follows the app if it moved (section 11).
+        // While starting with the session is on, the entry follows the app if it moved (section 11); not to a copy with its own local folder.
         Session = new SessionStart(Core.Startup.Autostart.ForSystem(), Environment.ProcessPath ?? string.Empty);
-        if (Session.RefreshAtStart() is { } refreshed)
+        if (Session.RefreshAtStart(ownLocalFolder: Environment.GetEnvironmentVariable(LocalStore.HomeVariable) is { Length: > 0 }) is { } refreshed)
         {
             Log.Write(refreshed);
         }
