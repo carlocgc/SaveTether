@@ -53,6 +53,13 @@ public class AppsPageTests
         Assert.Equal((RowAction?)RowAction.ChooseFolderAgain, For(HealthState.Replaced, HealthReason.FolderMissing).Main);
         var defined = Mapping("ppsspp.savedata", "PPSSPP", HealthState.Replaced, HealthReason.FolderMissing) with { HasDefinition = true };
         Assert.Equal((RowAction?)RowAction.FindAppAgain, AppsPage.Row(defined).Main);
+
+        // A definition's app not found where it looks (a portable copy on Linux, found on Mint) can still be given a folder by hand.
+        Assert.Equal([RowAction.Apply, RowAction.ChooseFolder], AppsPage.Row(defined).Others);
+        var notHere = Mapping("ppsspp.savedata", "PPSSPP", HealthState.NotApplied, HealthReason.NoSaveFolder) with { HasDefinition = true };
+        Assert.Equal((RowAction?)RowAction.AddHere, AppsPage.Row(notHere).Main);
+        Assert.Equal([RowAction.ChooseFolder], AppsPage.Row(notHere).Others);
+        Assert.Empty(For(HealthState.NotApplied, HealthReason.NoSaveFolder).Others);
         foreach (var action in Enum.GetValues<RowAction>())
         {
             Assert.False(string.IsNullOrWhiteSpace(AppsPage.Label(action)));
