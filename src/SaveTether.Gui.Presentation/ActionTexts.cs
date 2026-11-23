@@ -75,7 +75,7 @@ public static class ActionTexts
     }
 
     public static string FirstSeed(string role) =>
-        $"If {role} was already set up on another device, cancel and wait until it has synced here. " +
+        $"If {role} was already set up on another device, cancel and make sure no other device is still writing to the sync folder. " +
         "Otherwise both devices will make their own data the shared copy.";
 
     /// <summary>Section 9.2's precondition table: one sentence for each kind.</summary>

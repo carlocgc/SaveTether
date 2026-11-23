@@ -299,7 +299,7 @@ public class PlanRendererTests
         Assert.Contains($"1. Back up '{Snap.Source}' and verify the backup", text, StringComparison.Ordinal);
         Assert.Contains($"5. Link '{Snap.Source}' to '{Snap.Target}'", text, StringComparison.Ordinal);
         Assert.Contains("9. Delete", text, StringComparison.Ordinal);
-        Assert.Contains("wait until that has synced", text, StringComparison.Ordinal);
+        Assert.Contains("make sure no other device is still writing to the sync folder", text, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -227,7 +227,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         $"{string.Join("\n", roles)}\n\nNothing is shared for {(roles.Count == 1 ? "this" : "these")} yet. One answer applies to {(roles.Count == 1 ? "it" : "all of them")}:\n\n" +
         $"{FirstDeviceShare}: the data on this device becomes the shared copy in the sync folder.\n" +
         $"{FirstDeviceStartEmpty}: this device's data is kept in a backup only, and {(roles.Count == 1 ? "it" : "they")} will see no data until another device shares some.\n\n" +
-        "Each is backed up first. If any of these was already set up on another device, leave them and wait until it has synced here; " +
+        "Each is backed up first. If any of these was already set up on another device, leave them and make sure no other device is still writing to the sync folder; " +
         "otherwise both devices will make their own data the shared copy.";
 
     /// <summary>Apply all's summary (section 9.4).</summary>

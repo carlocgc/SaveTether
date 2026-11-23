@@ -917,7 +917,7 @@ internal static class CliApp
 
             if (made.NeedsFirstSeedConfirmation && CanAsk && !Confirm(
                 "No other device has set this mapping up, as far as this device can see. " +
-                "If you already set it up on another device, wait until that has synced.\nMake this device's saves the shared copy?"))
+                "If you already set it up on another device, make sure no other device is still writing to the sync folder.\nMake this device's saves the shared copy?"))
             {
                 return Ended(OperationOutcome.Cancelled, made);
             }

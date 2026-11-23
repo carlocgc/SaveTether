@@ -104,7 +104,7 @@ internal static class PlanRenderer
         {
             text.AppendLine(
                 "  Note: No other device has set this mapping up, as far as this device can see. " +
-                "If you already set it up elsewhere, wait until that has synced before continuing.");
+                "If you already set it up elsewhere, make sure no other device is still writing to the sync folder before continuing.");
         }
     }
 

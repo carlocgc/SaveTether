@@ -169,7 +169,7 @@ Plan section 5 lists the lock as its own item; this is the behaviour both front 
 
 **A plan.** A confirmation: "Link <role> on this device to the shared folder?" with the save folder and the shared folder in full (5.3 requires the plan to print both), "A backup is taken first" when the folder has data, and the steps under "Show steps". Buttons: Cancel (focused), Apply.
 
-When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role> was already set up on another device, cancel and wait until it has synced here. Otherwise both devices will make their own saves the shared copy." (5.3, the one race.)
+When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role> was already set up on another device, cancel and make sure no other device is still writing to the sync folder. Otherwise both devices will make their own saves the shared copy." (5.3, the one race.)
 
 **A refusal**, by `RefusalKind`:
 
