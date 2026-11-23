@@ -20,7 +20,7 @@ public enum SyncFolderFinding
     /// <summary>The path is empty or not absolute.</summary>
     NotAPath,
 
-    /// <summary>On Windows, the folder is on a network drive, where no link SaveTether makes can point.</summary>
+    /// <summary>On Windows, a network share this device cannot link to: Developer Mode is off, or policy stops it. Check again after fixing.</summary>
     NetworkDrive,
 
     /// <summary>Nothing is there. On a drive or share that is not connected, say.</summary>
@@ -34,7 +34,7 @@ public enum SyncFolderFinding
 }
 
 /// <summary>Step 1's result, with the sentence the page shows.</summary>
-public sealed record SyncFolderCheck(SyncFolderFinding Finding, string Path, IReadOnlyList<string> Devices, string Sentence)
+public sealed record SyncFolderCheck(SyncFolderFinding Finding, string Path, IReadOnlyList<string> Devices, string Sentence, string? Warning = null)
 {
     /// <summary>True when Next may go on without more from the owner.</summary>
     public bool CanContinue => Finding == SyncFolderFinding.AlreadySetUp;
@@ -66,11 +66,11 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
 {
     public const string NameRule = "Lowercase letters, digits, '-' and '_', starting with a letter or digit; up to 40 characters.";
 
-    /// <summary>Step 1's sentence. Windows leaves out a network share, which setup refuses there: junctions only point to local drives (docs/sharing.md).</summary>
-    public static string SyncFolderIntro { get; } =
+    /// <summary>Step 1's sentence. A network share is allowed but not recommended (design 5.16, D8).</summary>
+    public const string SyncFolderIntro =
         "Where SaveTether keeps the folders it manages, each with a link left in its place. " +
         "To share them between devices, choose a folder a sync tool keeps the same on each: " +
-        (OperatingSystem.IsWindows() ? "Syncthing, OneDrive or Nextcloud." : "Syncthing, OneDrive, Nextcloud or a network share.");
+        "Syncthing, OneDrive, Nextcloud or a network share.";
 
     public const string FirstDeviceWarning =
         "Only on the first device. If SaveTether is set up on another device, wait for its folder to arrive here instead; " +
@@ -116,11 +116,26 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
 
         path = PathRules.Normalize(Path.GetFullPath(path));
 
-        // Before looking at the folder: on Windows nothing could be linked into a share, and probing one that is
-        // not there can stall. The core's init refuses it too; saying so here keeps it at step 1.
+        // A share (Windows only; a mount on Linux is not detected) is stored as UNC (D4) and checked first: one that
+        // is not there can stall, and linking to it needs a symlink (design 5.16). It is allowed, with the D8 warning.
+        var shareNote = string.Empty;
+        string? warning = null;
         if (PathRules.IsOnNetworkDrive(path))
         {
-            return _syncFolder = new SyncFolderCheck(SyncFolderFinding.NetworkDrive, path, [], Workspace.NetworkSyncRootMessage(path));
+            var typedPath = path;
+            path = PathRules.ToUncIfMapped(path);
+            try
+            {
+                Workspace.RequireLinkableShare(path);
+            }
+            catch (StoreException e)
+            {
+                var finding = e.Problem == StoreProblem.NotFound ? SyncFolderFinding.Missing : SyncFolderFinding.NetworkDrive;
+                return _syncFolder = new SyncFolderCheck(finding, path, [], e.Message);
+            }
+
+            shareNote = path == typedPath ? string.Empty : $"Using {Path.GetPathRoot(path)} (the drive {typedPath[..2]} points to). ";
+            warning = Workspace.NetworkShareWarning;
         }
 
         if (SharedStore.ReadProblem(path) is { } problem)
@@ -138,12 +153,12 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
         var shared = new SharedStore(path);
         if (!shared.IsInitialized)
         {
-            return _syncFolder = new SyncFolderCheck(SyncFolderFinding.NotSetUp, path, [], "This sync folder is not set up for SaveTether yet.");
+            return _syncFolder = new SyncFolderCheck(SyncFolderFinding.NotSetUp, path, [], shareNote + "This sync folder is not set up for SaveTether yet.", warning);
         }
 
         var devices = Workspace.ExistingDevices(path);
         var on = devices.Count == 0 ? "no device yet" : string.Join(", ", devices);
-        return _syncFolder = new SyncFolderCheck(SyncFolderFinding.AlreadySetUp, path, devices, $"This sync folder is already set up for SaveTether, on: {on}.");
+        return _syncFolder = new SyncFolderCheck(SyncFolderFinding.AlreadySetUp, path, devices, shareNote + $"This sync folder is already set up for SaveTether, on: {on}.", warning);
     }
 
     /// <summary>Step 1, after the "first device" confirmation.</summary>

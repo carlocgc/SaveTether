@@ -389,6 +389,10 @@ public static class ActionTexts
             actions.Add(RefusalAction.CheckAgain);
             actions.Add(RefusalAction.AssumeClosed);
         }
+        else if (kinds.Contains(PrecheckKind.SymlinkNotAllowed))
+        {
+            actions.Add(RefusalAction.CheckAgain);
+        }
 
         if (refusal.Failures.Any(f => f.Kind == PrecheckKind.RestoreDestinationUnusable && f.Message.Next.Any(n => n.Kind == NextStepKind.Revert)))
         {

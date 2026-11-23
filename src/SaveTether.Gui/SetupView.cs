@@ -46,13 +46,20 @@ internal sealed class SetupView : UserControl
         _stepLabel.Text = "Step 1 of 3: the sync folder";
         var path = PathField(_flow.SyncFolder?.Path ?? string.Empty, "Sync folder");
         var finding = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        var warning = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Icons.Amber) };
         var firstDevice = new Button { Content = "This is my first device", IsVisible = false };
         var next = new Button { Content = "Next", IsDefault = true };
 
-        void Check()
+        async void Check()
         {
-            var check = _flow.CheckSyncFolder(path.Field.Text ?? string.Empty);
+            // A share is asked with a time limit (up to 5 s): off the UI thread, as step 3's Set up is.
+            next.IsEnabled = false;
+            var typed = path.Field.Text ?? string.Empty;
+            var check = await Task.Run(() => _flow.CheckSyncFolder(typed));
+            next.IsEnabled = true;
             finding.Text = check.Sentence;
+            warning.Text = check.Warning ?? string.Empty;
+            next.Content = check.Finding == SyncFolderFinding.NetworkDrive ? "Check again" : "Next";
             firstDevice.IsVisible = check.OffersFirstDevice;
             if (check.CanContinue)
             {
@@ -75,6 +82,7 @@ internal sealed class SetupView : UserControl
             error,
             path.Row,
             finding,
+            warning,
             Buttons(firstDevice, next));
         path.Field.Focus();
     }

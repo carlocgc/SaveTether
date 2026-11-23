@@ -931,7 +931,7 @@ Status: planned with the owner on 2026-11-23; built in phase 3.7 (`docs/plans/ph
 - **D5** Only the sync folder may be a share. A save folder or backup location on a network drive stays refused.
 - **D6** No copy fallback. If the link cannot be made, nothing is linked.
 - **D7** The elevated helper is deferred (phase 3.7, T8). An always-elevated app is rejected: UAC on every launch, the `Run` key skips elevated programs, no drag and drop from Explorer, mapped drives invisible to the elevated process.
-- **D8** A share is allowed but not recommended, and the user is warned where they choose it (setup step 1, `init`), on Windows and Linux alike. It does not block. Text: "Not recommended: if the share is disconnected, games and emulators that save here can fail or misbehave. A folder on this device, kept in step by a sync tool, is safer." It shows once more on the first Apply to a share.
+- **D8** A share is allowed but not recommended, and the user is warned where they choose it (setup step 1, `init`), on Windows and Linux alike. It does not block. Text: "Not recommended: if the share is disconnected, applications that write data here can fail or misbehave. A folder on this device, kept in step by a sync tool, is safer." It shows once more on the first Apply to a share.
 
 **Capability order,** wherever a share is chosen or linked:
 
