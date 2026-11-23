@@ -54,6 +54,9 @@ public static class ActionTexts
         "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's data. " +
         "The deletion reaches every device through the sync tool.";
 
+    /// <summary>Typed to confirm replacing the shared data, as for every other deletion of saves.</summary>
+    public const string ReplacePhrase = "replace shared data";
+
     public static string FirstSeed(string role) =>
         $"If {role} was already set up on another device, cancel and wait until it has synced here. " +
         "Otherwise both devices will make their own data the shared copy.";

@@ -150,6 +150,9 @@ public static class BackupsPage
         "What is in the shared folder now is backed up on this device first. Then it is emptied and filled from this backup. " +
         "The change reaches every device through the sync tool.";
 
+    /// <summary>Typed to confirm restoring the shared copy, as for every other deletion of saves.</summary>
+    public const string RestoreSharedPhrase = "restore shared data";
+
     /// <summary>
     /// A local restore's confirmation sentence, above the plan's. The plan's own sentences say a backup is
     /// taken first, so this does not (it said it twice on the Deck).

@@ -222,6 +222,7 @@ The Deck, the app driven with `xdotool`, two homes on one scratch sync folder (a
 6. **Remove this device:** page 1, page 2, the typed name, the result listing the folders. OK lands on setup with no restart, and the folders are real folders.
 7. **Banners:** from the CLI, remove a from b (`device remove --other a`). On a, the "removed by b" page replaces the Apps page; Set up again lands on setup. For "Removal not finished", copy `bootstrap.json` aside, run the removal, put it back.
 8. **Captures:** each page and dialog at the default window size, and a text dialog with the on-screen keyboard open (Steam+X). On Mint the same screens, clicks only.
+9. **Typed guards on shared saves:** apply a mapping whose folder and shared folder both hold saves and choose "Replace the shared data with this device's": the button stays disabled until `replace shared data` is typed (any case). Restoring a backup of the shared copy asks for `restore shared data` the same way. Cancel leaves the shared folder untouched.
 
 ### Start with the session
 

@@ -68,6 +68,16 @@ public class MaintenancePageTests
     }
 
     [Fact]
+    public void Replacing_shared_data_needs_its_typed_phrase()
+    {
+        Assert.Null(MaintenancePage.TypedPhraseProblem(" Replace Shared Data ", ActionTexts.ReplacePhrase));
+        Assert.NotNull(MaintenancePage.TypedPhraseProblem("replace", ActionTexts.ReplacePhrase));
+        Assert.NotNull(MaintenancePage.TypedPhraseProblem("", ActionTexts.ReplacePhrase));
+        Assert.Null(MaintenancePage.TypedPhraseProblem("Restore shared data", BackupsPage.RestoreSharedPhrase));
+        Assert.NotNull(MaintenancePage.TypedPhraseProblem(ActionTexts.ReplacePhrase, BackupsPage.RestoreSharedPhrase));
+    }
+
+    [Fact]
     public void Device_name_refuses_invalid_and_taken_names()
     {
         Assert.Null(MaintenancePage.DeviceNameProblem(" deck2 ", ["pc"]));

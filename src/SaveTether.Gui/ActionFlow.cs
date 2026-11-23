@@ -171,7 +171,8 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 log.Write($"backup restore {row.Info.Id} refused: {refusal.Kind}: {refusal.Message.Text}");
                 if (refusal.Kind == RefusalKind.ConfirmationNeeded)
                 {
-                    if (!await overlay.ConfirmAsync(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device", Overlay.OperationDialogTimeout))
+                    if (await overlay.AskTextAsync(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device",
+                        typed => MaintenancePage.TypedPhraseProblem(typed, BackupsPage.RestoreSharedPhrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null)
                     {
                         return;
                     }
@@ -769,8 +770,9 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         return choice == SetupChoice.ReplaceShared && !await ConfirmReplaceAsync(role) ? null : choice;
     }
 
-    private Task<bool> ConfirmReplaceAsync(string role) =>
-        overlay.ConfirmAsync(ActionTexts.ReplaceTitle(role), ActionTexts.ReplaceText, "Replace on every device", Overlay.OperationDialogTimeout);
+    private async Task<bool> ConfirmReplaceAsync(string role) =>
+        await overlay.AskTextAsync(ActionTexts.ReplaceTitle(role), ActionTexts.ReplaceText, "Replace on every device",
+            typed => MaintenancePage.TypedPhraseProblem(typed, ActionTexts.ReplacePhrase), danger: true, timeout: Overlay.OperationDialogTimeout) is not null;
 
     /// <summary>The plan's confirmation with its steps under "Show steps", then the run and its result. Null when cancelled.</summary>
     private async Task<ExecutionResult?> ConfirmAndRunAsync(OperationSession session, Plan plan, string role, string? lead = null)

@@ -217,7 +217,7 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 - When `AssumeSyncedWouldHelp`, `add-missing` and `replace-shared` are shown disabled with: "The shared copy may still be arriving: it lacks files a device shared. Wait for the sync tool, or confirm it has finished." and a checkbox "It has finished syncing", which re-plans with `AssumeSynced`.
 - `replace-shared` leads to the replace confirmation.
 
-**The replace confirmation.** Its own dialog, never combined with the choice: "Replace the shared saves for <role> on every device?" then: "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. The deletion reaches every device through the sync tool." Buttons: Cancel (focused), **Replace on every device**. Nothing is typed (decision 7), although the CLI asks for a typed "yes": the separate dialog with Cancel focused already makes it deliberate, and on the Deck's Desktop Mode typing usually means the on-screen keyboard.
+**The replace confirmation.** Its own dialog, never combined with the choice: "Replace the shared saves for <role> on every device?" then: "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. The deletion reaches every device through the sync tool." Buttons: Cancel, **Replace on every device**. *As built (2026-11-23), asked for by the owner:* the dialog asks for the typed phrase "replace shared data", like every other deletion of saves, because the shared saves are deleted on every device; the button stays disabled until it matches. Restoring a backup of the shared copy asks for "restore shared data" the same way.
 
 **Double seed.** "Use this device's copy" runs `PlanApply` with `replace-shared`. On a device where the folder is already the link (classification row 1) the confirmation instead says: "Make this device's copy the one every device keeps? No files change; the other devices' claims are marked as replaced." Where the sync tool kept the other device's files and this device's should win, the route is revert, restore and replace (5.3); the dialog says so and links to Backups.
 
@@ -544,5 +544,5 @@ flowchart TD
   K -- "this device's folder" --> L{"Folder linked?"}
   L -- yes --> RF(["Revert first"]) --> A
   L -- no --> C2(["Confirm restore"]) --> R2["Run with progress"]
-  K -- "the shared copy" --> C3(["Restore on every device?<br/>Cancel focused"]) --> R2
+  K -- "the shared copy" --> C3(["Restore on every device?<br/>type restore shared data"]) --> R2
 ```
