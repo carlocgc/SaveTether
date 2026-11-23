@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# Fake input through XTEST, for the Mint box (no xdotool): python3 xinput.py click <screen x> <screen y> | key <keysym> | chord <modifier keysym> <keysym> (e.g. chord Control_L q). Needs DISPLAY and XAUTHORITY as in "Running the app".
+# Fake input through XTEST, for the Mint box (no xdotool): python3 xinput.py click <screen x> <screen y> | key <keysym> | chord <modifier keysym> <keysym> (e.g. chord Control_L q)
+# | type <text> (a path or name, on a US layout: letters, digits, space and / . - _). Needs DISPLAY and XAUTHORITY as in "Running the app".
 import ctypes, sys, time
 x11 = ctypes.CDLL("libX11.so.6"); xt = ctypes.CDLL("libXtst.so.6")
 x11.XOpenDisplay.restype = ctypes.c_void_p
@@ -15,7 +16,20 @@ def click(x, y):
 def key(name):
     kc = x11.XKeysymToKeycode(d, x11.XStringToKeysym(name.encode()))
     xt.XTestFakeKeyEvent(d, kc, 1, 0); xt.XTestFakeKeyEvent(d, kc, 0, 0); x11.XFlush(d)
+def press(keysym, shift):
+    kc = x11.XKeysymToKeycode(d, x11.XStringToKeysym(keysym.encode()))
+    if kc == 0: sys.exit(f"xinput.py cannot type {keysym!r}")
+    sh =x11.XKeysymToKeycode(d, x11.XStringToKeysym(b"Shift_L"))
+    if shift: xt.XTestFakeKeyEvent(d, sh, 1, 0)
+    xt.XTestFakeKeyEvent(d, kc, 1, 0); xt.XTestFakeKeyEvent(d, kc, 0, 0)
+    if shift: xt.XTestFakeKeyEvent(d, sh, 0, 0)
+    x11.XFlush(d); time.sleep(.03)
+def type_text(text):
+    names = {"/": "slash", ".": "period", "-": "minus", " ": "space", "_": "minus"}
+    for ch in text:
+        press(names.get(ch, ch.lower()), ch.isupper() or ch == "_")
 cmd = sys.argv[1]
+if cmd == "type": type_text(sys.argv[2])
 if cmd == "click": click(int(sys.argv[2]), int(sys.argv[3]))
 elif cmd == "key": key(sys.argv[2])
 if cmd == "chord":
