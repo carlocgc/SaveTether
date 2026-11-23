@@ -92,15 +92,14 @@ public class MaintenancePageTests
     }
 
     [Fact]
-    public void Replacing_after_the_arriving_override_needs_the_stronger_phrase_and_says_why()
+    public void Replacing_after_the_arriving_override_says_what_has_no_backup()
     {
         var plan = new Plan("g.saves", Classification.Guard, SetupChoice.ReplaceShared, "s", "t",
             [new PlanStep(StepKind.ClearTarget, "t")], [], false);
 
         var guard = ActionTexts.SharedDeletionGuard(plan, "game", assumedSynced: true)!;
-        Assert.Equal(ActionTexts.ReplaceAnywayPhrase, guard.Phrase);
+        Assert.Equal(ActionTexts.ReplacePhrase, guard.Phrase);
         Assert.Contains(ActionTexts.ReplaceAnywayText, guard.Text, StringComparison.Ordinal);
-        Assert.NotEqual(ActionTexts.ReplacePhrase, guard.Phrase);
     }
 
     [Fact]

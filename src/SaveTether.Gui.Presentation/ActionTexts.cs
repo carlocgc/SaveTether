@@ -58,11 +58,9 @@ public static class ActionTexts
     public const string ReplacePhrase = "replace shared data";
 
     /// <summary>
-    /// Typed instead of <see cref="ReplacePhrase"/> when the owner overrode "the shared copy may still be arriving": files another
+    /// Added to the replace dialog when the owner overrode "the shared copy may still be arriving": files another
     /// device shared are not here, so this device has no backup of them and the replacement can remove them elsewhere.
     /// </summary>
-    public const string ReplaceAnywayPhrase = "replace shared data anyway";
-
     public const string ReplaceAnywayText =
         "Files another device shared have not reached this device, so they are not in this device's backup. " +
         "Replacing the shared copy can remove them from the other device, and this device has no backup of them.";
@@ -82,7 +80,7 @@ public static class ActionTexts
         return plan.Operation == PlanOperation.Restore
             ? new(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore to the sync folder", BackupsPage.RestoreSharedPhrase)
             : assumedSynced
-                ? new(ReplaceTitle(role), $"{ReplaceText}\n\n{ReplaceAnywayText}", "Replace in the sync folder", ReplaceAnywayPhrase)
+                ? new(ReplaceTitle(role), $"{ReplaceText}\n\n{ReplaceAnywayText}", "Replace in the sync folder", ReplacePhrase)
                 : new(ReplaceTitle(role), ReplaceText, "Replace in the sync folder", ReplacePhrase);
     }
 
