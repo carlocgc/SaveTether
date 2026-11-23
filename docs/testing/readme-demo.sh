@@ -1,28 +1,38 @@
 #!/bin/bash
-# The README's Apps page demo, on the Deck, all under ~/sttest/demo: device "deck" with Dolphin (gc, wii) and
-# PPSSPP (savedata, states) linked, Eden (saves) ready to link, and a Cemu mapping only device "pc" has.
+# The README's Apps page demo, on the Deck. Usage: readme-demo.sh <unpacked Linux package folder>
+# Runs in a private mount namespace where folders under ~/sttest/demo hide ~/Sync, ~/.var and
+# ~/.local/share/savetether, so the app shows the real paths while the real ones are never touched.
+# Device "deck": Dolphin (GC, Wii) and PCSX2 memory cards linked, PCSX2 save states ready to link; a Cemu
+# mapping only device "pc" has. Then starts the app in the same namespace.
 set -e
 D=$HOME/sttest/demo
-export SAVETETHER_HOME=$D/home
-case "$SAVETETHER_HOME" in "$HOME"/sttest/*) ;; *) echo "not scratch"; exit 1;; esac
-ST=$D/savetether-0.2.0-linux-x64/savetether
-mkdir -p $D/Sync $D/userhome
-for f in dolphin/gc dolphin/wii eden/saves ppsspp/savedata ppsspp/states; do mkdir -p $D/apps/$f; echo save > $D/apps/$f/slot1.sav; done
-$ST init --sync-root $D/Sync --device deck --create-root >/dev/null
-defs=$D/Sync/savetether/.savetether/definitions; mkdir -p $defs
-def() { # id name role...
-  local id=$1 name=$2; shift 2; local roles=""
-  for r in "$@"; do roles="$roles${roles:+,}{\"id\":\"$r\",\"class\":\"save\",\"default\":true,\"path\":\"$r\",\"target\":\"$r\"}"; done
-  printf '{"schema":1,"id":"%s","name":"%s","kind":"emulator","installs":[{"id":"demo","os":"linux","detect":{"dir":"{home}/sttest/demo/apps/%s"},"base":"{home}/sttest/demo/apps/%s"}],"roles":[%s]}\n' "$id" "$name" "$id" "$id" "$roles" > $defs/$id.jsonc
-}
-def dolphin Dolphin gc wii; def eden Eden saves; def ppsspp PPSSPP savedata states
-for m in dolphin.gc dolphin.wii eden.saves ppsspp.savedata ppsspp.states; do
-  app=${m%%.*}; role=${m#*.}
-  $ST map add $m --target $app/$role --source $D/apps/$app/$role >/dev/null
+if [ -z "$DEMO_NS" ]; then
+  [ -x "$1/savetether-gui" ] || { echo "usage: $0 <unpacked package folder>"; exit 1; }
+  mkdir -p $D/Sync $D/var $D/local
+  # Root in an outer user namespace to bind-mount, then back to this user's id in an inner one.
+  exec env DEMO_NS=1 unshare -U -r -m sh -c '
+    mount --bind "$1/Sync" "$HOME/Sync" && mount --bind "$1/var" "$HOME/.var" &&
+    mount --bind "$1/local" "$HOME/.local/share/savetether" &&
+    exec unshare -U --map-user="$2" --map-group="$3" "$4" "$5"' sh "$D" "$(id -u)" "$(id -g)" "$(realpath "$0")" "$(realpath "$1")"
+fi
+for p in Sync:Sync .var:var .local/share/savetether:local; do # refuse unless each bind is in place
+  [ "$(stat -c %d:%i "$HOME/${p%%:*}")" = "$(stat -c %d:%i "$D/${p#*:}")" ] || { echo "not scratch: ~/${p%%:*}"; exit 1; }
 done
-for m in dolphin.gc dolphin.wii ppsspp.savedata ppsspp.states; do $ST apply $m --copy --assume-closed >/dev/null; done
+ST=$1/savetether
+V=$HOME/.var/app
+map() { # mapping, source folder; linked unless a third argument is given
+  mkdir -p "$2"; echo save > "$2/slot1.sav"
+  $ST map add $1 --target ${1%%.*}/${1#*.} --source "$2" >/dev/null
+  [ -n "$3" ] || $ST apply $1 --copy --assume-closed >/dev/null
+}
+$ST init --sync-root $HOME/Sync --device deck --create-root >/dev/null
+map dolphin.gc $V/org.DolphinEmu.dolphin-emu/data/dolphin-emu/GC
+map dolphin.wii $V/org.DolphinEmu.dolphin-emu/data/dolphin-emu/Wii
+map pcsx2.memcards $V/net.pcsx2.PCSX2/config/PCSX2/memcards
+map pcsx2.sstates $V/net.pcsx2.PCSX2/config/PCSX2/sstates unlinked
 # Another device, with a mapping this one does not have.
 mkdir -p $D/pc-local $D/pc-cemu
-SAVETETHER_HOME=$D/pc-local $ST init --sync-root $D/Sync --device pc >/dev/null
+SAVETETHER_HOME=$D/pc-local $ST init --sync-root $HOME/Sync --device pc >/dev/null
 SAVETETHER_HOME=$D/pc-local $ST map add cemu.save --target cemu/save --source $D/pc-cemu >/dev/null
 $ST status
+exec "$1/savetether-gui"
