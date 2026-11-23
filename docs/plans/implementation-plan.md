@@ -539,6 +539,14 @@ Exit test: on a throwaway folder shared by the Deck and the Windows PC, rename t
 
 Progress: not started.
 
+## 5c. Phase 3.7: sync folder on a network share (Windows)
+
+Planned 2026-11-23. Goal: a Windows device can use a network share as its sync folder, linked with symlinks where Windows allows one (Developer Mode or an elevated shell), with a terse "not recommended" warning where the user chooses it. SaveTether never elevates itself; no installer admin option.
+
+Everything else is in [phase-3.7-network-share.md](phase-3.7-network-share.md): decisions, design, tasks T1 to T8 with the model for each and a hardware check before each, and progress.
+
+Progress: not started.
+
 ## 6. Phase 4: Decky plugin
 
 Goal, revised 2026-11-17: status in Game Mode, with only the actions that need no input (design 5.11). Starts with a short design step against the then-current Decky API.
