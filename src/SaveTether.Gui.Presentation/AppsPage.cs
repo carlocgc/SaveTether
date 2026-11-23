@@ -51,6 +51,12 @@ public enum RowAction
     /// <summary>Not on this device: Add app's page 2 for this app (section 5.1), or the hand form when the app has no definition.</summary>
     AddHere,
 
+    /// <summary>
+    /// A definition's app not found where it looks (a portable copy, say, which no Linux install asks for): the hand form for this
+    /// mapping, to give its folder on this device directly. Under More, beside Add and Find the app again.
+    /// </summary>
+    ChooseFolder,
+
     /// <summary>The Backups page, filtered to this row's app (section 9.7).</summary>
     Backups,
 }
@@ -111,14 +117,15 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
                 new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert }),
             (HealthState.NotApplied, HealthReason.NoSaveFolder) => (
                 SetUpOnSentence(mapping.SetUpOn),
-                RowAction.AddHere, []),
+                RowAction.AddHere, mapping.HasDefinition ? new[] { RowAction.ChooseFolder } : []),
             (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => (
                 $"This device's file has '{mapping.Health.Source}' as the folder.", null, new[] { RowAction.Details }),
             (HealthState.NotApplied, _) => ("Original", RowAction.Apply, new[] { RowAction.OpenFolder, RowAction.Remove }),
             (HealthState.Replaced, HealthReason.FolderEmpty) => ("The link is gone and the folder is empty.", RowAction.Apply, new[] { RowAction.OpenFolder }),
             (HealthState.Replaced, HealthReason.FolderMissing) => (
                 $"Nothing is at {source}. If the app has moved, find it again.",
-                mapping.HasDefinition ? RowAction.FindAppAgain : RowAction.ChooseFolderAgain, new[] { RowAction.Apply }),
+                mapping.HasDefinition ? RowAction.FindAppAgain : RowAction.ChooseFolderAgain,
+                mapping.HasDefinition ? new[] { RowAction.Apply, RowAction.ChooseFolder } : new[] { RowAction.Apply }),
             (HealthState.Replaced, HealthReason.NotAFolder) => (
                 $"Something other than a folder is at {source}. Move it away by hand, then apply.", RowAction.OpenFolderParent, new[] { RowAction.Details }),
             (HealthState.Replaced, _) => (
@@ -182,6 +189,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         RowAction.FindAppAgain => "Find the app again",
         RowAction.ChooseFolderAgain => "Choose the folder again",
         RowAction.AddHere => "Add",
+        RowAction.ChooseFolder => "Choose the folder myself",
         RowAction.Backups => "Backups",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no label."),
     };

@@ -465,7 +465,7 @@ internal sealed class MainWindow : Window
     /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
         actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.Remove or RowAction.Delete
-            or RowAction.FindAppAgain or RowAction.ChooseFolderAgain or RowAction.AddHere);
+            or RowAction.FindAppAgain or RowAction.ChooseFolderAgain or RowAction.AddHere or RowAction.ChooseFolder);
 
     /// <summary>Banner B5's Fix it (write the entry with this app's path) or Turn it off (remove it); then a check redraws.</summary>
     private void SetSessionStart(bool on)
@@ -531,8 +531,8 @@ internal sealed class MainWindow : Window
             case RowAction.FindAppAgain or RowAction.AddHere when mapping.HasDefinition:
                 OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.App(mapping.AppId), _scans));
                 break;
-            case RowAction.ChooseFolderAgain or RowAction.AddHere:
-                // A folder added by hand: the hand form for this mapping (section 8).
+            case RowAction.ChooseFolderAgain or RowAction.AddHere or RowAction.ChooseFolder:
+                // A folder added by hand, or a definition's app the owner locates: the hand form for this mapping (section 8).
                 OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Folder(mapping.MappingId), _scans));
                 break;
             case RowAction.Backups:
