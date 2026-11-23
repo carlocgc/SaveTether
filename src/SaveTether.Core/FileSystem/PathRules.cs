@@ -44,6 +44,11 @@ public static class PathRules
             return true;
         }
 
+        if (NetworkKind(local) != FileSystem.NetworkKind.None)
+        {
+            return true;
+        }
+
         try
         {
             return Path.GetPathRoot(local) is { Length: > 0 } root && new DriveInfo(root).DriveType == DriveType.Network;
@@ -53,6 +58,15 @@ public static class PathRules
             return false;
         }
     }
+
+    /// <summary>The kind of network location <paramref name="path"/> is on; <see cref="FileSystem.NetworkKind.None"/> off Windows. Reads no share.</summary>
+    public static FileSystem.NetworkKind NetworkKind(string path) => NetworkPaths.Kind(path, NetworkPaths.MappedShare, NetworkPaths.SubstShare);
+
+    /// <summary>
+    /// A mapped or <c>subst</c> drive letter replaced by the share it points to (<c>Z:\x</c> becomes
+    /// <c>\\server\share\x</c>); any other path comes back unchanged.
+    /// </summary>
+    public static string ToUncIfMapped(string path) => NetworkPaths.ToUncIfMapped(path, NetworkPaths.MappedShare, NetworkPaths.SubstShare);
 
     /// <summary>
     /// True when <paramref name="path"/> is absolute on Windows or on Linux, whichever this machine is. For a
