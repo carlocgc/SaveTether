@@ -70,8 +70,8 @@ public static class ActionTexts
         }
 
         return plan.Operation == PlanOperation.Restore
-            ? new(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore on every device", BackupsPage.RestoreSharedPhrase)
-            : new(ReplaceTitle(role), ReplaceText, "Replace on every device", ReplacePhrase);
+            ? new(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore to the sync folder", BackupsPage.RestoreSharedPhrase)
+            : new(ReplaceTitle(role), ReplaceText, "Replace in the sync folder", ReplacePhrase);
     }
 
     public static string FirstSeed(string role) =>
