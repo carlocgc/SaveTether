@@ -128,7 +128,7 @@ public class AppsPageTests
             }
         }
 
-        Assert.StartsWith("1 linked. 1 not linked, each needs a choice or a fix first: PPSSPP savedata.", AppsPage.ApplyAllSummary(1, ["PPSSPP savedata"]), StringComparison.Ordinal);
+        Assert.StartsWith("1 linked. Not linked, each needs a choice or a fix first: PPSSPP savedata.", AppsPage.ApplyAllSummary(1, ["PPSSPP savedata"]), StringComparison.Ordinal);
         Assert.Equal("2 linked.", AppsPage.ApplyAllSummary(2, []));
         sandbox.AssertCanaryIntact();
     }
@@ -221,11 +221,13 @@ public class AppsPageTests
     [Fact]
     public void The_first_device_question_names_every_mapping_and_both_answers()
     {
-        var text = AppsPage.FirstDeviceText(["Eden saves", "Cemu saves"]);
+        var text = AppsPage.FirstDeviceText(["Eden saves", "Cemu saves"], others: false);
 
         Assert.Contains("Eden saves\nCemu saves", text, StringComparison.Ordinal);
         Assert.Contains(AppsPage.FirstDeviceShare, text, StringComparison.Ordinal);
         Assert.Contains(AppsPage.FirstDeviceStartEmpty, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("another device", text, StringComparison.Ordinal);
+        Assert.Contains("another device", AppsPage.FirstDeviceText(["Eden saves"], others: true), StringComparison.Ordinal);
         Assert.Equal("2 save folders have data only on this device", AppsPage.FirstDeviceTitle(2, "Eden saves"));
         Assert.Equal("Eden saves has data only on this device", AppsPage.FirstDeviceTitle(1, "Eden saves"));
     }
@@ -309,13 +311,13 @@ public class AppsPageTests
     }
 
     [Fact]
-    public void The_Delete_confirmation_is_short_and_asks_the_owner_to_make_sure_writes_and_syncing_are_done()
+    public void The_Delete_confirmation_asks_about_other_devices_only_when_there_are_some()
     {
-        Assert.Equal("Delete PPSSPP savedata, orphaned in the shared folder?", AppsPage.DeleteTitle("PPSSPP savedata"));
-        Assert.StartsWith("Any other devices that use the sync folder will see this deletion.", AppsPage.DeleteText, StringComparison.Ordinal);
-        Assert.Contains("make sure all writes to this role's shared folder are complete and the sync folder is up to date on every device that uses it", AppsPage.DeleteText, StringComparison.Ordinal);
-        Assert.Equal("PPSSPP savedata was deleted from the shared folder. Its shared data are backed up on this device; Backups shows them.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: true));
-        Assert.Equal("PPSSPP savedata was deleted from the shared folder.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: false));
+        Assert.Equal("Delete PPSSPP savedata from the sync folder?", AppsPage.DeleteTitle("PPSSPP savedata"));
+        Assert.Equal("Its shared copy is backed up on this device first.", AppsPage.DeleteText(others: false));
+        Assert.Contains("make sure none is still writing to it", AppsPage.DeleteText(others: true), StringComparison.Ordinal);
+        Assert.Equal("PPSSPP savedata was deleted from the sync folder. Its shared copy is in Backups.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: true));
+        Assert.Equal("PPSSPP savedata was deleted from the sync folder.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: false));
         Assert.Equal("before deleting", BackupsPage.Reason(Core.Backup.BackupReason.PreDelete));
     }
 

@@ -61,14 +61,6 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     private async Task ApplyAsync(Subject mapping, bool useThisCopy)
     {
         var role = mapping.Name;
-        if (useThisCopy && !await overlay.ConfirmAsync(
-                "Make this device's copy the shared copy?",
-                "No files change; the other devices' claims are marked as replaced. Do this only if this device's saves are the ones to keep.",
-                "Use this device's copy"))
-        {
-            return;
-        }
-
         var session = await BeginAsync("apply");
         if (session is null)
         {
@@ -92,7 +84,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 switch (refusal.Kind)
                 {
                     case RefusalKind.ChoiceNeeded:
-                        if (await ChooseAsync(refusal, mapping, role) is not { } choice)
+                        if (await ChooseAsync(refusal, mapping, role, session.HasOtherDevices) is not { } choice)
                         {
                             return;
                         }
@@ -312,7 +304,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             {
                 var described = await Work("Checking what the shared folder holds…", () => session.DescribeMappingDeletion(mappingId));
                 if (!confirmed && !await overlay.ConfirmAsync(
-                        AppsPage.DeleteTitle(role), AppsPage.DeleteText, "Delete", Overlay.OperationDialogTimeout, danger: true))
+                        AppsPage.DeleteTitle(role), AppsPage.DeleteText(session.HasOtherDevices), "Delete", Overlay.OperationDialogTimeout, danger: true))
                 {
                     return;
                 }
@@ -365,7 +357,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 var empty = new Button { Content = AppsPage.FirstDeviceStartEmpty };
                 var share = new Button { Content = AppsPage.FirstDeviceShare };
                 var pressed = await overlay.ShowAsync(
-                    AppsPage.FirstDeviceTitle(names.Count, names[0]), Overlay.Body(AppsPage.FirstDeviceText(names)), [leave, empty, share], leave, Overlay.OperationDialogTimeout);
+                    AppsPage.FirstDeviceTitle(names.Count, names[0]), Overlay.Body(AppsPage.FirstDeviceText(names, session.HasOtherDevices)), [leave, empty, share], leave, Overlay.OperationDialogTimeout);
                 if (pressed != leave)
                 {
                     var choice = pressed == share ? SetupChoice.Copy : SetupChoice.NoCopy;
@@ -386,7 +378,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             if (plans.Count > 0)
             {
                 var list = string.Join("\n", plans.Select(p => chosen.TryGetValue(p.MappingId, out var c)
-                    ? $"{roles[p.MappingId]} ({(c == SetupChoice.Copy ? "share this device's saves" : "start empty")})"
+                    ? $"{roles[p.MappingId]} ({(c == SetupChoice.Copy ? "share this device's data" : "start empty")})"
                     : roles[p.MappingId]));
                 var intro = waiting.Count == 0 ? string.Empty : $"\n\nNot these, which need a choice or a fix first: {string.Join(", ", waiting)}.";
                 if (!await overlay.ConfirmAsync(
@@ -402,7 +394,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 foreach (var plan in plans)
                 {
                     var role = roles[plan.MappingId];
-                    var result = await RunWithProgressAsync(ActionTexts.Confirmation(plan, role).Title, plan, progress => session.Run(plan, progress), role, quietOnSuccess: true);
+                    var result = await RunWithProgressAsync(ActionTexts.Confirmation(plan, role, session.HasOtherDevices).Title, plan, progress => session.Run(plan, progress), role, quietOnSuccess: true);
                     if (result.Status == ExecutionStatus.Completed)
                     {
                         linked++;
@@ -452,7 +444,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     {
         ArgumentNullException.ThrowIfNull(taken);
         var name = await overlay.AskTextAsync(
-            "Rename this device", "The name shows in the sync folder and on your other devices. Your links and saves are not touched.",
+            "Rename this device", "The name shows in the sync folder. Your links and saves are not touched.",
             "Rename", typed => MaintenancePage.DeviceNameProblem(typed, taken), initial: currentName);
         if (name is null || name == currentName)
         {
@@ -481,11 +473,10 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
     }
 
-    /// <summary>"Remove" on another device: a warning, then its typed name (D8), then <c>device remove --other</c>.</summary>
+    /// <summary>"Remove" on another device: one warning that asks for its typed name (D8), then <c>device remove --other</c>.</summary>
     public async Task RemoveOtherDeviceAsync(string name)
     {
-        if (!await overlay.ConfirmAsync(MaintenancePage.RemoveOtherTitle(name), MaintenancePage.RemoveOtherText, "Continue", danger: true)
-            || await overlay.AskTextAsync($"Type {name} to confirm", MaintenancePage.RemoveOtherTitle(name), "Remove device", typed => MaintenancePage.TypedPhraseProblem(typed, name), danger: true) is null)
+        if (await overlay.AskTextAsync(MaintenancePage.RemoveOtherTitle(name), MaintenancePage.RemoveOtherText, "Remove device", typed => MaintenancePage.TypedPhraseProblem(typed, name), danger: true) is null)
         {
             return;
         }
@@ -554,7 +545,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
     }
 
-    /// <summary>Backup Clean up (D9) over the given mappings (null: every backup). "All" asks for a warning, then the typed phrase.</summary>
+    /// <summary>Backup Clean up (D9) over the given mappings (null: every backup). "All" asks for the typed phrase in its one dialog.</summary>
     public async Task CleanUpBackupsAsync(IReadOnlyList<string>? mappingIds, string scope, BackupCleanup mode)
     {
         var session = await BeginAsync("backup delete");
@@ -577,8 +568,9 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
                 var text = $"{BackupCleanupTexts.Describe(mode, scope)}\n\nThis deletes {BackupCleanupTexts.Count(found.Count)} ({ActionTexts.Size(found.Sum(b => b.TotalBytes))}).";
                 var all = mode == BackupCleanup.All;
-                if (!await overlay.ConfirmAsync(BackupCleanupTexts.Label(mode) + "?", text, all ? "Continue" : "Delete", Overlay.OperationDialogTimeout, danger: all)
-                    || (all && await overlay.AskTextAsync("Delete all backups", BackupCleanupTexts.Describe(mode, scope), "Delete all backups", typed => MaintenancePage.TypedPhraseProblem(typed, BackupCleanupTexts.AllPhrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null))
+                if (all
+                        ? await overlay.AskTextAsync(BackupCleanupTexts.Label(mode) + "?", text, "Delete all backups", typed => MaintenancePage.TypedPhraseProblem(typed, BackupCleanupTexts.AllPhrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null
+                        : !await overlay.ConfirmAsync(BackupCleanupTexts.Label(mode) + "?", text, "Delete", Overlay.OperationDialogTimeout))
                 {
                     return;
                 }
@@ -622,7 +614,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 foreach (var phrase in RemoveDeviceFlow.PhrasesToType(plan.DeviceName, choices))
                 {
                     var asking = phrase == MaintenancePage.DeleteEverythingPhrase
-                        ? "This deletes saves from the sync folder, which other devices may use."
+                        ? "This deletes saves from the sync folder."
                         : string.Join("\n", RemoveDeviceFlow.PlanLines(plan));
                     if (await overlay.AskTextAsync($"Type {phrase} to confirm", asking, "Continue", typed => MaintenancePage.TypedPhraseProblem(typed, phrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null)
                     {
@@ -678,18 +670,8 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             return null;
         }
 
-        if (chosen == RefusalAction.AssumeClosed && !await overlay.ConfirmAsync(
-                $"Is {mapping.AppName} closed?", ActionTexts.AssumeClosedWarning(mapping.AppName), $"{mapping.AppName} is closed", Overlay.OperationDialogTimeout))
-        {
-            return null;
-        }
-
-        if (chosen == RefusalAction.AssumeSynced && !await overlay.ConfirmAsync(
-                "Were the shared saves deleted?", ActionTexts.AssumeSyncedWarning, "They were deleted", Overlay.OperationDialogTimeout))
-        {
-            return null;
-        }
-
+        // "Is closed" and "were deleted" carry their warning in the refusal's own sentences (ActionTexts.Describe), and the plan's
+        // confirmation still follows, so they get no dialog of their own.
         if (chosen == RefusalAction.GiveAccess)
         {
             var granted = await Work("Giving access…", () => session.GrantSandbox(grant!));
@@ -705,7 +687,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     }
 
     /// <summary>The choice dialog (section 9.2): the comparison, then exactly the allowed choices, none selected at first.</summary>
-    private async Task<SetupChoice?> ChooseAsync(Refusal refusal, Subject mapping, string role)
+    private async Task<SetupChoice?> ChooseAsync(Refusal refusal, Subject mapping, string role, bool others)
     {
         var body = new StackPanel { Spacing = 10 };
         if (refusal.Comparison is { } comparison)
@@ -720,7 +702,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         var cont = new Button { Content = "Continue", IsEnabled = false };
         var chosen = (SetupChoice?)null;
-        foreach (var option in ActionTexts.Choices(refusal, mapping.AppName))
+        foreach (var option in ActionTexts.Choices(refusal, mapping.AppName, others))
         {
             var radio = new RadioButton { GroupName = "choice", Content = new StackPanel
             {
@@ -744,7 +726,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         body.Children.Add(new TextBlock { Text = ActionTexts.EveryChoiceBacksUp, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
         var cancel = new Button { Content = "Cancel" };
-        var pressed = await overlay.ShowAsync($"{role} on this device already has data.", body, [cancel, cont], cancel, Overlay.OperationDialogTimeout);
+        var pressed = await overlay.ShowAsync(ActionTexts.ChoiceTitle(role), body, [cancel, cont], cancel, Overlay.OperationDialogTimeout);
         if (pressed != cont || chosen is not { } choice)
         {
             return null;
@@ -753,36 +735,29 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         return choice;
     }
 
-    /// <summary>The plan's confirmation with its steps under "Show steps", then the run and its result. Null when cancelled.</summary>
+    /// <summary>
+    /// The plan's one confirmation with its steps under "Show steps", then the run and its result. Null when cancelled.
+    /// A plan that empties the shared folder asks for its typed phrase in that same dialog.
+    /// </summary>
     private async Task<ExecutionResult?> ConfirmAndRunAsync(OperationSession session, Plan plan, string role, string? lead = null, bool assumedSynced = false)
     {
-        var (title, planSentences) = ActionTexts.Confirmation(plan, role);
-        IReadOnlyList<string> sentences = lead is null ? planSentences : [lead, .. planSentences];
+        var view = ActionTexts.Confirmation(plan, role, session.HasOtherDevices, assumedSynced);
+        var text = string.Join("\n\n", lead is null ? view.Sentences : [lead, .. view.Sentences]);
         var steps = new Expander
         {
             Header = "Show steps",
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Content = new TextBlock { Text = string.Join("\n", plan.Steps.Select((s, i) => $"{i + 1}. {ActionTexts.Step(s)}")), TextWrapping = TextWrapping.Wrap },
         };
-        var go = plan.Operation switch
-        {
-            PlanOperation.Revert => "Revert",
-            PlanOperation.Restore => "Restore",
-            _ => "Apply",
-        };
-        if (!await overlay.ConfirmAsync(title, string.Join("\n\n", sentences), go, Overlay.OperationDialogTimeout, steps))
+        var go = view.Phrase is { } phrase
+            ? await overlay.AskTextAsync(view.Title, text, view.Button, typed => MaintenancePage.TypedPhraseProblem(typed, phrase), danger: true, timeout: Overlay.OperationDialogTimeout, details: steps) is not null
+            : await overlay.ConfirmAsync(view.Title, text, view.Button, Overlay.OperationDialogTimeout, steps);
+        if (!go)
         {
             return null;
         }
 
-        // A plan that deletes what the shared folder holds ends with the typed phrase, the last dialog before it runs.
-        if (ActionTexts.SharedDeletionGuard(plan, role, assumedSynced) is { } guard
-            && await overlay.AskTextAsync(guard.Title, guard.Text, guard.Button, typed => MaintenancePage.TypedPhraseProblem(typed, guard.Phrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null)
-        {
-            return null;
-        }
-
-        return await RunWithProgressAsync(title, plan, progress => session.Run(plan, progress), role);
+        return await RunWithProgressAsync(view.Title, plan, progress => session.Run(plan, progress), role);
     }
 
     /// <summary>
@@ -909,7 +884,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     {
         RefusalAction.CheckAgain => "Check again",
         RefusalAction.AssumeClosed => $"{app} is closed",
-        RefusalAction.AssumeSynced => "The shared saves really were deleted",
+        RefusalAction.AssumeSynced => "They were deleted on purpose",
         RefusalAction.GiveAccess => "Give access",
         RefusalAction.Revert => "Revert",
         _ => action.ToString(),

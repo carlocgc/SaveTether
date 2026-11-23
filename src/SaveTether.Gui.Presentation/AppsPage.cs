@@ -126,7 +126,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
             (HealthState.Broken, HealthReason.SyncRootUnavailable) => (
                 "The sync folder is not available.", RowAction.CheckAgain, new[] { RowAction.OpenFolder }),
             (HealthState.Broken, _) => (
-                "The link is in place, but the shared folder is missing. It may not have synced yet.", RowAction.CheckAgain,
+                ActionTexts.SharedFolderMissing, RowAction.CheckAgain,
                 new[] { RowAction.OpenFolder, RowAction.OpenSharedFolderParent }),
             (HealthState.Retargeted, _) => (
                 $"The folder now links to {link} instead of the shared folder. Remove that link by hand, then apply.", RowAction.OpenFolder,
@@ -186,24 +186,22 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no label."),
     };
 
-    public static string DeleteTitle(string role) => $"Delete {role}, orphaned in the shared folder?";
+    public static string DeleteTitle(string role) => $"Delete {role} from the sync folder?";
 
     /// <summary>
-    /// Delete's confirmation, kept short (the owner's wording): the title says what, and this says the two things to know. The
-    /// owner confirms the condition nothing here can check: every write to the role's shared folder is complete and the sync tool has
-    /// finished with it on every device. The shared copy is backed up on this device first without being asked about, and the result
-    /// says where.
+    /// Delete's confirmation: the title says what. With other devices registered, the owner confirms the condition nothing
+    /// here can check: none of them is still writing to the role's shared folder. The result says where the backup is.
     /// </summary>
-    public const string DeleteText =
-        "Any other devices that use the sync folder will see this deletion. Before confirming, make sure all writes to this role's shared folder are complete " +
-        "and the sync folder is up to date on every device that uses it.";
+    public static string DeleteText(bool others) => others
+        ? "Its shared copy is backed up on this device first. Other devices that use the sync folder lose it too: make sure none is still writing to it."
+        : "Its shared copy is backed up on this device first.";
 
     public static string DeletedText(string role, bool hadBackup) =>
-        $"{role} was deleted from the shared folder." + (hadBackup ? " Its shared data are backed up on this device; Backups shows them." : string.Empty);
+        $"{role} was deleted from the sync folder." + (hadBackup ? " Its shared copy is in Backups." : string.Empty);
 
     /// <summary>Remove's confirmation (section 5).</summary>
     public static string RemoveWarning(string role) =>
-        $"Forget this device's folder for {role}? Nothing is deleted; the shared copy and other devices are not affected.";
+        $"Forget this device's folder for {role}? Nothing is deleted, and the shared copy is not changed.";
 
     /// <summary>
     /// A mapping Apply all can ask about together with the others: this device has saves in its folder and the shared
@@ -223,16 +221,16 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     public const string FirstDeviceLeave = "Leave them";
 
     /// <summary>One question for every mapping with saves only on this device (apply all, section 9.4, as built 2026-11-21).</summary>
-    public static string FirstDeviceText(IReadOnlyList<string> roles) =>
-        $"{string.Join("\n", roles)}\n\nNothing is shared for {(roles.Count == 1 ? "this" : "these")} yet. One answer applies to {(roles.Count == 1 ? "it" : "all of them")}:\n\n" +
-        $"{FirstDeviceShare}: the data on this device becomes the shared copy in the sync folder.\n" +
-        $"{FirstDeviceStartEmpty}: this device's data is kept in a backup only, and {(roles.Count == 1 ? "it" : "they")} will see no data until another device shares some.\n\n" +
-        "Each is backed up first. If any of these was already set up on another device, leave them and make sure no other device is still writing to the sync folder; " +
-        "otherwise both devices will make their own data the shared copy.";
+    /// <param name="others">Another device is registered: only then can one of these already be set up elsewhere.</param>
+    public static string FirstDeviceText(IReadOnlyList<string> roles, bool others) =>
+        $"{string.Join("\n", roles)}\n\nNo shared copy yet. One answer for {(roles.Count == 1 ? "it" : "all of them")}:\n" +
+        $"{FirstDeviceShare}: this device's data becomes the shared copy.\n" +
+        $"{FirstDeviceStartEmpty}: this device's data is kept only in the backup." +
+        (others ? $"\n\nIf any of these is set up on another device, choose {FirstDeviceLeave} until its data has arrived here." : string.Empty);
 
     /// <summary>Apply all's summary (section 9.4).</summary>
     public static string ApplyAllSummary(int linked, IReadOnlyList<string> needYou) =>
         needYou.Count == 0
             ? $"{linked} linked."
-            : $"{linked} linked. {needYou.Count} not linked, each needs a choice or a fix first: {string.Join(", ", needYou)}.\n\nPress Apply on each to see what it needs.";
+            : $"{linked} linked. Not linked, each needs a choice or a fix first: {string.Join(", ", needYou)}.";
 }

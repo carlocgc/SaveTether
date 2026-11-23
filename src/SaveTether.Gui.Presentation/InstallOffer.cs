@@ -99,7 +99,7 @@ public sealed class InstallOffer(string localFolder, InstallLayout layout, strin
     /// <summary>Uninstall's confirmation: what goes, and what stays.</summary>
     public string UninstallText() =>
         $"This removes SaveTether's programs from {Layout.AppFolder} and {Layout.BinFolder}, its app menu entry, and starting with the session. "
-        + "Your setup, your linked folders, their backups and the sync folder are not touched: linked folders stay linked and keep syncing, "
+        + "Your setup, linked folders, backups and the sync folder are not touched: linked folders stay linked, "
         + "but nothing checks on them until SaveTether is installed again. SaveTether quits afterwards.";
 
     /// <summary>Uninstall. A problem is said in words; files that are not SaveTether's are left and named.</summary>

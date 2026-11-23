@@ -10,6 +10,15 @@ namespace SaveTether.Core.Planning;
 /// </summary>
 public static class Planner
 {
+    // Notes the desktop app says in its own words, so it leaves them out of its confirmation (ActionTexts.Confirmation).
+    public const string RevertLeavesSharedNote = "The shared folder is left as it is, for the other devices.";
+
+    public const string AlreadyAppliedReplaceNote =
+        "Already linked, so no saves are copied or deleted. The shared folder as it is now becomes the agreed copy, " +
+        "and the other devices' records are marked as superseded.";
+
+    public const string ReplaceSharedNote = "The shared saves in the sync folder will be replaced. They are backed up on this device first.";
+
     public const string AsideSuffix = ".savetether-old";
     public const string StagingSuffix = ".savetether-new";
 
@@ -118,7 +127,7 @@ public static class Planner
 
         var staging = s.Source + StagingSuffix;
         var steps = new List<PlanStep>();
-        var notes = new List<Note> { "The shared folder is left as it is, for the other devices." };
+        var notes = new List<Note> { RevertLeavesSharedNote };
         if (s.TargetTree.HasData)
         {
             steps.Add(new PlanStep(StepKind.BackUpTarget, s.Target));
@@ -368,8 +377,7 @@ public static class Planner
                     new PlanStep(StepKind.WriteState, s.Source, s.Target),
                 ],
                 [
-                    "Already linked, so no saves are copied or deleted. The shared folder as it is now becomes the agreed copy, " +
-                    "and the other devices' records are marked as superseded.",
+                    AlreadyAppliedReplaceNote,
                     "If the shared folder does not hold the saves you want: revert, restore this device's backup, " +
                     "then apply again, replacing the shared saves.",
                 ]);
@@ -542,7 +550,7 @@ public static class Planner
                 AddSwitchSteps(s, steps, StepKind.WriteSeedMarker, StepKind.SupersedeMarkers);
                 return Planned(
                     s, Classification.Guard, SetupChoice.ReplaceShared, steps,
-                    ["The shared saves in the sync folder will be replaced. They are backed up on this device first."]);
+                    [ReplaceSharedNote]);
             }
         }
     }

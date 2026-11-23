@@ -50,7 +50,7 @@ internal sealed class Overlay : Panel
     /// is disabled while <paramref name="problem"/> answers a message, which is shown under the box. Enter does not confirm; Escape
     /// cancels, and so does <paramref name="timeout"/> when given (an operation holding the lock passes one). Focus starts in the box: the one exception to "focus on the safe choice", since typing cannot confirm by itself.
     /// </summary>
-    public async Task<string?> AskTextAsync(string title, string text, string confirmLabel, Func<string, string?> problem, bool danger = false, string initial = "", TimeSpan? timeout = null)
+    public async Task<string?> AskTextAsync(string title, string text, string confirmLabel, Func<string, string?> problem, bool danger = false, string initial = "", TimeSpan? timeout = null, Control? details = null)
     {
         ArgumentNullException.ThrowIfNull(problem);
         var box = new TextBox { Text = initial, MinWidth = 320, AcceptsReturn = false };
@@ -60,6 +60,10 @@ internal sealed class Overlay : Panel
         if (danger)
         {
             Danger.Style(confirm);
+
+            // The hint says what to type; in red it ties the box to the red button, with no more words (owner, 2026-11-23).
+            message.Foreground = Danger.Text;
+            message.Opacity = 1;
         }
 
         void Check()
@@ -71,7 +75,14 @@ internal sealed class Overlay : Panel
 
         box.TextChanged += (_, _) => Check();
         Check();
-        var entry = new StackPanel { Spacing = 6, Children = { box, message } };
+        var entry = new StackPanel { Spacing = 6 };
+        if (details is not null)
+        {
+            entry.Children.Add(details);
+        }
+
+        entry.Children.Add(box);
+        entry.Children.Add(message);
         var pressed = await ShowAsync(title, Body(text, entry), [cancel, confirm], cancel, timeout, box);
         return pressed == confirm ? (box.Text ?? string.Empty).Trim() : null;
     }

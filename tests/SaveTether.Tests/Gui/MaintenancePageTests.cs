@@ -82,13 +82,21 @@ public class MaintenancePageTests
     [Theory]
     [InlineData(PlanOperation.Apply, "replace shared data")]
     [InlineData(PlanOperation.Restore, "restore shared data")]
-    public void A_plan_that_empties_the_shared_folder_ends_with_its_typed_phrase(PlanOperation operation, string phrase)
+    public void A_plan_that_empties_the_shared_folder_asks_for_its_phrase_in_its_one_confirmation(PlanOperation operation, string phrase)
     {
         Plan PlanOf(params StepKind[] kinds) => new("g.saves", Classification.Guard, SetupChoice.ReplaceShared, "s", "t",
-            [.. kinds.Select(k => new PlanStep(k, "t"))], [], false, operation);
+            [.. kinds.Select(k => new PlanStep(k, "t"))], [Planner.ReplaceSharedNote, RestorePlanner.SharedChangesNote], false, operation);
 
-        Assert.Equal(phrase, ActionTexts.SharedDeletionGuard(PlanOf(StepKind.BackUpTarget, StepKind.ClearTarget), "game")?.Phrase);
-        Assert.Null(ActionTexts.SharedDeletionGuard(PlanOf(StepKind.BackUpSource, StepKind.CreateLink), "game"));
+        var alone = ActionTexts.Confirmation(PlanOf(StepKind.BackUpTarget, StepKind.ClearTarget), "game", others: false);
+        Assert.Equal(phrase, alone.Phrase);
+
+        // The backup is said once, the restated core notes not at all, and other devices only when there are some.
+        Assert.Single(alone.Sentences, s => s.Contains("backed up", StringComparison.Ordinal));
+        Assert.DoesNotContain(alone.Sentences, s => s.Contains("other device", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(ActionTexts.Confirmation(PlanOf(StepKind.BackUpTarget, StepKind.ClearTarget), "game", others: true).Sentences,
+            s => s.Contains(ActionTexts.OthersGetChange, StringComparison.Ordinal));
+
+        Assert.Null(ActionTexts.Confirmation(PlanOf(StepKind.BackUpSource, StepKind.CreateLink), "game", others: true).Phrase);
     }
 
     [Fact]
@@ -97,9 +105,10 @@ public class MaintenancePageTests
         var plan = new Plan("g.saves", Classification.Guard, SetupChoice.ReplaceShared, "s", "t",
             [new PlanStep(StepKind.ClearTarget, "t")], [], false);
 
-        var guard = ActionTexts.SharedDeletionGuard(plan, "game", assumedSynced: true)!;
-        Assert.Equal(ActionTexts.ReplacePhrase, guard.Phrase);
-        Assert.Contains(ActionTexts.ReplaceAnywayText, guard.Text, StringComparison.Ordinal);
+        var view = ActionTexts.Confirmation(plan, "game", others: true, assumedSynced: true);
+        Assert.Equal(ActionTexts.ReplacePhrase, view.Phrase);
+        Assert.Contains(ActionTexts.ReplaceAnywayText, view.Sentences);
+        Assert.DoesNotContain(ActionTexts.ReplaceAnywayText, ActionTexts.Confirmation(plan, "game", others: true).Sentences);
     }
 
     [Fact]

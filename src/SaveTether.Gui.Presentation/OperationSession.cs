@@ -20,9 +20,31 @@ public sealed class OperationSession : IDisposable
     {
         _lock = held;
         Workspace = workspace;
+
+        // Read here, while Begin runs behind the window's busy dialog, not later on the UI thread: the sync folder may be a
+        // network share that stops answering.
+        HasOtherDevices = OtherDevicesRegistered(workspace);
     }
 
     public Workspace Workspace { get; }
+
+    /// <summary>
+    /// True when another device is registered in the sync folder. Only then do the dialogs mention other devices:
+    /// the sync folder may be a plain folder for one device. True when it cannot be read, so a warning is never lost.
+    /// </summary>
+    public bool HasOtherDevices { get; }
+
+    private static bool OtherDevicesRegistered(Workspace workspace)
+    {
+        try
+        {
+            return workspace.Shared.ListDeviceNames().Any(n => !string.Equals(n, workspace.DeviceName, StringComparison.Ordinal));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or StoreException)
+        {
+            return true;
+        }
+    }
 
     /// <summary>Takes the lock and opens the device. On a refusal, says why in the app's words; nothing is held then.</summary>
     public static (OperationSession? Session, string? Refused) Begin(
