@@ -107,10 +107,10 @@ internal static class CliApp
               Remove this device's save folder for a mapping. Other devices keep theirs.
           savetether map delete <id> [--confirm-delete]
               Delete a mapping no device uses from the sync folder: its shared copy, its record and its seed
-              markers, on every device's sync folder. Each device's own save folders and backups are not
+              markers. Other devices may use that folder. Each device's own save folders and backups are not
               touched. The shared copy is backed up on this device first. It cannot be undone from the share,
               so it asks first, or needs --confirm-delete, which says that every write to the role's shared
-              folder is complete and the sync tool has finished with it on every device. Refused while any
+              folder is complete and the sync folder is up to date on every device that uses it. Refused while any
               device has a folder set for it.
 
           savetether app add <app> [--install <id>] [--role <id>]... [--install-dir <path>]
@@ -135,7 +135,7 @@ internal static class CliApp
                 --copy            they become the shared copy (only when the shared folder is empty)
                 --no-copy         use the shared saves; this device's are kept in the backup only
                 --add-missing     also add what the shared copy lacks; nothing is overwritten
-                --replace-shared  they replace the shared copy on every device (needs --confirm-replace)
+                --replace-shared  they replace the shared copy in the sync folder (needs --confirm-replace)
               --assume-synced  go ahead although the shared copy may not have fully arrived
               --assume-closed  go ahead although the app appears to be running
               --grant-sandbox  when a Flatpak app cannot write the shared folder, allow it (that
@@ -378,12 +378,12 @@ internal static class CliApp
                     : "its record (the shared folder is already gone)";
                 if (!CanAsk)
                 {
-                    return Failed(ExitRefused, $"Deleting '{id}' removes {what} from the sync folder, on every device. Each device's own save folders and backups are not touched. Add --confirm-delete to go ahead, once all writes to its shared folder are complete and your sync tool has finished syncing it on every device.");
+                    return Failed(ExitRefused, $"Deleting '{id}' removes {what} from the sync folder, which other devices may use. Each device's own save folders and backups are not touched. Add --confirm-delete to go ahead, once all writes to its shared folder are complete and the sync folder is up to date on every device that uses it.");
                 }
 
                 var question =
-                    $"Delete '{id}' from the shared folder? This removes {what}, and the sync tool carries the deletion to every device's sync folder. Each device's own save folders and backups are not touched." +
-                    "\nBefore confirming, make sure all writes to this role's shared folder are complete and your sync tool has finished syncing it on every device." +
+                    $"Delete '{id}' from the shared folder? This removes {what}, and the deletion reaches every device that uses the sync folder. Each device's own save folders and backups are not touched." +
+                    "\nBefore confirming, make sure all writes to this role's shared folder are complete and the sync folder is up to date on every device that uses it." +
                     "\nThe shared copy is backed up on this device first.";
                 if (!Confirm(question))
                 {

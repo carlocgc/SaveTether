@@ -91,7 +91,7 @@ public static class RestorePlanner
                 return new PlanOutcome(null, new Refusal(
                     info.MappingId, RefusalKind.ConfirmationNeeded, Classification.NotClassified,
                     new Note(
-                        $"This backup is of the shared folder '{destination}'. Restoring it replaces what is there on every device once it syncs. " +
+                        $"This backup is of the shared folder '{destination}'. Restoring it replaces what is there, and any other devices that use the sync folder will see that. " +
                         "The current content is backed up on this device first.",
                         new NextStep(NextStepKind.ConfirmReplace, info.MappingId, backupId)),
                     [], [], AssumeSyncedWouldHelp: false, Comparison: null, PlanOperation.Restore));
@@ -105,7 +105,7 @@ public static class RestorePlanner
             steps.Add(new PlanStep(StepKind.EnsureTarget, destination));
             steps.Add(new PlanStep(StepKind.ClearTarget, destination));
             steps.Add(new PlanStep(StepKind.CopyIntoTarget, data, destination));
-            notes.Add("The shared folder will change on every device once this syncs.");
+            notes.Add("The shared folder will change, and any other devices that use it will see that.");
         }
         else
         {

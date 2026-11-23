@@ -111,9 +111,9 @@ savetether map remove eden.saves
 savetether map delete <id> [--confirm-delete]
 ```
 
-Deletes a mapping no device uses from the sync folder, **on every device's sync folder**: its shared copy, its record and its seed markers. Each device's own save folders and backups are not touched: a device that reverted the mapping keeps its own copy. It is the way to clean up a mapping that every device has reverted and removed, which otherwise stays in `status` as "Not applied" with its saves still in the sync folder. The shared saves are backed up on this device first and the backup is verified (`backup list` shows it as `pre-delete`); only then is anything deleted. It cannot be undone from the share, so it asks first, or needs `--confirm-delete`.
+Deletes a mapping no device uses from the sync folder, **which other devices may use**: its shared copy, its record and its seed markers. Each device's own save folders and backups are not touched: a device that reverted the mapping keeps its own copy. It is the way to clean up a mapping that every device has reverted and removed, which otherwise stays in `status` as "Not applied" with its saves still in the sync folder. The shared saves are backed up on this device first and the backup is verified (`backup list` shows it as `pre-delete`); only then is anything deleted. It cannot be undone from the share, so it asks first, or needs `--confirm-delete`.
 
-Before you confirm, make sure all writes to the role's shared folder are complete and your sync tool has finished syncing it on every device: nothing here can tell, and `--confirm-delete` says so on your behalf. The command deletes only the files the verified backup holds, and only while each still matches the backup; a save that arrived or changed after the backup is left, with the mapping record, and the command says so (run it again once the sync tool has finished). Refused while any device, this one included, has a folder set for the mapping: `revert` and `map remove` it there first. Refused too when the shared folder, or the shared data folder above it, is reached through a link (an app folder that is a symlink or junction). The check of the device files reads the files in the sync folder, so a device that has not yet synced its own file cannot be seen. Safe to run again if it stopped part way.
+Before you confirm, make sure all writes to the role's shared folder are complete and the sync folder is up to date on every device that uses it: nothing here can tell, and `--confirm-delete` says so on your behalf. The command deletes only the files the verified backup holds, and only while each still matches the backup; a save that arrived or changed after the backup is left, with the mapping record, and the command says so (run it again once the sync folder is up to date). Refused while any device, this one included, has a folder set for the mapping: `revert` and `map remove` it there first. Refused too when the shared folder, or the shared data folder above it, is reached through a link (an app folder that is a symlink or junction). The check of the device files reads the files in the sync folder, so a device that has not yet synced its own file cannot be seen. Safe to run again if it stopped part way.
 
 ```bash
 savetether map delete eden.saves --confirm-delete
@@ -139,7 +139,7 @@ The three path options give what cannot be found by looking. They are remembered
 
 `--dry-run` refuses what the real add would refuse, with the same message and exit code: for example a role whose new mapping would use a target another mapping already has.
 
-Definitions come from `<sync root>/savetether/.savetether/definitions/<app>.jsonc` first, then those built in. Only Cemu is built in so far. A shared definition reaches every device through the sync tool. The format is in the [design, section 5.2](design/save-redirection-design.md).
+Definitions come from `<sync root>/savetether/.savetether/definitions/<app>.jsonc` first, then those built in. Only Cemu is built in so far. A shared definition is seen by every device that uses the sync folder. The format is in the [design, section 5.2](design/save-redirection-design.md).
 
 ```bash
 savetether app add cemu --dry-run     # what it found, with sizes; nothing written
@@ -253,7 +253,7 @@ Links the save folder to the shared copy. A backup is taken first wherever there
 | `--copy` | This device's saves become the shared copy. | The shared copy is empty: this is the first device. |
 | `--no-copy` | Use the shared saves. This device's are kept in the backup only. | Always. |
 | `--add-missing` | Use the shared saves, and also copy in the games only this device has. Nothing in the shared copy is changed or deleted. | The shared copy has saves. |
-| `--replace-shared --confirm-replace` | This device's saves replace the shared copy **on every device**. The shared copy is backed up here first. | The shared copy has saves. Needs both flags (or `yes` at a terminal). |
+| `--replace-shared --confirm-replace` | This device's saves replace the shared copy **in the sync folder**. The shared copy is backed up here first. | The shared copy has saves. Needs both flags (or `yes` at a terminal). |
 
 Only the choices that are safe for the situation are accepted; the refusal lists them.
 
@@ -300,7 +300,7 @@ savetether backup restore <backup-id> [--confirm-replace] [--assume-closed] [--d
 Puts a backup back where it was taken from. What is there now is backed up first. For a backup of this device's folder, links that were inside it are recreated; none are ever created in the sync root.
 
 - A backup of **this device's folder** needs that folder not to be linked: `revert` first, or restoring would write into the shared copy.
-- A backup of **the shared copy** replaces it on every device, so it needs `--confirm-replace` (or `yes` at a terminal).
+- A backup of **the shared copy** replaces it in the sync folder, so it needs `--confirm-replace` (or `yes` at a terminal).
 
 ```bash
 savetether backup list cemu.save

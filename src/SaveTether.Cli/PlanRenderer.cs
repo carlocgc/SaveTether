@@ -46,7 +46,7 @@ internal static class PlanRenderer
             StepKind.BackUpSource => $"Back up '{step.Path}' and verify the backup",
             StepKind.BackUpTarget => $"Back up the shared folder '{step.Path}' to this device and verify the backup",
             StepKind.EnsureTarget => $"Create the shared folder '{step.Path}' if it does not exist",
-            StepKind.ClearTarget => $"Delete the contents of the shared folder '{step.Path}' (this spreads to every device)",
+            StepKind.ClearTarget => $"Delete the contents of the shared folder '{step.Path}' (any other devices that use the sync folder will see this)",
             StepKind.CopyIntoTarget when step.Entries is { } entries =>
                 $"Copy into '{step.OtherPath}' only: {string.Join(", ", entries)}",
             StepKind.CopyIntoTarget => $"Copy everything from '{step.Path}' into '{step.OtherPath}'",

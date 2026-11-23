@@ -62,7 +62,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     {
         var role = mapping.Name;
         if (useThisCopy && !await overlay.ConfirmAsync(
-                "Make this device's copy the one every device keeps?",
+                "Make this device's copy the shared copy?",
                 "No files change; the other devices' claims are marked as replaced. Do this only if this device's saves are the ones to keep.",
                 "Use this device's copy"))
         {
@@ -622,7 +622,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 foreach (var phrase in RemoveDeviceFlow.PhrasesToType(plan.DeviceName, choices))
                 {
                     var asking = phrase == MaintenancePage.DeleteEverythingPhrase
-                        ? "This deletes saves from the sync folder for every device."
+                        ? "This deletes saves from the sync folder, which other devices may use."
                         : string.Join("\n", RemoveDeviceFlow.PlanLines(plan));
                     if (await overlay.AskTextAsync($"Type {phrase} to confirm", asking, "Continue", typed => MaintenancePage.TypedPhraseProblem(typed, phrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null)
                     {

@@ -48,11 +48,11 @@ public static class ActionTexts
         "Go ahead only if the shared data was deleted on purpose. If the sync tool is still delivering them, wait instead: " +
         "going ahead now would start this device from an empty shared folder.";
 
-    public static string ReplaceTitle(string role) => $"Replace the shared data for {role} on every device?";
+    public static string ReplaceTitle(string role) => $"Replace the shared data for {role} in the sync folder?";
 
     public const string ReplaceText =
         "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's data. " +
-        "The deletion reaches every device through the sync tool.";
+        "Any other devices that use the sync folder will see the replacement.";
 
     /// <summary>Typed to confirm replacing the shared data, as for every other deletion of saves.</summary>
     public const string ReplacePhrase = "replace shared data";
@@ -161,7 +161,7 @@ public static class ActionTexts
         var sharedHasData = refusal.Comparison?.Entries.Any(e => e.Presence != EntryPresence.OnlyLocal) == true;
         return refusal.AllowedChoices.Select(choice => choice switch
         {
-            SetupChoice.Copy => new ChoiceOption(choice, "Share this device's data", "This data becomes the shared copy for every device."),
+            SetupChoice.Copy => new ChoiceOption(choice, "Share this device's data", "This data becomes the shared copy in the sync folder."),
             SetupChoice.NoCopy => sharedHasData
                 ? new ChoiceOption(choice, "Use the shared data", $"This device's data is kept in a backup only. {app} will see the shared data.")
                 : new ChoiceOption(choice, "Start empty", $"This device's data is kept in a backup only. {app} will see no data until another device shares some."),
@@ -170,7 +170,7 @@ public static class ActionTexts
                 "Copies entries the shared copy does not have. Nothing in the shared copy is changed or deleted."),
             SetupChoice.ReplaceShared => new ChoiceOption(
                 choice, "Replace the shared data with this device's",
-                "Every device's copy is replaced. The shared data is backed up on this device first."),
+                "The shared data in the sync folder is replaced, so any other devices that use it will see this device's data. It is backed up on this device first."),
             _ => throw new ArgumentOutOfRangeException(nameof(refusal), choice, "A choice with no text."),
         }).ToList();
     }
@@ -225,7 +225,7 @@ public static class ActionTexts
                 break;
             default:
                 title = plan.Classification == Classification.AlreadyApplied && plan.Choice == SetupChoice.ReplaceShared
-                    ? "Make this device's copy the one every device keeps?"
+                    ? "Make this device's copy the shared copy?"
                     : $"Link {role} on this device to the shared folder?";
                 if (plan.Classification == Classification.AlreadyApplied && plan.Choice == SetupChoice.ReplaceShared)
                 {

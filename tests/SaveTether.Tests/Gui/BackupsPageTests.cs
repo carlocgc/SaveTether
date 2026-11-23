@@ -111,7 +111,7 @@ public class BackupsPageTests
         }
 
         Assert.Equal("theirs", pc.SharedFiles()["GAME1/save.bin"]);
-        Assert.Equal($"Restore the shared data for {Role} on every device?", BackupsPage.RestoreSharedTitle(Role));
+        Assert.Equal($"Restore the shared data for {Role} into the sync folder?", BackupsPage.RestoreSharedTitle(Role));
         sandbox.AssertCanaryIntact();
     }
 
