@@ -57,11 +57,21 @@ public static class ActionTexts
     /// <summary>Typed to confirm replacing the shared data, as for every other deletion of saves.</summary>
     public const string ReplacePhrase = "replace shared data";
 
+    /// <summary>
+    /// Typed instead of <see cref="ReplacePhrase"/> when the owner overrode "the shared copy may still be arriving": files another
+    /// device shared are not here, so this device has no backup of them and the replacement can remove them elsewhere.
+    /// </summary>
+    public const string ReplaceAnywayPhrase = "replace shared data anyway";
+
+    public const string ReplaceAnywayText =
+        "Files another device shared have not reached this device, so they are not in this device's backup. " +
+        "Replacing the shared copy can remove them from the other device, and this device has no backup of them.";
+
     /// <summary>The last dialog before a plan that empties the shared folder runs: what it says, its button, and the phrase to type.</summary>
     public sealed record SharedDeletionGuardView(string Title, string Text, string Button, string Phrase);
 
     /// <summary>The typed guard for a plan, or null when it does not delete what the shared folder holds (no ClearTarget step).</summary>
-    public static SharedDeletionGuardView? SharedDeletionGuard(Plan plan, string role)
+    public static SharedDeletionGuardView? SharedDeletionGuard(Plan plan, string role, bool assumedSynced = false)
     {
         ArgumentNullException.ThrowIfNull(plan);
         if (!plan.Steps.Any(s => s.Kind == StepKind.ClearTarget))
@@ -71,7 +81,9 @@ public static class ActionTexts
 
         return plan.Operation == PlanOperation.Restore
             ? new(BackupsPage.RestoreSharedTitle(role), BackupsPage.RestoreSharedText, "Restore to the sync folder", BackupsPage.RestoreSharedPhrase)
-            : new(ReplaceTitle(role), ReplaceText, "Replace in the sync folder", ReplacePhrase);
+            : assumedSynced
+                ? new(ReplaceTitle(role), $"{ReplaceText}\n\n{ReplaceAnywayText}", "Replace in the sync folder", ReplaceAnywayPhrase)
+                : new(ReplaceTitle(role), ReplaceText, "Replace in the sync folder", ReplacePhrase);
     }
 
     public static string FirstSeed(string role) =>

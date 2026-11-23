@@ -92,6 +92,18 @@ public class MaintenancePageTests
     }
 
     [Fact]
+    public void Replacing_after_the_arriving_override_needs_the_stronger_phrase_and_says_why()
+    {
+        var plan = new Plan("g.saves", Classification.Guard, SetupChoice.ReplaceShared, "s", "t",
+            [new PlanStep(StepKind.ClearTarget, "t")], [], false);
+
+        var guard = ActionTexts.SharedDeletionGuard(plan, "game", assumedSynced: true)!;
+        Assert.Equal(ActionTexts.ReplaceAnywayPhrase, guard.Phrase);
+        Assert.Contains(ActionTexts.ReplaceAnywayText, guard.Text, StringComparison.Ordinal);
+        Assert.NotEqual(ActionTexts.ReplacePhrase, guard.Phrase);
+    }
+
+    [Fact]
     public void Device_name_refuses_invalid_and_taken_names()
     {
         Assert.Null(MaintenancePage.DeviceNameProblem(" deck2 ", ["pc"]));

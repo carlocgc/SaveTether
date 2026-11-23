@@ -83,7 +83,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 var outcome = await Work("Checking what applying involves…", () => session.PlanApply(mapping.MappingId, request));
                 if (outcome.Plan is { } plan)
                 {
-                    await ConfirmAndRunAsync(session, plan, role);
+                    await ConfirmAndRunAsync(session, plan, role, assumedSynced: request.AssumeSynced);
                     return;
                 }
 
@@ -754,7 +754,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     }
 
     /// <summary>The plan's confirmation with its steps under "Show steps", then the run and its result. Null when cancelled.</summary>
-    private async Task<ExecutionResult?> ConfirmAndRunAsync(OperationSession session, Plan plan, string role, string? lead = null)
+    private async Task<ExecutionResult?> ConfirmAndRunAsync(OperationSession session, Plan plan, string role, string? lead = null, bool assumedSynced = false)
     {
         var (title, planSentences) = ActionTexts.Confirmation(plan, role);
         IReadOnlyList<string> sentences = lead is null ? planSentences : [lead, .. planSentences];
@@ -776,7 +776,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
 
         // A plan that deletes what the shared folder holds ends with the typed phrase, the last dialog before it runs.
-        if (ActionTexts.SharedDeletionGuard(plan, role) is { } guard
+        if (ActionTexts.SharedDeletionGuard(plan, role, assumedSynced) is { } guard
             && await overlay.AskTextAsync(guard.Title, guard.Text, guard.Button, typed => MaintenancePage.TypedPhraseProblem(typed, guard.Phrase), danger: true, timeout: Overlay.OperationDialogTimeout) is null)
         {
             return null;
