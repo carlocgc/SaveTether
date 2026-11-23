@@ -317,7 +317,7 @@ Every value `--json` can print, by field. A test checks that each value in the c
 
 **Refusal kind** (`refusal.kind`): `precondition`, `choice-needed`, `choice-not-allowed`, `confirmation-needed`, `not-arrived`, `foreign-link`, `broken-link`.
 
-**Precondition kind** (`failures[].kind`): `sync-root-not-initialized`, `unfinished-operation`, `target-outside-data-root`, `source-inside-sync-root`, `paths-overlap`, `source-parent-missing`, `source-unusable`, `target-unusable`, `app-running`, `backup-location-unusable`, `target-not-local`, `source-not-local` (the folder to link is on a network drive, on Windows), `not-enough-space`, `sandbox-cannot-reach`, `not-applied`, `backup-unusable`, `restore-destination-unusable`.
+**Precondition kind** (`failures[].kind`): `sync-root-not-initialized`, `unfinished-operation`, `target-outside-data-root`, `source-inside-sync-root`, `paths-overlap`, `source-parent-missing`, `source-unusable`, `target-unusable`, `app-running`, `backup-location-unusable`, `target-not-local` (the sync folder is on a network share that Windows policy will not follow a link to), `source-not-local` (the folder to link is on a network drive, on Windows), `symlink-not-allowed` (the sync folder is on a network share, and this Windows process can make no symlink: Developer Mode is off and it is not elevated), `not-enough-space`, `sandbox-cannot-reach`, `not-applied`, `backup-unusable`, `restore-destination-unusable`.
 
 **Entry presence** (`comparison.entries[].presence`): `only-local`, `only-shared`, `identical`, `different`.
 

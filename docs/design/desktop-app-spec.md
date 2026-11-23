@@ -196,7 +196,8 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 | `source-parent-missing` | "The folder that should hold the save folder does not exist: <path>. The app may have moved, or not been started yet." | Find the app again |
 | `backup-location-unusable` | "Backups cannot be written to <path>: <fact>." | Open Settings |
 | `not-enough-space` | "Not enough free space on <volume>: <need> needed, <free> free." | none |
-| `target-not-local` | "On Windows the sync folder must be on a local drive, because a folder link cannot point to a network drive." | none |
+| `target-not-local` | "The sync folder is on a network share, and Windows on this device is set not to follow links to a share." Changed 2026-11-23 (phase 3.7 T3): a share is linked with a symlink, so only the policy refuses it here | none |
+| `symlink-not-allowed` | "The sync folder is on a network share. To link to it, Windows needs Developer Mode (Settings, System, For developers), or SaveTether run once from a terminal opened as administrator." Added 2026-11-23 (phase 3.7 T3); T4 adds **Check again** | none |
 | `source-not-local` | "<Role>'s folder is on a network drive. On Windows SaveTether can only link a folder on a local drive." Added 2026-11-19; the folder is refused when added too, so this is the last line of defence | none |
 | `source-inside-sync-root`, `paths-overlap`, `target-outside-data-root`, `source-unusable`, `target-unusable` | "<role> cannot be linked as it is set up: <fact>." | Details |
 | `not-applied`, `backup-unusable`, `restore-destination-unusable` | Revert and restore only; see 9.6 and 9.7 | |

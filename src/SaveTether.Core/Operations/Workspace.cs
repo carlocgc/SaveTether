@@ -101,20 +101,23 @@ public sealed partial class Workspace
     }
 
     /// <summary>
-    /// Why a sync root on a network drive is refused on Windows, where every link SaveTether makes is a junction
-    /// and a junction can only point to a local drive. The way out is a local copy that a sync tool keeps in step.
+    /// Why a sync root on a network share is refused on Windows when this process cannot make a symlink: a
+    /// junction cannot point to a share, and a symlink needs Developer Mode or elevation (design 5.16).
     /// </summary>
     public static string NetworkSyncRootMessage(string syncRoot) =>
-        $"'{syncRoot}' is on a network drive. On Windows, SaveTether links save folders with junctions, which can only point to a local drive, " +
-        "so no save folder could be linked there. Use a folder on a local drive, and keep it in step with the share or the other devices with a sync tool.";
+        $"'{syncRoot}' is on a network share. {SymlinkCapability.DeveloperModeFix}";
 
     /// <summary>The device names that have a file in the sync root, for "init" to offer.</summary>
     public static IReadOnlyList<string> ExistingDevices(string syncRoot)
     {
-        // Not looked at on Windows: Init refuses it, and probing a share that is not there stalls first.
+        // A share that is not there can stall a plain read, so it is asked first, with a time limit.
         if (PathRules.IsOnNetworkDrive(syncRoot))
         {
-            return [];
+            syncRoot = PathRules.ToUncIfMapped(syncRoot);
+            if (!NetworkPaths.IsReachable(ShareOf(syncRoot)))
+            {
+                return [];
+            }
         }
 
         var shared = new SharedStore(syncRoot);
@@ -131,13 +134,16 @@ public sealed partial class Workspace
         ArgumentNullException.ThrowIfNull(local);
         ArgumentNullException.ThrowIfNull(request);
 
-        // First, and by the path alone: probing a share that is not there can stall on a network timeout.
-        if (PathRules.IsOnNetworkDrive(request.SyncRoot))
+        // First, before anything reads the share: one that is not there can stall on a network timeout.
+        var syncRoot = request.SyncRoot;
+        if (PathRules.IsOnNetworkDrive(syncRoot))
         {
-            throw new StoreException(StoreProblem.Invalid, NetworkSyncRootMessage(request.SyncRoot));
+            // Stored as UNC: a mapped letter belongs to one logon session, and an elevated shell does not see it (D4).
+            syncRoot = PathRules.ToUncIfMapped(syncRoot);
+            RequireLinkableShare(syncRoot);
         }
 
-        var shared = new SharedStore(request.SyncRoot);
+        var shared = new SharedStore(syncRoot);
         if (!Identifiers.IsValidDeviceName(request.DeviceName))
         {
             throw new StoreException(
@@ -213,6 +219,32 @@ public sealed partial class Workspace
             NewDevice: existing is null, TookOver: existing is not null && !alreadyOurs,
             shared.ListDeviceNames(), notes);
     }
+
+    /// <summary>
+    /// Refuses a share this device cannot link to: one that does not answer, one Windows policy will not follow
+    /// links to, or one this process cannot make a symlink to (no Developer Mode, not elevated). Design 5.16.
+    /// </summary>
+    private static void RequireLinkableShare(string syncRoot)
+    {
+        var share = ShareOf(syncRoot);
+        if (!NetworkPaths.IsReachable(share))
+        {
+            throw new StoreException(
+                StoreProblem.NotFound,
+                $"The network share '{share}' does not answer. Check that it is online and that this device can open it, then try again.");
+        }
+
+        switch (SymlinkCapability.Probe(Path.GetTempPath(), syncRoot))
+        {
+            case ShareLinkSupport.PolicyOff:
+                throw new StoreException(StoreProblem.Invalid, $"'{syncRoot}' is on a network share. {SymlinkCapability.PolicyOffReason}");
+            case ShareLinkSupport.NeedsDevModeOrElevation:
+                throw new StoreException(StoreProblem.Invalid, NetworkSyncRootMessage(syncRoot));
+        }
+    }
+
+    /// <summary>The <c>\\server\share</c> part of a UNC path.</summary>
+    private static string ShareOf(string uncPath) => Path.GetPathRoot(uncPath) is { Length: > 0 } root ? root : uncPath;
 
     /// <summary>
     /// "init" with a sync root other than this device's: refused while any of its save folders is
@@ -623,7 +655,8 @@ public sealed partial class Workspace
                 new Note($"This device has no save folder set for '{mappingId}'.", new NextStep(NextStepKind.SetSaveFolder, mappingId)));
         }
 
-        return SnapshotReader.Read(Shared, mapping, DeviceName, path, device.BackupRoot, _processes, Journal.IsOpen);
+        var snapshot = SnapshotReader.Read(Shared, mapping, DeviceName, path, device.BackupRoot, _processes, Journal.IsOpen);
+        return snapshot.TargetOnLocalVolume ? snapshot : snapshot with { ShareLink = SymlinkCapability.Probe(Local.Folder, snapshot.Target) };
     }
 
     private MappingFile ReadMapping(string mappingId) =>
