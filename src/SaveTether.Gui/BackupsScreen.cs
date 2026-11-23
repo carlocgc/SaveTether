@@ -3,6 +3,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using SaveTether.Core.Backup;
 using SaveTether.Core.Storage;
 using SaveTether.Gui.Presentation;
 
@@ -13,13 +14,23 @@ namespace SaveTether.Gui;
 /// by mapping with an app filter, Open folder, Restore and Delete. The logic is <see cref="BackupsPage"/>; restore
 /// runs through <see cref="ActionFlow.RestoreAsync"/> as an operation, after which the list is read again.
 /// </summary>
-internal sealed class BackupsScreen : UserControl
+internal sealed class BackupsScreen : UserControl, IScreen
 {
+    /// <summary>The way back, shown by the window above the scrolling page.</summary>
+    public ContentControl Bar { get; } = new();
+
+    // The app filter sits beside the way back, above the scrolling list; it is known once the backups are read.
+    private readonly ContentControl _filterHost = new() { VerticalAlignment = VerticalAlignment.Center };
+
     private readonly LocalStore _local;
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly Action _close;
     private readonly ContentControl _page = new();
     private string? _appFilter;
+
+    // What Clean up covers: the app the list is filtered to, or all apps (D9).
+    private IReadOnlyList<string>? _cleanUpMappings;
+    private string _cleanUpScope = BackupCleanupTexts.Scope(null);
 
     /// <param name="appFilter">An app to show at first, from a row's "Backups"; null for all.</param>
     public BackupsScreen(string localFolder, Func<Func<ActionFlow, Task>, Task> operate, Action close, string? appFilter)
@@ -27,8 +38,23 @@ internal sealed class BackupsScreen : UserControl
         _local = new LocalStore(localFolder);
         _operate = operate;
         _close = close;
+        Bar.Content = new StackPanel
+        {
+            Spacing = 8,
+            Children =
+            {
+                new TextBlock { Text = "Backups", FontSize = 22, FontWeight = FontWeight.SemiBold },
+                new TextBlock { Text = BackupsPage.Intro, TextWrapping = TextWrapping.Wrap },
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 12,
+                    Children = { Navigation.BackRow("Back to apps", close), _filterHost, CleanUpButton() },
+                },
+            },
+        };
         _appFilter = appFilter;
-        Content = new StackPanel { Spacing = 16, MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Left, Children = { _page } };
+        Content = new StackPanel { Spacing = 16, Children = { _page } };
         _ = LoadAsync();
     }
 
@@ -47,6 +73,7 @@ internal sealed class BackupsScreen : UserControl
             var expected = e is StoreException or IOException or UnauthorizedAccessException;
             App.Options.Log.Write(expected ? $"backup list: {e.GetType().Name}: {e.Message}" : $"unexpected error: {e}");
             _page.IsEnabled = true;
+            _filterHost.Content = null;
             _page.Content = Page([new TextBlock { Text = expected ? e.Message : $"Something went wrong: {e.Message}", TextWrapping = TextWrapping.Wrap }]);
             return;
         }
@@ -58,6 +85,7 @@ internal sealed class BackupsScreen : UserControl
     private void Show(IReadOnlyList<BackupGroup> groups, Func<string, string> appName)
     {
         var content = new List<Control>();
+        _filterHost.Content = null;
         var apps = BackupsPage.Apps(groups, appName);
         if (_appFilter is not null && apps.All(a => a.AppId != _appFilter))
         {
@@ -80,10 +108,12 @@ internal sealed class BackupsScreen : UserControl
                 _appFilter = filter.SelectedIndex <= 0 ? null : apps[filter.SelectedIndex - 1].AppId;
                 Show(groups, appName);
             };
-            content.Add(filter);
+            _filterHost.Content = filter;
         }
 
         var shown = BackupsPage.Filter(groups, _appFilter);
+        _cleanUpMappings = _appFilter is null ? null : shown.Select(g => g.MappingId).ToList();
+        _cleanUpScope = BackupCleanupTexts.Scope(_appFilter is null ? null : apps.First(a => a.AppId == _appFilter).Name);
         if (shown.Count == 0)
         {
             content.Add(new TextBlock { Text = "No backups yet. SaveTether takes one before it first changes a folder.", Opacity = 0.75 });
@@ -91,7 +121,7 @@ internal sealed class BackupsScreen : UserControl
 
         foreach (var group in shown)
         {
-            content.Add(new TextBlock { Text = group.Name, FontSize = 17, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 10, 0, 2) });
+            content.Add(Navigation.GroupHeader(group.Name));
             foreach (var row in group.Rows)
             {
                 content.Add(Row(group, row, appName));
@@ -132,6 +162,29 @@ internal sealed class BackupsScreen : UserControl
         return grid;
     }
 
+    private Button CleanUpButton()
+    {
+        var menu = new MenuFlyout();
+        foreach (var mode in new[] { BackupCleanup.KeepFirst, BackupCleanup.KeepLast, BackupCleanup.All })
+        {
+            var item = new MenuItem { Header = BackupCleanupTexts.Label(mode) };
+            item.Click += (_, _) => _ = CleanUpAsync(mode);
+            menu.Items.Add(item);
+        }
+
+        var button = new Button { Content = "Clean up", Flyout = menu, VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetName(button, "Clean up backups");
+        return button;
+    }
+
+    private async Task CleanUpAsync(BackupCleanup mode)
+    {
+        var mappings = _cleanUpMappings;
+        var scope = _cleanUpScope;
+        await _operate(actions => actions.CleanUpBackupsAsync(mappings, scope, mode));
+        await LoadAsync();
+    }
+
     private async Task DeleteAsync(BackupRow row)
     {
         var deleted = false;
@@ -150,19 +203,14 @@ internal sealed class BackupsScreen : UserControl
         await LoadAsync();
     }
 
-    private StackPanel Page(IEnumerable<Control> content)
+    private static StackPanel Page(IEnumerable<Control> content)
     {
-        var back = new Button { Content = "Back to apps" };
-        back.Click += (_, _) => _close();
         var page = new StackPanel { Spacing = 8 };
-        page.Children.Add(new TextBlock { Text = "Backups", FontSize = 22, FontWeight = FontWeight.SemiBold });
-        page.Children.Add(new TextBlock { Text = BackupsPage.Intro, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) });
         foreach (var control in content)
         {
             page.Children.Add(control);
         }
 
-        page.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0), Children = { back } });
         return page;
     }
 

@@ -1,4 +1,5 @@
 using SaveTether.Core.Health;
+using SaveTether.Core.Planning;
 
 namespace SaveTether.Gui.Presentation;
 
@@ -29,8 +30,14 @@ public enum RowAction
     /// <summary>Open the shared folder's parent: the shared folder itself is missing.</summary>
     OpenSharedFolderParent,
 
-    /// <summary>"map remove": forget this device's folder for the mapping. Only offered when Ready to link.</summary>
-    StopUsingHere,
+    /// <summary>"map remove": forget this device's folder for the mapping, which moves to "Not on this device". Only offered when Ready to link.</summary>
+    Remove,
+
+    /// <summary>
+    /// "map delete": a mapping no device uses is deleted from the shared folder (its shared copy and its record, on every device's sync folder). Shown as its own
+    /// red button, on a "Not on this device" row that says no device has a folder set for it.
+    /// </summary>
+    Delete,
 
     /// <summary>Show the core's own sentence for the state.</summary>
     Details,
@@ -38,7 +45,10 @@ public enum RowAction
     /// <summary>Folder gone: Add app's page 2 for this app, to find where it is now (section 8). Needs a definition.</summary>
     FindAppAgain,
 
-    /// <summary>Not on this device: Add app's page 2 for this app (section 5.1). Needs a definition.</summary>
+    /// <summary>Folder gone, for a folder added by hand: the hand form for this mapping, to give where it is now (section 8).</summary>
+    ChooseFolderAgain,
+
+    /// <summary>Not on this device: Add app's page 2 for this app (section 5.1), or the hand form when the app has no definition.</summary>
     AddHere,
 
     /// <summary>The Backups page, filtered to this row's app (section 9.7).</summary>
@@ -48,7 +58,9 @@ public enum RowAction
 /// <summary>One row of the Apps page: a mapping, its sentence and its actions.</summary>
 /// <param name="Main">The row's main action, shown as its button; null when the state has none, or none built yet.</param>
 /// <param name="Others">The actions under "More", in the spec's order.</param>
-public sealed record AppRow(MappingState Mapping, string Sentence, RowAction? Main, IReadOnlyList<RowAction> Others);
+/// <param name="Destructive">An action that removes something for good, shown apart as a red button; null when the row has none.</param>
+/// <param name="Devices">For a row some other device has a folder for: their names, shown when the sentence is hovered; null when none has.</param>
+public sealed record AppRow(MappingState Mapping, string Sentence, RowAction? Main, IReadOnlyList<RowAction> Others, RowAction? Destructive = null, IReadOnlyList<string>? Devices = null);
 
 /// <summary>An app with its rows (section 5): mappings grouped by the part of the ID before the dot.</summary>
 public sealed record AppGroup(string AppName, IReadOnlyList<AppRow> Rows)
@@ -95,18 +107,18 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         var link = mapping.LinkTarget ?? "another folder";
         var (sentence, main, others) = (mapping.Health.State, mapping.Health.Reason) switch
         {
-            (HealthState.Ok, _) => ("Saves here are the shared copy.", (RowAction?)null,
+            (HealthState.Ok, _) => (mapping.LinkKind ?? "Link", (RowAction?)null,
                 new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert }),
             (HealthState.NotApplied, HealthReason.NoSaveFolder) => (
-                mapping.SetUpOn.Count == 0 ? "No device has a folder set for it." : $"Set up on {string.Join(", ", mapping.SetUpOn)}, not here.",
-                mapping.HasDefinition ? RowAction.AddHere : (RowAction?)null, []),
+                SetUpOnSentence(mapping.SetUpOn),
+                RowAction.AddHere, []),
             (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => (
                 $"This device's file has '{mapping.Health.Source}' as the folder.", null, new[] { RowAction.Details }),
-            (HealthState.NotApplied, _) => ("Not linked yet.", RowAction.Apply, new[] { RowAction.OpenFolder, RowAction.StopUsingHere }),
+            (HealthState.NotApplied, _) => ("Original", RowAction.Apply, new[] { RowAction.OpenFolder, RowAction.Remove }),
             (HealthState.Replaced, HealthReason.FolderEmpty) => ("The link is gone and the folder is empty.", RowAction.Apply, new[] { RowAction.OpenFolder }),
             (HealthState.Replaced, HealthReason.FolderMissing) => (
                 $"Nothing is at {source}. If the app has moved, find it again.",
-                mapping.HasDefinition ? RowAction.FindAppAgain : (RowAction?)null, new[] { RowAction.Apply }),
+                mapping.HasDefinition ? RowAction.FindAppAgain : RowAction.ChooseFolderAgain, new[] { RowAction.Apply }),
             (HealthState.Replaced, HealthReason.NotAFolder) => (
                 $"Something other than a folder is at {source}. Move it away by hand, then apply.", RowAction.OpenFolderParent, new[] { RowAction.Details }),
             (HealthState.Replaced, _) => (
@@ -114,7 +126,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
             (HealthState.Broken, HealthReason.SyncRootUnavailable) => (
                 "The sync folder is not available.", RowAction.CheckAgain, new[] { RowAction.OpenFolder }),
             (HealthState.Broken, _) => (
-                "The link is in place, but the shared folder is missing. It may not have synced yet.", RowAction.CheckAgain,
+                ActionTexts.SharedFolderMissing, RowAction.CheckAgain,
                 new[] { RowAction.OpenFolder, RowAction.OpenSharedFolderParent }),
             (HealthState.Retargeted, _) => (
                 $"The folder now links to {link} instead of the shared folder. Remove that link by hand, then apply.", RowAction.OpenFolder,
@@ -125,7 +137,33 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
                 new[] { RowAction.Details }),
             _ => throw new ArgumentOutOfRangeException(nameof(mapping), mapping.Health.State, "A state with no row in section 5.1."),
         };
-        return new AppRow(mapping, sentence, main, others);
+
+        // No device links this role (none has a folder set for it): nothing links to it, so it can be deleted from the shared folder.
+        var unused = mapping is { Health.Reason: HealthReason.NoSaveFolder, SetUpOn.Count: 0 };
+        var devices = mapping.Health.Reason == HealthReason.NoSaveFolder && mapping.SetUpOn.Count > 0 ? mapping.SetUpOn : null;
+        return new AppRow(mapping, sentence, main, others, unused ? RowAction.Delete : null, devices);
+    }
+
+    /// <summary>
+    /// What a row says when other devices have a folder for the role: only how many ("3 devices have a link."), so the row stays
+    /// one short line however many there are; the names are in <see cref="DevicesTip"/>, shown when the sentence is hovered.
+    /// </summary>
+    public static string SetUpOnSentence(IReadOnlyList<string> devices)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+        return devices.Count switch
+        {
+            0 => "No device links this role.",
+            1 => "1 device has a link.",
+            _ => $"{devices.Count} devices have a link.",
+        };
+    }
+
+    /// <summary>The hover text of that sentence: every device, one per line.</summary>
+    public static string DevicesTip(IReadOnlyList<string> devices)
+    {
+        ArgumentNullException.ThrowIfNull(devices);
+        return string.Join("\n", devices);
     }
 
     public static string Label(RowAction action) => action switch
@@ -138,19 +176,61 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         RowAction.OpenFolderParent => "Open folder's parent",
         RowAction.OpenSharedFolder => "Open shared folder",
         RowAction.OpenSharedFolderParent => "Open shared folder's parent",
-        RowAction.StopUsingHere => "Stop using here",
+        RowAction.Remove => "Remove",
+        RowAction.Delete => "Delete",
         RowAction.Details => "Details",
         RowAction.FindAppAgain => "Find the app again",
+        RowAction.ChooseFolderAgain => "Choose the folder again",
         RowAction.AddHere => "Add",
         RowAction.Backups => "Backups",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no label."),
     };
 
-    /// <summary>"Stop using here"'s confirmation (section 5).</summary>
-    public static string StopUsingWarning(string role) =>
-        $"Forget this device's folder for {role}? Nothing is deleted; the shared copy and other devices are not affected.";
+    public static string DeleteTitle(string role) => $"Delete {role} from the sync folder?";
+
+    /// <summary>
+    /// Delete's confirmation: the title says what. With other devices registered, the owner confirms the condition nothing
+    /// here can check: none of them is still writing to the role's shared folder. The result says where the backup is.
+    /// </summary>
+    public static string DeleteText(bool others) => others
+        ? "Its shared copy is backed up on this device first. Other devices that use the sync folder lose it too: make sure none is still writing to it."
+        : "Its shared copy is backed up on this device first.";
+
+    public static string DeletedText(string role, bool hadBackup) =>
+        $"{role} was deleted from the sync folder." + (hadBackup ? " Its shared copy is in Backups." : string.Empty);
+
+    /// <summary>Remove's confirmation (section 5).</summary>
+    public static string RemoveWarning(string role) =>
+        $"Forget this device's folder for {role}? Nothing is deleted, and the shared copy is not changed.";
+
+    /// <summary>
+    /// A mapping Apply all can ask about together with the others: this device has saves in its folder and the shared
+    /// location is empty, so the only question is share them or start empty. Both-sides-have-saves is never batched.
+    /// </summary>
+    public static bool NeedsFirstDeviceChoice(Refusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+        return refusal is { Kind: RefusalKind.ChoiceNeeded, Classification: Classification.FirstDevice };
+    }
+
+    public static string FirstDeviceTitle(int count, string firstRole) =>
+        count == 1 ? $"{firstRole} has data only on this device" : $"{count} save folders have data only on this device";
+
+    public const string FirstDeviceShare = "Share this data";
+    public const string FirstDeviceStartEmpty = "Start empty";
+    public const string FirstDeviceLeave = "Leave them";
+
+    /// <summary>One question for every mapping with saves only on this device (apply all, section 9.4, as built 2026-11-21).</summary>
+    /// <param name="others">Another device is registered: only then can one of these already be set up elsewhere.</param>
+    public static string FirstDeviceText(IReadOnlyList<string> roles, bool others) =>
+        $"{string.Join("\n", roles)}\n\nNo shared copy yet. One answer for {(roles.Count == 1 ? "it" : "all of them")}:\n" +
+        $"{FirstDeviceShare}: this device's data becomes the shared copy.\n" +
+        $"{FirstDeviceStartEmpty}: this device's data is kept only in the backup." +
+        (others ? $"\n\nIf any of these is set up on another device, choose {FirstDeviceLeave} until its data has arrived here." : string.Empty);
 
     /// <summary>Apply all's summary (section 9.4).</summary>
     public static string ApplyAllSummary(int linked, IReadOnlyList<string> needYou) =>
-        needYou.Count == 0 ? $"{linked} linked." : $"{linked} linked. {needYou.Count} need you: {string.Join(", ", needYou)}.";
+        needYou.Count == 0
+            ? $"{linked} linked."
+            : $"{linked} linked. Not linked, each needs a choice or a fix first: {string.Join(", ", needYou)}.";
 }

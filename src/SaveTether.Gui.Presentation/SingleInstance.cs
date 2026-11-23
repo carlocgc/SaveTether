@@ -1,7 +1,6 @@
 using System.Net.Sockets;
-using System.Security.Cryptography;
-using System.Text;
 using SaveTether.Core.FileSystem;
+using SaveTether.Core.Startup;
 
 namespace SaveTether.Gui.Presentation;
 
@@ -9,7 +8,7 @@ namespace SaveTether.Gui.Presentation;
 /// One copy of the app per user and local folder (desktop-app-spec.md, section 2). The first copy holds
 /// <c>gui.lock</c> with no sharing, as the operation lock does, so the operating system frees it however
 /// the process ends. It listens on a local socket; a second copy finds the lock taken, asks the first to
-/// show its window, and exits.
+/// show its window, and exits. A newer copy that is to update the installed app asks the first to quit instead.
 /// </summary>
 /// <remarks>
 /// One mechanism on both systems, where the spec named a mutex and a named pipe for Windows: .NET's
@@ -21,6 +20,7 @@ public sealed class SingleInstance : IDisposable
 {
     public const string LockName = "gui.lock";
     private const string ShowMessage = "show\n";
+    private const string QuitMessage = "quit\n";
     private const int MaxSocketPath = 100;
 
     private readonly FileStream _lock;
@@ -28,19 +28,20 @@ public sealed class SingleInstance : IDisposable
     private readonly string _socketPath;
     private readonly CancellationTokenSource _stop = new();
 
-    private SingleInstance(FileStream lockHandle, Socket listener, string socketPath, Action onShow)
+    private SingleInstance(FileStream lockHandle, Socket listener, string socketPath, Action onShow, Action? onQuit)
     {
         _lock = lockHandle;
         _listener = listener;
         _socketPath = socketPath;
-        _ = Task.Run(() => ListenAsync(onShow, _stop.Token));
+        _ = Task.Run(() => ListenAsync(onShow, onQuit, _stop.Token));
     }
 
     /// <summary>
     /// Becomes the one copy, or returns null when another copy already is. <paramref name="onShow"/> runs on
-    /// a background thread each time another copy asks for the window.
+    /// a background thread each time another copy asks for the window; <paramref name="onQuit"/> when one asks this
+    /// copy to quit, to update it.
     /// </summary>
-    public static SingleInstance? TryClaim(string localFolder, Action onShow)
+    public static SingleInstance? TryClaim(string localFolder, Action onShow, Action? onQuit = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(localFolder);
         ArgumentNullException.ThrowIfNull(onShow);
@@ -72,24 +73,14 @@ public sealed class SingleInstance : IDisposable
             throw;
         }
 
-        return new SingleInstance(handle, listener, socketPath, onShow);
+        return new SingleInstance(handle, listener, socketPath, onShow, onQuit);
     }
 
     /// <summary>Asks the copy that holds the lock to show its window. False when none answered.</summary>
-    public static bool SignalExisting(string localFolder)
-    {
-        try
-        {
-            using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-            socket.Connect(new UnixDomainSocketEndPoint(SocketPath(localFolder)));
-            socket.Send(Encoding.ASCII.GetBytes(ShowMessage));
-            return true;
-        }
-        catch (SocketException)
-        {
-            return false;
-        }
-    }
+    public static bool SignalExisting(string localFolder) => AppChannel.RequestShow(localFolder);
+
+    /// <summary>Asks the copy that holds the lock to quit, as it would from its tray menu. False when none answered.</summary>
+    public static bool RequestQuit(string localFolder) => AppChannel.RequestQuit(localFolder);
 
     public void Dispose()
     {
@@ -108,21 +99,9 @@ public sealed class SingleInstance : IDisposable
         _stop.Dispose();
     }
 
-    internal static string SocketPath(string localFolder)
-    {
-        var inFolder = Path.Combine(Path.GetFullPath(localFolder), "gui.sock");
-        if (inFolder.Length <= MaxSocketPath)
-        {
-            return inFolder;
-        }
+    internal static string SocketPath(string localFolder) => AppChannel.SocketPath(localFolder);
 
-        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(localFolder))))[..16];
-        var runtime = OperatingSystem.IsWindows() ? null : Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
-        var folder = runtime is { Length: > 0 } && Path.IsPathFullyQualified(runtime) ? runtime : Path.GetTempPath();
-        return Path.Combine(folder, $"savetether-{hash}.sock");
-    }
-
-    private async Task ListenAsync(Action onShow, CancellationToken stop)
+    private async Task ListenAsync(Action onShow, Action? onQuit, CancellationToken stop)
     {
         var buffer = new byte[16];
         while (!stop.IsCancellationRequested)
@@ -131,9 +110,14 @@ public sealed class SingleInstance : IDisposable
             {
                 using var client = await _listener.AcceptAsync(stop).ConfigureAwait(false);
                 var read = await client.ReceiveAsync(buffer, SocketFlags.None, stop).ConfigureAwait(false);
-                if (Encoding.ASCII.GetString(buffer, 0, read) == ShowMessage)
+                var message = System.Text.Encoding.ASCII.GetString(buffer, 0, read);
+                if (message == AppChannel.ShowMessage)
                 {
                     onShow();
+                }
+                else if (message == AppChannel.QuitMessage)
+                {
+                    onQuit?.Invoke();
                 }
             }
             catch (OperationCanceledException)

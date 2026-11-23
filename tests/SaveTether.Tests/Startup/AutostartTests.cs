@@ -30,6 +30,7 @@ public class AutostartTests
     [InlineData("/home/deck/.local/bin/savetether-gui")]
     [InlineData("/home/deck/My Games/save tether/savetether-gui")]
     [InlineData("/opt/odd \"name\" $HOME `x` back\\slash/savetether-gui")]
+    [InlineData("/home/a/50%/100%%/%f/savetether-gui")]
     public void The_program_is_read_back_from_the_desktop_entry_it_was_written_into(string program)
     {
         Assert.Equal(program, Autostart.ProgramInDesktopEntry(Autostart.DesktopEntry(program)));
@@ -42,6 +43,12 @@ public class AutostartTests
     {
         // A Windows path cannot hold a double quote, so the quotes around it are enough.
         Assert.Equal(program, Autostart.ProgramInRunValue(Autostart.RunValue(program)));
+    }
+
+    [Fact]
+    public void A_percent_sign_in_the_program_path_is_written_as_two_so_it_is_not_a_field_code()
+    {
+        Assert.Contains("Exec=\"/home/a/50%%/savetether-gui\"", Autostart.DesktopEntry("/home/a/50%/savetether-gui"), StringComparison.Ordinal);
     }
 
     [Fact]

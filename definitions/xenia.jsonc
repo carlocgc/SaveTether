@@ -1,0 +1,56 @@
+// Xenia Canary (Xbox 360 emulator for Windows; on Linux it runs under Proton). Shipped with SaveTether. The folders come from Xenia
+// Canary's source (app/xenia_main.cc: portable by default on Windows, else Documents/Xenia; content under the storage root), read
+// 2026-11-22. The EmuDeck folder comes from EmuDeck's Xenia script, which runs Xenia from Emulation/roms/xbox360. Not yet tried with
+// `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "xenia",
+  "name": "Xenia Canary",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/content" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "win-documents",
+      "os": "windows",
+      "detect": { "dir": "{documents}/Xenia/content" },
+      "base": "{documents}/Xenia"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/roms/xbox360/content" },
+      "base": "{emudeck}/roms/xbox360"
+    }
+  ],
+  "roles": [
+    {
+      "id": "content",
+      "class": "save",
+      "default": true,
+      "path": "content",
+      "target": "content",
+      "notes": "Profiles and game saves, and also installed title updates and DLC, which can be large."
+    },
+    {
+      "id": "patches",
+      "class": "mod",
+      "default": false,
+      "path": "patches",
+      "target": "patches",
+      "notes": "Game patches (.patch.toml)."
+    }
+  ],
+  "quirks": [
+    "On a portable install the folder also holds the program; only content and patches are shared. cache and xenia-canary.config.toml stay on each device.",
+    "Saves belong to a profile: use the same profile on every device, or a game will not see the other device's saves.",
+    "storage_root and content_root in xenia-canary.config.toml can move these folders; Add app follows the default location only.",
+    "Xenia Manager keeps a portable Xenia Canary in its Emulators/Xenia Canary folder: use that as the install folder.",
+    "Process name for the running check: xenia_canary.exe."
+  ]
+}

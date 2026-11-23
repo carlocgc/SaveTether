@@ -1,0 +1,1 @@
+{"schema":1,"id":"generic-game","name":"Generic Game","kind":"game","installs":[{"id":"windows","os":"windows","detect":{"dir":"{documents}/My Games/GenericGame"},"base":"{documents}"}],"roles":[{"id":"save","class":"save","default":true,"path":{"windows":"My Games/GenericGame"},"target":"save"}],"tier":"imported","origin":"ludusavi"}

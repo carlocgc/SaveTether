@@ -1,0 +1,85 @@
+// RPCS3 (PlayStation 3 emulator). Shipped with SaveTether; replaces the Ludusavi entry, which shares the whole dev_hdd0/home. The
+// folders come from RPCS3's source (Utilities/File.cpp get_config_dir, Emu/vfs_config.h, savestate_utils.cpp), read 2026-11-22. The
+// EmuDeck folder comes from EmuDeck's RPCS3 script and the owner's Steam Deck, where dev_hdd0 is moved to Emulation/storage/rpcs3.
+// Not yet tried with `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "rpcs3",
+  "name": "RPCS3",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-install",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/dev_hdd0" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:net.rpcs3.RPCS3}/config/rpcs3/dev_hdd0" },
+      "base": "{flatpak:net.rpcs3.RPCS3}/config/rpcs3"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_config}/rpcs3/dev_hdd0" },
+      "base": "{xdg_config}/rpcs3"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/storage/rpcs3/dev_hdd0" },
+      "base": "{emudeck}/storage/rpcs3"
+    }
+  ],
+  "roles": [
+    {
+      "id": "savedata",
+      "class": "save",
+      "default": true,
+      "path": "dev_hdd0/home/00000001/savedata",
+      "target": "savedata",
+      "notes": "Game saves for the first user (00000001): a folder per save."
+    },
+    {
+      "id": "trophy",
+      "class": "save",
+      "default": true,
+      "path": "dev_hdd0/home/00000001/trophy",
+      "target": "trophy",
+      "notes": "Trophies for the first user."
+    },
+    {
+      "id": "games",
+      "class": "system",
+      "default": false,
+      "path": "dev_hdd0/game",
+      "target": "game",
+      "notes": "Installed games, updates and DLC: often many gigabytes. Some games also keep data they need here."
+    },
+    {
+      "id": "savestates",
+      "class": "state",
+      "default": false,
+      "path": { "win-install": "savestates", "linux-flatpak": "savestates", "linux-native": "savestates" },
+      "target": "savestates",
+      "notes": "Save states: a newer RPCS3 may not load an older one. Not for EmuDeck, which keeps them in ~/.config/rpcs3."
+    },
+    {
+      "id": "patches",
+      "class": "mod",
+      "default": false,
+      "path": { "win-install": "patches", "linux-flatpak": "patches", "linux-native": "patches" },
+      "target": "patches",
+      "notes": "Game patches (patch.yml and imported ones). Not for EmuDeck, which keeps them in ~/.config/rpcs3."
+    }
+  ],
+  "quirks": [
+    "config, input_configs, GuiConfigs, vfs.yml and cache stay on each device. dev_flash holds the installed firmware: install it on each device.",
+    "A portable folder beside the program, or RPCS3_CONFIG_DIR on Windows, moves the whole folder; vfs.yml can move dev_hdd0. Add app follows the default location only.",
+    "The Flatpak's config folder can be a link to ~/.config/rpcs3 (it is on the owner's Deck), so both Linux installs may be found for one folder.",
+    "Process name for the running check: rpcs3.exe on Windows, rpcs3 or the AppImage on Linux."
+  ]
+}

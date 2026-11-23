@@ -1,0 +1,88 @@
+// RetroArch (multi-system emulator front end). Shipped with SaveTether; replaces the Ludusavi entry, which lists only saves and
+// states. The folders are RetroArch's defaults (saves, states, system, thumbnails, screenshots and cheats under its config folder, or
+// beside retroarch.exe on Windows); the Flatpak folder was read on the owner's Steam Deck, where EmuDeck links
+// Emulation/saves/retroarch to it. Not yet tried with `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "retroarch",
+  "name": "RetroArch",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-install",
+      "os": "windows",
+      "detect": { "file": "{install_dir}/retroarch.cfg" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "file": "{flatpak:org.libretro.RetroArch}/config/retroarch/retroarch.cfg" },
+      "base": "{flatpak:org.libretro.RetroArch}/config/retroarch"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "file": "{xdg_config}/retroarch/retroarch.cfg" },
+      "base": "{xdg_config}/retroarch"
+    }
+  ],
+  "roles": [
+    {
+      "id": "saves",
+      "class": "save",
+      "default": true,
+      "path": "saves",
+      "target": "saves",
+      "notes": "In-game saves (.srm and others), for every core."
+    },
+    {
+      "id": "states",
+      "class": "state",
+      "default": false,
+      "path": "states",
+      "target": "states",
+      "notes": "Save states: a newer core may not load an older one."
+    },
+    {
+      "id": "system",
+      "class": "system",
+      "default": false,
+      "path": "system",
+      "target": "system",
+      "notes": "BIOS and system files the cores need."
+    },
+    {
+      "id": "cheats",
+      "class": "mod",
+      "default": false,
+      "path": "cheats",
+      "target": "cheats",
+      "notes": "Cheat files."
+    },
+    {
+      "id": "thumbnails",
+      "class": "media",
+      "default": false,
+      "path": "thumbnails",
+      "target": "thumbnails",
+      "notes": "Box art, title screens and snaps for the playlists: can be large."
+    },
+    {
+      "id": "screenshots",
+      "class": "media",
+      "default": false,
+      "path": "screenshots",
+      "target": "screenshots",
+      "notes": "Screenshots."
+    }
+  ],
+  "quirks": [
+    "cores, playlists, config (core overrides) and retroarch.cfg stay on each device: cores are built for each system, and playlists hold full paths.",
+    "Settings > Directory can move any of these folders; Add app follows the default location only. EmuDeck points the system folder at Emulation/bios.",
+    "EmuDeck keeps RetroArch's own Flatpak folder and only links Emulation/saves/retroarch to it, so use the Flatpak install there.",
+    "On Windows set the install folder to the one holding retroarch.exe, which is also the Steam copy's folder.",
+    "Process name for the running check: retroarch.exe on Windows, retroarch on Linux."
+  ]
+}

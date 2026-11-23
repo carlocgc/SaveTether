@@ -1,0 +1,11 @@
+Split When Game:
+  files:
+    "<winDocuments>/Split When/Saves":
+      tags: [save]
+      when:
+        - os: windows
+          store: gog
+        - os: linux
+          store: steam
+  steam:
+    id: 4343

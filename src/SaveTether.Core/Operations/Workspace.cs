@@ -33,6 +33,15 @@ public sealed record StatusReport(
 {
     public bool SyncRootAvailable => SyncRootProblem is null;
 
+    /// <summary>Set when this install's ID is in a tombstone: the device was removed from the sync folder (phase 3.6, D6).</summary>
+    public RemovalKind? Removal { get; init; }
+
+    /// <summary>The device that did the removal, when <see cref="Removal"/> is set.</summary>
+    public string? RemovedBy { get; init; }
+
+    /// <summary>Devices whose file is in the sync folder although their install ID is tombstoned: a sync tool put it back.</summary>
+    public IReadOnlyList<string> ReturnedDevices { get; init; } = [];
+
     /// <summary>
     /// The program the autostart entry starts, when the entry is there and the program is not (desktop-app-spec.md,
     /// section 11). Set by the front end that reads the entry, not by <see cref="Workspace.Status"/>.
@@ -91,9 +100,23 @@ public sealed partial class Workspace
         return new Workspace(local, bootstrap, processes, time, faults, flatpak);
     }
 
+    /// <summary>
+    /// Why a sync root on a network drive is refused on Windows, where every link SaveTether makes is a junction
+    /// and a junction can only point to a local drive. The way out is a local copy that a sync tool keeps in step.
+    /// </summary>
+    public static string NetworkSyncRootMessage(string syncRoot) =>
+        $"'{syncRoot}' is on a network drive. On Windows, SaveTether links save folders with junctions, which can only point to a local drive, " +
+        "so no save folder could be linked there. Use a folder on a local drive, and keep it in step with the share or the other devices with a sync tool.";
+
     /// <summary>The device names that have a file in the sync root, for "init" to offer.</summary>
     public static IReadOnlyList<string> ExistingDevices(string syncRoot)
     {
+        // Not looked at on Windows: Init refuses it, and probing a share that is not there stalls first.
+        if (PathRules.IsOnNetworkDrive(syncRoot))
+        {
+            return [];
+        }
+
         var shared = new SharedStore(syncRoot);
         return shared.IsInitialized ? shared.ListDeviceNames() : [];
     }
@@ -107,6 +130,12 @@ public sealed partial class Workspace
     {
         ArgumentNullException.ThrowIfNull(local);
         ArgumentNullException.ThrowIfNull(request);
+
+        // First, and by the path alone: probing a share that is not there can stall on a network timeout.
+        if (PathRules.IsOnNetworkDrive(request.SyncRoot))
+        {
+            throw new StoreException(StoreProblem.Invalid, NetworkSyncRootMessage(request.SyncRoot));
+        }
 
         var shared = new SharedStore(request.SyncRoot);
         if (!Identifiers.IsValidDeviceName(request.DeviceName))
@@ -145,6 +174,11 @@ public sealed partial class Workspace
         var alreadyOurs = existing is not null && local.TryReadBootstrap() is { } known
             && known.DeviceName == existing.DeviceName && known.InstallId == existing.InstallId;
         var device = alreadyOurs ? existing! : DeviceIdentity.Claim(shared, request.DeviceName, backupRoot, request.TakeOver);
+        if (!alreadyOurs)
+        {
+            shared.DeleteTombstone(request.DeviceName); // The name is reused by a new install, with a new install ID.
+        }
+
         if (device.BackupRoot != backupRoot)
         {
             device = device with { BackupRoot = backupRoot };
@@ -277,6 +311,11 @@ public sealed partial class Workspace
         }
 
         var newSource = PathRules.Normalize(source);
+        if (PathRules.IsOnNetworkDrive(newSource))
+        {
+            throw new StoreException(StoreProblem.Invalid, NetworkFolderMessage(newSource) + " Nothing was changed.");
+        }
+
         if (SourceOverlap(mappingId, newSource, SourcesOf(device)) is { } overlap)
         {
             throw new StoreException(overlap.Message, overlap.Facts);
@@ -331,6 +370,14 @@ public sealed partial class Workspace
         return new MapResult(mapping, path, created, depthChanged);
     }
 
+    /// <summary>
+    /// Why a folder to link on a network drive is refused on Windows: a junction cannot be made there, so an apply
+    /// would copy the folder into the shared copy and then fail. Refused when the folder is added, before anything is written.
+    /// </summary>
+    public static string NetworkFolderMessage(string folder) =>
+        $"The folder '{folder}' is on a network drive. On Windows SaveTether can only link a folder on a local drive, " +
+        "because a junction cannot be made on a network drive.";
+
     /// <summary>"map remove": drops this device's entry only. The shared mapping stays for the other devices.</summary>
     public DevicePath MapRemove(string mappingId)
     {
@@ -364,6 +411,15 @@ public sealed partial class Workspace
     {
         if (!Shared.IsInitialized)
         {
+            if (SharedTreeGone)
+            {
+                // Delete everything deleted the shared folder and stopped before the local state: not "sync root unavailable".
+                return new StatusReport(DeviceName, Shared.SyncRoot, DeviceFileMismatch: false, Journal.IsOpen, [])
+                {
+                    Removal = RemovalKind.Unfinished, RemovedBy = DeviceName,
+                };
+            }
+
             var problem = Shared.NotAvailableMessage;
             var recorded = Local.ReadState().Mappings;
             if (mappingId is not null && !recorded.ContainsKey(mappingId))
@@ -381,18 +437,55 @@ public sealed partial class Workspace
                 problem);
         }
 
-        var device = Shared.TryReadDevice(DeviceName)
-            ?? throw new StoreException(
+        var tombstones = Shared.ReadTombstones();
+        var own = tombstones.FirstOrDefault(t => t.InstallId == Bootstrap.InstallId);
+        var gone = tombstones.Select(t => t.InstallId).ToHashSet(StringComparer.Ordinal);
+        var returned = new List<string>();
+        foreach (var name in Shared.ListDeviceNames())
+        {
+            try
+            {
+                if (gone.Contains(Shared.ReadDevice(name).InstallId))
+                {
+                    returned.Add(name);
+                }
+            }
+            catch (StoreException)
+            {
+                // A device file this version cannot read is not one to flag.
+            }
+        }
+
+        var device = Shared.TryReadDevice(DeviceName);
+        if (device is null && own is not null)
+        {
+            // Removed from the sync folder, with this install's files still here: nothing to check against.
+            return new StatusReport(DeviceName, Shared.SyncRoot, DeviceFileMismatch: false, Journal.IsOpen, [])
+            {
+                Removal = RemovalOf(own), RemovedBy = own.RemovedBy, ReturnedDevices = returned,
+            };
+        }
+
+        if (device is null)
+        {
+            throw new StoreException(
                 StoreProblem.NotFound,
                 new Note($"The sync root has no file for this device ('{DeviceName}').", new NextStep(NextStepKind.SetUpAgain)));
+        }
         var state = Local.ReadState();
         var mappings = mappingId is null ? Shared.ListMappings() : [ReadMapping(mappingId)];
         return new StatusReport(
             DeviceName, Shared.SyncRoot, !DeviceIdentity.Matches(Bootstrap, device), Journal.IsOpen,
             mappings
                 .Select(m => HealthCheck.Check(Shared, m, device.Paths.GetValueOrDefault(m.Id), state.Mappings.GetValueOrDefault(m.Id)))
-                .ToList());
+                .ToList())
+        {
+            Removal = own is null ? null : RemovalOf(own), RemovedBy = own?.RemovedBy, ReturnedDevices = returned,
+        };
     }
+
+    private RemovalKind RemovalOf(TombstoneFile own) =>
+        own.RemovedBy == DeviceName ? RemovalKind.Unfinished : RemovalKind.RemovedByAnother;
 
     /// <summary>The mappings this device has a save folder for, in order: what "apply --all" runs.</summary>
     public IReadOnlyList<string> MappingsWithPaths() => ReadOwnDevice().Paths.Keys.Order(StringComparer.Ordinal).ToList();
@@ -480,6 +573,25 @@ public sealed partial class Workspace
         return OpenBackups(ReadOwnDevice()).Remove(backupId);
     }
 
+    /// <summary>"backup delete --all/--keep-first/--keep-last", before asking: what it would delete. Reads only.</summary>
+    public IReadOnlyList<BackupInfo> DescribeBackupCleanup(string? mappingId, BackupCleanup mode) =>
+        OpenBackups(ReadOwnDevice()).Select(mappingId, mode);
+
+    /// <summary>
+    /// "backup delete" in bulk. Refused while an operation is unfinished, as <see cref="DeleteBackup"/> is.
+    /// Call it under the operation lock, once the owner has confirmed.
+    /// </summary>
+    public IReadOnlyList<BackupInfo> CleanUpBackups(string? mappingId, BackupCleanup mode)
+    {
+        if (Journal.IsOpen)
+        {
+            throw new BackupException(
+                "No backup is deleted while an operation is unfinished: recovering it may need its backups. Recover first.");
+        }
+
+        return OpenBackups(ReadOwnDevice()).RemoveMany(mappingId, mode);
+    }
+
     private Executor NewExecutor(DeviceFile? device)
     {
         BackupStore? backups = null;
@@ -526,7 +638,7 @@ public sealed partial class Workspace
     /// </summary>
     private DeviceFile ReadOwnDevice()
     {
-        var device = Shared.TryReadDevice(DeviceName)
+        var device = Shared.TryReadDevice(DeviceName) ?? RemovedDeviceFile()
             ?? throw new StoreException(
                 StoreProblem.NotFound,
                 new Note($"The sync root has no file for this device ('{DeviceName}').", new NextStep(NextStepKind.SetUpAgain)));

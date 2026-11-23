@@ -10,6 +10,15 @@ namespace SaveTether.Core.Planning;
 /// </summary>
 public static class Planner
 {
+    // Notes the desktop app says in its own words, so it leaves them out of its confirmation (ActionTexts.Confirmation).
+    public const string RevertLeavesSharedNote = "The shared folder is left as it is, for the other devices.";
+
+    public const string AlreadyAppliedReplaceNote =
+        "Already linked, so no saves are copied or deleted. The shared folder as it is now becomes the agreed copy, " +
+        "and the other devices' records are marked as superseded.";
+
+    public const string ReplaceSharedNote = "The shared saves in the sync folder will be replaced. They are backed up on this device first.";
+
     public const string AsideSuffix = ".savetether-old";
     public const string StagingSuffix = ".savetether-new";
 
@@ -118,7 +127,7 @@ public static class Planner
 
         var staging = s.Source + StagingSuffix;
         var steps = new List<PlanStep>();
-        var notes = new List<Note> { "The shared folder is left as it is, for the other devices." };
+        var notes = new List<Note> { RevertLeavesSharedNote };
         if (s.TargetTree.HasData)
         {
             steps.Add(new PlanStep(StepKind.BackUpTarget, s.Target));
@@ -215,6 +224,12 @@ public static class Planner
         {
             Fail(PrecheckKind.PathsOverlap, $"The save folder '{s.Source}' contains the shared folder '{s.Target}'.");
         }
+        else if (IsTooBroad(s.ResolvedSource))
+        {
+            Fail(
+                PrecheckKind.SourceUnusable,
+                $"'{s.Source}' is a drive root or the home folder, or holds it. Linking it would move far more than a save folder. Check the path for a typing mistake.");
+        }
 
         if (!s.SourceParentExists)
         {
@@ -236,6 +251,13 @@ public static class Planner
         if (!s.TargetOnLocalVolume)
         {
             Fail(PrecheckKind.TargetNotLocal, $"The shared folder '{s.Target}' is on a network drive. A Windows junction can only point to a local drive.");
+        }
+
+        if (!s.SourceOnLocalVolume)
+        {
+            Fail(
+                PrecheckKind.SourceNotLocal,
+                $"The folder '{s.Source}' is on a network drive. On Windows SaveTether can only link a folder on a local drive, because a junction cannot be made on a network drive.");
         }
 
         if (s.Sandbox is { CanReach: false } sandbox)
@@ -355,8 +377,7 @@ public static class Planner
                     new PlanStep(StepKind.WriteState, s.Source, s.Target),
                 ],
                 [
-                    "Already linked, so no saves are copied or deleted. The shared folder as it is now becomes the agreed copy, " +
-                    "and the other devices' records are marked as superseded.",
+                    AlreadyAppliedReplaceNote,
                     "If the shared folder does not hold the saves you want: revert, restore this device's backup, " +
                     "then apply again, replacing the shared saves.",
                 ]);
@@ -426,7 +447,7 @@ public static class Planner
                 AddSwitchSteps(s, steps);
                 return Planned(
                     s, Classification.FirstDevice, SetupChoice.NoCopy, steps,
-                    ["The shared location is empty, so the app will see no saves after this. This device's saves will be in the backup only."]);
+                    ["The shared location is empty, so the app will see no data after this. This device's data will be in the backup only."]);
             }
 
             default:
@@ -508,7 +529,7 @@ public static class Planner
                     return Refuse(
                         s, RefusalKind.ConfirmationNeeded, Classification.Guard,
                         new Note(
-                            "Replacing the shared saves deletes them on every device once it syncs. " +
+                            "Replacing the shared saves deletes them from the sync folder, which other devices may use. " +
                             "The shared copy is backed up on this device first.",
                             new NextStep(NextStepKind.ConfirmReplace, s.MappingId)),
                         allowed: GuardChoices, comparison: comparison);
@@ -529,7 +550,7 @@ public static class Planner
                 AddSwitchSteps(s, steps, StepKind.WriteSeedMarker, StepKind.SupersedeMarkers);
                 return Planned(
                     s, Classification.Guard, SetupChoice.ReplaceShared, steps,
-                    ["The shared saves will be replaced on every device once this syncs. They are backed up on this device first."]);
+                    [ReplaceSharedNote]);
             }
         }
     }
@@ -552,6 +573,14 @@ public static class Planner
         {
             steps.Add(new PlanStep(StepKind.DeleteAside, aside));
         }
+    }
+
+    /// <summary>True for a filesystem root, the user's home folder, or a folder that holds it.</summary>
+    private static bool IsTooBroad(string resolvedSource)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return PathRules.AreSame(resolvedSource, Path.GetPathRoot(resolvedSource) ?? resolvedSource)
+            || (home.Length > 0 && PathRules.IsSameOrInside(PathRules.ResolveAll(home), resolvedSource));
     }
 
     private static void AddArrivalNote(Snapshot s, List<string> notes)

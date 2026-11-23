@@ -46,7 +46,7 @@ internal static class PlanRenderer
             StepKind.BackUpSource => $"Back up '{step.Path}' and verify the backup",
             StepKind.BackUpTarget => $"Back up the shared folder '{step.Path}' to this device and verify the backup",
             StepKind.EnsureTarget => $"Create the shared folder '{step.Path}' if it does not exist",
-            StepKind.ClearTarget => $"Delete the contents of the shared folder '{step.Path}' (this spreads to every device)",
+            StepKind.ClearTarget => $"Delete the contents of the shared folder '{step.Path}' (any other devices that use the sync folder will see this)",
             StepKind.CopyIntoTarget when step.Entries is { } entries =>
                 $"Copy into '{step.OtherPath}' only: {string.Join(", ", entries)}",
             StepKind.CopyIntoTarget => $"Copy everything from '{step.Path}' into '{step.OtherPath}'",
@@ -104,7 +104,7 @@ internal static class PlanRenderer
         {
             text.AppendLine(
                 "  Note: No other device has set this mapping up, as far as this device can see. " +
-                "If you already set it up elsewhere, wait until that has synced before continuing.");
+                "If you already set it up elsewhere, make sure no other device is still writing to the sync folder before continuing.");
         }
     }
 

@@ -1,0 +1,35 @@
+// xemu (original Xbox emulator). Shipped with SaveTether. Saves live inside the hard disk image, which xemu asks for on first start and which
+// can sit anywhere, so only EmuDeck's install has a fixed folder (Emulation/storage/xemu, from EmuDeck's own xemu script, read on the owner's
+// Steam Deck, 2026-11-22). Elsewhere, "Add a folder by hand" with the image's folder. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "xemu",
+  "name": "xemu",
+  "kind": "emulator",
+  "tier": "verified",
+  "tested_on": ["Steam Deck, EmuDeck (dry run; the folder was absent there)"],
+  "installs": [
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/storage/xemu" },
+      "base": "{emudeck}/storage"
+    }
+  ],
+  "roles": [
+    {
+      "id": "hdd",
+      "class": "save",
+      "default": true,
+      "path": "xemu",
+      "target": "hdd",
+      "notes": "The hard disk image xbox_hdd.qcow2, which holds every game's saves, and eeprom.bin. One large file: any change sends all of it again."
+    }
+  ],
+  "quirks": [
+    "Outside EmuDeck the image is wherever Settings > System > Hard Disk points (hdd_path in xemu.toml); add its folder by hand.",
+    "EmuDeck installs the Flatpak (app.xemu.xemu) and points hdd_path and eeprom_path at Emulation/storage/xemu; Emulation/saves/xemu/saves is only a link to it.",
+    "Run xemu on one device at a time: two copies of the image changed apart cannot be merged.",
+    "Process name for the running check: xemu.exe on Windows, xemu on Linux (the Flatpak runs it too)."
+  ]
+}

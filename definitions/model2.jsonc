@@ -1,0 +1,47 @@
+// Model 2 Emulator (Sega Model 2 emulator, Windows; on Linux it runs under Proton). Shipped with SaveTether. It is portable and keeps
+// everything beside EMULATOR.EXE: NVDATA (NVRAM), CFG (per-game input and settings) and SHOTS, as in the owner's copy under LaunchBox
+// (1.1a) and the Deck's EmuDeck copy in Emulation/roms/model2 (EmuDeck's Model 2 script, read 2026-11-22). The emulator is closed
+// source, so these come from its folders, not its code. Not yet tried with `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "model2",
+  "name": "Model 2 Emulator",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/NVDATA" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/roms/model2/NVDATA" },
+      "base": "{emudeck}/roms/model2"
+    }
+  ],
+  "roles": [
+    {
+      "id": "nvdata",
+      "class": "save",
+      "default": true,
+      "path": "NVDATA",
+      "target": "NVDATA",
+      "notes": "Each game's NVRAM (.DAT): settings, records and high scores."
+    },
+    {
+      "id": "shots",
+      "class": "media",
+      "default": false,
+      "path": "SHOTS",
+      "target": "SHOTS",
+      "notes": "Screenshots."
+    }
+  ],
+  "quirks": [
+    "CFG (per-game input and settings) and EMULATOR.INI (ROM folders) stay on each device.",
+    "Process name for the running check: EMULATOR.EXE or emulator_multicpu.exe."
+  ]
+}

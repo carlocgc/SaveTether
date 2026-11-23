@@ -51,7 +51,7 @@ The contract is checked by `JsonContractTests` against `tests/SaveTether.Tests/C
 | `conflict` | object | When `problem` is `conflict`: what is in the way. See "Conflict". |
 | `message` | string | A sentence the owner should read: `apply --all` with nothing to apply, or `app list` when the shared definitions could not be read. |
 
-Then one section, depending on the command: `init`, `mapping`, `app`, `apps`, `status`, `operations` or `backups`.
+Then one section, depending on the command: `init`, `mapping`, `app`, `apps`, `found`, `status`, `operations` or `backups`.
 
 ## Commands
 
@@ -93,6 +93,21 @@ Store problems specific to `init`: `not-initialized` (the sync folder has no Sav
 
 A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `not-found`.
 
+### `map delete`
+
+`map delete <id>`, with `--confirm-delete`, which says that every write to the role's shared folder is complete and the sync folder is up to date on every device that uses it. With `--json` nothing is asked, so without `--confirm-delete` it is refused (exit 1) and nothing is deleted. Refused (exit 1, `problem` `conflict`, `conflict.kind` `in-use-on-devices`) while any device, this one included, has a folder set for the mapping, and (exit 3) while an operation is unfinished. A deletion that stops part way (a file arrived after the backup, or a delete failed) is a refusal (exit 1) whose message says what was removed and names the backup; running it again finishes. Added 2026-11-21.
+
+`mapping_deleted` object, present when the mapping was deleted from the shared folder:
+
+| Field | Type | |
+|---|---|---|
+| `mapping_id` | string | The mapping that was deleted. |
+| `target_folder` | string | The shared folder that held its saves. |
+| `target_exists` | boolean | False when the shared folder was already gone, which a `map delete` that stopped part way leaves; there is then no backup. |
+| `files` | number | Files the shared folder held. |
+| `bytes` | number | Their total size. |
+| `backup` | object or null | The verified backup of the shared folder taken on this device first, with the fields of `backups[]` above (`reason` is `pre-delete`); null when the folder held no files. |
+
 ### `app add` and `app list`
 
 `app add <app>` flags: `--install <id>`, `--role <id>` (repeatable), `--install-dir <path>`, `--sd-card <path>`, `--wine-prefix <path>`, `--dry-run`.
@@ -113,8 +128,9 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | Field | Type | |
 |---|---|---|
 | `app_id`, `app_name` | string | |
-| `definition_source` | string | `built-in` or `shared`. |
-| `definition_location` | string | The shared definition's file, or `built-in <file name>`. |
+| `definition_source` | string | `built-in`, `shared` or `imported`. |
+| `verified` | boolean | False when the definition was converted from the Ludusavi manifest and has not been tried by hand (`definition_source` is `imported`). |
+| `definition_location` | string | The shared definition's file, `built-in <file name>`, or `imported <file name>`. |
 | `install` | string | The install ID used. |
 | `values` | object | What this device records for the app: `install`, and `install_dir`, `sd_card`, `wine_prefix` when given or found. |
 | `roles` | array of object | One per role to add. |
@@ -124,7 +140,42 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 
 `candidates[]`: `id`, `is_detected`, `found` (what showed the install is there, when found), `reason` (why not, when not found), `problem` (why not, as a resolve problem below).
 
-`app list` takes no flags. `apps` is an array of `id`, `name`, `source` (`built-in` or `shared`), and `error` when the definition has mistakes (then `name` may be absent).
+`app list` takes `--search <text>`. `apps` is an array of `id`, `name`, `source` (`built-in`, `shared` or `imported`), `verified` (false for `imported`), and `error` when the definition has mistakes (then `name` may be absent).
+
+`app list --found` has `found` instead of `apps`: an array of `id`, `name`, `source` (as above), `verified`, `install` (the install ID found), `save_folder` (the folder found) and `newest_write` (when that folder last changed, UTC; absent when it holds no file), newest first. The `--search` filter applies to it.
+
+### `device list`
+
+`device list`, no flags. `devices` object:
+
+| Field | Type | |
+|---|---|---|
+| `sync_root` | string | |
+| `devices[]` | array | `name`, `install_id`, `last_activity_utc` (the newest of its device file and its seed markers), `mapping_count` (mappings it has a save folder for), `is_this_device`, `tombstoned` (the device was removed, and its file came back). |
+| `mappings` | array of string | Every mapping ID in the shared list. |
+| `mappings_here` | array of string | Those this device has a save folder for. |
+| `linked_here` | array of string | Those this device has applied. |
+| `orphans` | array of string | Mappings no device has a save folder for. |
+| `backup_count` | number | This device's backups. |
+| `backup_bytes` | number | Their total size. |
+
+### `device rename`
+
+`device rename <new-name>`, no flags. `renamed` object: `old_name` and `new_name` (strings; equal when only files left by an earlier rename were cleared). Exit 3 while an operation is unfinished.
+
+### `device remove`
+
+`device remove [--delete-orphan <mapping>[:saves]]... [--delete-backups] [--delete-everything] [--confirm-remove] [--confirm-delete]` (added 2026-11-22; `--delete-everything` adds no field, and exits 1 while another device is registered). `device remove --other <name> [--confirm-remove]` removes a device that is gone: `removal` has an empty `given_back`, `not_linked` and `orphans`, `shared_files` lists that device's deleted files, `backups_deleted` is 0. Exit 1 when the name is this device's own, unknown, or a file left by a rename. Under `--json` without `--confirm-remove` nothing is changed and the answer has `dry_run` true. Exit 1 when a link cannot be reverted (the error says which and why) or a `--delete-orphan` names a mapping another device uses; 2 when a revert failed and was rolled back; 3 while an operation is unfinished. A failed revert leaves everything in the sync folder as it was. `removal` object:
+
+| Field | Type | |
+|---|---|---|
+| `dry_run` | boolean | True when nothing was changed. |
+| `given_back` | array of strings | The save folders that are (or would be) real folders again. |
+| `not_linked` | array of strings | Mapping IDs this device has a folder for that are not linked here, and were skipped. |
+| `orphans` | array of objects | Mappings only this device used: `mapping_id`, and `choice`: `keep`, `delete-mapping` or `delete-with-saves`. After a run, only the ones deleted. |
+| `shared_files` | array of strings | This device's files in the sync folder (its seed markers and its device file). |
+| `backups_deleted` | number | The backups deleted, or with `dry_run` the ones that would be; 0 when they are kept. |
+| `other` | string | Only with `--other`: the name of the device removed. Absent when this device was removed. |
 
 ### `status`
 
@@ -141,6 +192,9 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `device_file_mismatch` | boolean | The device name now belongs to another install. |
 | `journal_open` | boolean | An operation is unfinished. |
 | `mappings` | array of object | One per mapping. |
+| `removal` | string | Present when this install's ID is in a record of removed devices: `removed-by-another` (the device `removed_by` removed this one) or `unfinished` (this device's own removal did not finish). `mappings` is then empty if this device's file is gone. Added 2026-11-22. |
+| `removed_by` | string | Present with `removal`: the name of the device that did the removal. |
+| `returned_devices` | array of string | Devices whose file is in the sync folder although they were removed: a sync tool put it back. Empty when none. |
 | `autostart_missing` | string | Present only when the desktop app is set to start with the session and the program the entry names is missing: that program's path. `status` only reports it; it does not change the entry. Added 2026-11-18. |
 
 `mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner).
@@ -218,6 +272,24 @@ Flags:
 | `was_first` | boolean | It was its mapping's first backup, which retention never removes: usually the only copy of the folder from before SaveTether changed it. |
 | `remaining` | number | How many backups of the mapping are left. |
 
+`backup delete --all | --keep-first | --keep-last [--mapping <id>]` deletes many (added 2026-11-22). `--all` without `--confirm-delete` under `--json` deletes nothing and answers with `dry_run` true; the two `--keep-` modes need no flag. `backups_cleaned` object:
+
+| Field | Type | |
+|---|---|---|
+| `removed` | array of objects | The backups deleted, or with `dry_run` the ones that would be, each with the fields of `backups[]` above. |
+| `dry_run` | boolean | True when nothing was deleted. |
+
+### `uninstall`
+
+`uninstall`, with `--confirm-uninstall`. With `--json` nothing is asked, so without `--confirm-uninstall` it is refused (exit 1) and nothing is removed. Refused (exit 1) when nothing is installed, and on Windows, where the installer's uninstaller does this. Added 2026-11-19.
+
+`uninstalled` object, present when SaveTether was uninstalled:
+
+| Field | Type | |
+|---|---|---|
+| `removed` | array of strings | Each file, link, folder or autostart entry removed. |
+| `left` | array of strings | Each one left, with the reason: a file in the install folder that is not SaveTether's, a link SaveTether did not make, or an installed SaveTether still running after it was asked to quit (named by process id). |
+
 ## Conflict
 
 The `conflict` object, at the top level for a store refusal and in `app` for `app add`:
@@ -245,7 +317,7 @@ Every value `--json` can print, by field. A test checks that each value in the c
 
 **Refusal kind** (`refusal.kind`): `precondition`, `choice-needed`, `choice-not-allowed`, `confirmation-needed`, `not-arrived`, `foreign-link`, `broken-link`.
 
-**Precondition kind** (`failures[].kind`): `sync-root-not-initialized`, `unfinished-operation`, `target-outside-data-root`, `source-inside-sync-root`, `paths-overlap`, `source-parent-missing`, `source-unusable`, `target-unusable`, `app-running`, `backup-location-unusable`, `target-not-local`, `not-enough-space`, `sandbox-cannot-reach`, `not-applied`, `backup-unusable`, `restore-destination-unusable`.
+**Precondition kind** (`failures[].kind`): `sync-root-not-initialized`, `unfinished-operation`, `target-outside-data-root`, `source-inside-sync-root`, `paths-overlap`, `source-parent-missing`, `source-unusable`, `target-unusable`, `app-running`, `backup-location-unusable`, `target-not-local`, `source-not-local` (the folder to link is on a network drive, on Windows), `not-enough-space`, `sandbox-cannot-reach`, `not-applied`, `backup-unusable`, `restore-destination-unusable`.
 
 **Entry presence** (`comparison.entries[].presence`): `only-local`, `only-shared`, `identical`, `different`.
 
@@ -253,19 +325,21 @@ Every value `--json` can print, by field. A test checks that each value in the c
 
 **Store problem** (top-level `problem`): `not-found`, `invalid`, `schema-too-new` (a file was written by a newer SaveTether; it is left as it is), `not-initialized`, `conflict`, `name-in-use`, `operation-running` (another SaveTether process holds the operation lock), `mappings-applied`.
 
-**Conflict kind** (`conflict.kind`): `target-differs`, `applied-elsewhere`, `folder-in-use`, `target-in-use`.
+**Conflict kind** (`conflict.kind`): `target-differs`, `applied-elsewhere`, `folder-in-use`, `target-in-use`, `in-use-on-devices` (`map delete`: a device still has a folder set for the mapping; `conflict.mapping_id` is that mapping).
+
+**Removal** (`status.removal`): `removed-by-another`, `unfinished`.
 
 **Health state** (`status.mappings[].state`, design 5.5): `ok`, `not-applied`, `replaced`, `broken`, `retargeted`, `double-seed`, `foreign-link`.
 
 **Health reason** (`status.mappings[].reason`): for `not-applied`, `no-save-folder`, `save-folder-not-absolute`, `not-linked-yet`; for `replaced`, `folder-holds-files`, `folder-empty`, `folder-missing`, `not-a-folder`; for `broken`, `shared-folder-missing`, `sync-root-unavailable`.
 
-**Backup reason** (`backups[].reason`): `pre-apply`, `pre-revert`, `pre-restore`, `baseline`, `snapshot` (this version never takes one; it is listed because a backup folder may hold one made by a test build).
+**Backup reason** (`backups[].reason`): `pre-apply`, `pre-revert`, `pre-restore`, `pre-delete` (the shared folder, before `map delete` removed it), `baseline`, `snapshot` (this version never takes one; it is listed because a backup folder may hold one made by a test build).
 
-**App add problem** (`app.problem`): `unknown-app`, `invalid-definition`, `unknown-install`, `not-installed`, `install-choice-needed`, `unknown-role`, `unresolved`, `conflict`.
+**App add problem** (`app.problem`): `unknown-app`, `invalid-definition`, `unknown-install`, `not-installed`, `install-choice-needed`, `unknown-role`, `unresolved`, `conflict`, `not-local` (a role's folder is on a network drive, on Windows).
 
 **Role class** (`app.plan.roles[].class`): `save`, `system`, `state`, `cache`, `mod`, `media`.
 
-**Definition source** (`definition_source`, `apps[].source`): `built-in`, `shared`.
+**Definition source** (`definition_source`, `apps[].source`): `built-in`, `shared`, `imported`.
 
 **Resolve problem** (`app.candidates[].problem`): `invalid`, `not-on-this-os`, `needs-value`, `missing`, `ambiguous`, `not-yet-supported`.
 

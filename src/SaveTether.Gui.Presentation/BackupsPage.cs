@@ -38,15 +38,7 @@ public static class BackupsPage
         {
             if (!names.TryGetValue(id, out var name))
             {
-                try
-                {
-                    name = catalog.Find(id)?.Definition?.Name ?? id;
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-                {
-                    name = id;
-                }
-
+                name = AppNames.Resolve(catalog, id).Name;
                 names[id] = name;
             }
 
@@ -112,6 +104,7 @@ public static class BackupsPage
         BackupReason.PreApply => "before linking",
         BackupReason.PreRevert => "before reverting",
         BackupReason.PreRestore => "before restoring",
+        BackupReason.PreDelete => "before deleting",
         BackupReason.Baseline => "first backup",
         BackupReason.Snapshot => "snapshot",
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "A reason with no text."),
@@ -151,11 +144,12 @@ public static class BackupsPage
     }
 
     /// <summary>The confirmation for a backup of the shared copy (section 9.7), like replace-shared's.</summary>
-    public static string RestoreSharedTitle(string role) => $"Restore the shared saves for {role} on every device?";
+    public static string RestoreSharedTitle(string role) => $"Restore the shared copy of {role}?";
 
-    public const string RestoreSharedText =
-        "What is in the shared folder now is backed up on this device first. Then it is emptied and filled from this backup. " +
-        "The change reaches every device through the sync tool.";
+    public const string RestoreSharedText = "The shared copy is backed up on this device, then replaced with this backup.";
+
+    /// <summary>Typed to confirm restoring the shared copy, as for every other deletion of saves.</summary>
+    public const string RestoreSharedPhrase = "restore shared data";
 
     /// <summary>
     /// A local restore's confirmation sentence, above the plan's. The plan's own sentences say a backup is
@@ -165,14 +159,6 @@ public static class BackupsPage
     {
         ArgumentNullException.ThrowIfNull(row);
         return $"The save folder is put back as it was on {row.When} ({row.Reason}).";
-    }
-
-    /// <summary>Listing backups checks no processes.</summary>
-    private sealed class NoProcesses : Core.Planning.IProcessLister
-    {
-        public static readonly NoProcesses Instance = new();
-
-        public IReadOnlyList<string> RunningProcessNames() => [];
     }
 
     private static bool IsOfShared(string sourcePath, string resolvedSyncRoot)

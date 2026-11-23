@@ -371,8 +371,9 @@ public class CliCommandTests
         Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
         Assert.False(pc.IsLinked);
 
-        // The copy that reached the shared folder stays (invariant 2), so the choice is now a different one.
-        Assert.Equal("guard", pc.Expect(CliApp.ExitRefused, "apply", Id, "--copy", "--json").Operation().GetProperty("refusal").GetProperty("classification").GetString());
+        // The copy it made into the shared folder was undone too, so the same choice can be made again.
+        Assert.False(Directory.Exists(pc.Target));
+        Assert.Equal("planned", pc.Ok("apply", Id, "--copy", "--dry-run", "--json").Operation().GetProperty("outcome").GetString());
 
         // 3: a step failed after the link was verified. Everything but looking and recovering refuses.
         pc.Faults = new FailAt(StepKind.WriteState, FaultPoint.BeforeStep);
@@ -409,6 +410,7 @@ public class CliCommandTests
         Assert.Equal("rolled-back", recovered.GetProperty("outcome").GetString());
         Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
         Assert.False(pc.IsLinked);
+        Assert.False(Directory.Exists(pc.Target));
     }
 
     [Fact]

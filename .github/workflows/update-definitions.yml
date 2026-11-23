@@ -1,0 +1,136 @@
+name: Update imported definitions
+
+# Plan phase 3.5, T7. Converts the latest Ludusavi manifest and opens a pull request against development
+# when the definitions change. Run monthly, and by hand from the Actions tab.
+#
+# Before the first run, the repository must allow it: Settings > Actions > General > Workflow permissions >
+# "Allow GitHub Actions to create and approve pull requests". The permissions block below does not override it;
+# without it the push works and `gh pr create` fails.
+#
+# CI on a pull request created with the workflow's token waits for a maintainer: select "Approve workflows to run"
+# when GitHub shows that prompt, then merge once the checks pass.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-definitions
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Convert and open a pull request
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Fetch the latest manifest
+        id: manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha=$(gh api repos/mtkennerly/ludusavi-manifest/commits/master --jq .sha)
+          mkdir -p "$RUNNER_TEMP/manifest"
+          curl -fsSL "https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/$sha/data/manifest.yaml" \
+            -o "$RUNNER_TEMP/manifest/manifest.yaml"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Convert
+        run: |
+          set -euo pipefail
+          dotnet run build/convert-ludusavi.cs -- "$RUNNER_TEMP/manifest/manifest.yaml" \
+            "$RUNNER_TEMP/ludusavi.jsonl.gz" --report "$RUNNER_TEMP/report.txt" \
+            --commit "${{ steps.manifest.outputs.sha }}" --verified definitions
+
+      - name: Compare with the committed bundle
+        id: compare
+        run: |
+          set -euo pipefail
+          # Compare the decompressed lines: zlib versions can change the compressed bytes alone.
+          # Each file is decompressed by its own command, so a corrupt bundle fails the run.
+          gzip -dc definitions/imported/ludusavi.jsonl.gz > "$RUNNER_TEMP/old.jsonl"
+          gzip -dc "$RUNNER_TEMP/ludusavi.jsonl.gz" > "$RUNNER_TEMP/new.jsonl"
+          status=0
+          diff -q "$RUNNER_TEMP/old.jsonl" "$RUNNER_TEMP/new.jsonl" > /dev/null || status=$?
+          case $status in
+            0) echo "changed=false" >> "$GITHUB_OUTPUT"; echo "The definitions are unchanged." ;;
+            1) echo "changed=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "diff failed with status $status" >&2; exit 1 ;;
+          esac
+
+      - name: Open a pull request
+        if: steps.compare.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.manifest.outputs.sha }}
+        run: |
+          set -euo pipefail
+          branch="update-definitions-${SHA:0:7}"
+          title="Definitions: update from the Ludusavi manifest (${SHA:0:7})"
+
+          # A rerun for the same manifest commit resumes: an open pull request is the result; a branch
+          # without one is checked against this run's files and gets its pull request.
+          existing=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')
+          if [ -n "$existing" ]; then
+            echo "Already open: $existing"
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            git fetch -q origin "$branch"
+            for f in ludusavi.jsonl.gz ludusavi.source.txt; do
+              git show "FETCH_HEAD:definitions/imported/$f" > "$RUNNER_TEMP/remote-$f"
+            done
+            gzip -dc "$RUNNER_TEMP/remote-ludusavi.jsonl.gz" > "$RUNNER_TEMP/remote.jsonl"
+            cmp -s "$RUNNER_TEMP/remote.jsonl" "$RUNNER_TEMP/new.jsonl"               || { echo "Branch $branch exists with different definitions; delete it and rerun." >&2; exit 1; }
+            cmp -s "$RUNNER_TEMP/remote-ludusavi.source.txt" "$RUNNER_TEMP/ludusavi.source.txt"               || { echo "Branch $branch exists with a different source note; delete it and rerun." >&2; exit 1; }
+          else
+            # --commit wrote ludusavi.source.txt beside the output, in the runner's temp folder.
+            cp "$RUNNER_TEMP/ludusavi.jsonl.gz" definitions/imported/ludusavi.jsonl.gz
+            cp "$RUNNER_TEMP/ludusavi.source.txt" definitions/imported/ludusavi.source.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -b "$branch"
+            git add definitions/imported/ludusavi.jsonl.gz definitions/imported/ludusavi.source.txt
+            git commit -m "$title"
+            git push origin "$branch"
+          fi
+
+          {
+            echo "Converted the Ludusavi manifest at commit \`$SHA\` with \`build/convert-ludusavi.cs\`."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/report.txt"
+            echo '```'
+            echo
+            # The bundle is a gzip file, which GitHub cannot show a diff of. Definitions decide which folders get
+            # linked and backed up, so each changed definition is listed with its detect folders and role paths.
+            # Through files, and head -c last: a pipe closed early would kill the writer, and pipefail would fail the step.
+            diff "$RUNNER_TEMP/old.jsonl" "$RUNNER_TEMP/new.jsonl" > "$RUNNER_TEMP/changes.diff" || true
+            grep -E '^[<>] ' "$RUNNER_TEMP/changes.diff" > "$RUNNER_TEMP/changed-lines.txt" || true
+            jq -R -r '
+              .[0:1] as $side | (.[2:] | try fromjson catch null) as $d
+              | if $d == null then "\($side) (a line that cannot be read)"
+                else "\($side) \($d.id) \($d.name | @json) | detect: \([$d.installs[]?.detect | tostring] | join(" ; ")) | paths: \([$d.roles[]? | .path | tostring] | join(" ; "))" end
+            ' "$RUNNER_TEMP/changed-lines.txt" > "$RUNNER_TEMP/changes.txt"
+            echo "Changed definitions ($(wc -l < "$RUNNER_TEMP/changes.txt")): \`<\` removed, \`>\` added, each with its detect folders and role paths. The first 55000 characters are shown."
+            echo '```diff'
+            head -c 55000 "$RUNNER_TEMP/changes.txt"
+            echo '```'
+            echo
+            echo "Check the counts against the previous run before merging. CI for a pull request created by a workflow waits for approval: select **Approve workflows to run** when GitHub shows that prompt."
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --base development --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/body.md"

@@ -1,0 +1,70 @@
+// Mesen 2 (NES, SNES, Game Boy, GBA, PC Engine, SMS and WonderSwan emulator). Shipped with SaveTether. The folders come from Mesen's
+// source (UI/Config/ConfigManager.cs: settings.json beside the program makes it portable, else Documents/Mesen2 on Windows and
+// ~/.config/Mesen2 on Linux; the Saves, SaveStates, Screenshots and HdPacks folder names), read 2026-11-22. Not yet tried with
+// `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "mesen2",
+  "name": "Mesen 2",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "file": "{install_dir}/settings.json" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "win-documents",
+      "os": "windows",
+      "detect": { "file": "{documents}/Mesen2/settings.json" },
+      "base": "{documents}/Mesen2"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "file": "{xdg_config}/Mesen2/settings.json" },
+      "base": "{xdg_config}/Mesen2"
+    }
+  ],
+  "roles": [
+    {
+      "id": "saves",
+      "class": "save",
+      "default": true,
+      "path": "Saves",
+      "target": "Saves",
+      "notes": "Battery saves for every system."
+    },
+    {
+      "id": "savestates",
+      "class": "state",
+      "default": false,
+      "path": "SaveStates",
+      "target": "SaveStates",
+      "notes": "Save states: a newer Mesen may not load an older one."
+    },
+    {
+      "id": "hdpacks",
+      "class": "mod",
+      "default": false,
+      "path": "HdPacks",
+      "target": "HdPacks",
+      "notes": "HD packs (graphics and audio replacements)."
+    },
+    {
+      "id": "screenshots",
+      "class": "media",
+      "default": false,
+      "path": "Screenshots",
+      "target": "Screenshots",
+      "notes": "Screenshots."
+    }
+  ],
+  "quirks": [
+    "settings.json stays on each device: it holds video, audio, input and path settings.",
+    "Each folder can be moved in Settings > Preferences > Folders; Add app follows the default location only.",
+    "Process name for the running check: Mesen.exe on Windows, Mesen on Linux."
+  ]
+}

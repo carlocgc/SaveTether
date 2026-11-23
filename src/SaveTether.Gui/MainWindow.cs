@@ -24,9 +24,17 @@ internal sealed class MainWindow : Window
     private readonly Ellipse _dot = new() { Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _headline = new() { FontSize = 17, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _checkedAt = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _check = new() { Content = Texts.CheckNow, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _banners = new() { Spacing = 8 };
     private readonly StackPanel _rows = new() { Spacing = 2 };
+
+    /// <summary>
+    /// Above the scrolling area, so it stays in view: the Apps page's buttons, or the open screen's way back
+    /// (asked for by the owner). Empty during setup.
+    /// </summary>
+    private readonly ContentControl _bar = new();
     private readonly ScrollViewer _body;
+    private Control? _pageActions;
     private readonly Overlay _overlay;
     private readonly string _localFolder;
     private readonly Action _checkNow;
@@ -37,13 +45,64 @@ internal sealed class MainWindow : Window
     private bool _notHereOpen;
 
     /// <param name="operate">Runs one operation: the app marks itself busy around it and checks after it.</param>
+    /// <summary>The background tasks the strip along the bottom shows; a scan registers here.</summary>
+    public BackgroundTasks Tasks { get; }
+
+    /// <summary>What the scans found, kept while the window is open.</summary>
+    private readonly ScanSession _scans;
+
+    // The status in the footer's right corner: what runs in the background, or "Idle". It is one row that is always
+    // there, so a scan starting or ending moves nothing on the page (the owner took the old strip for a bug).
+    private readonly TextBlock _stripText = new() { Text = Idle, Opacity = 0.75, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _stripButton = new() { IsVisible = false, Margin = new Thickness(12, 0, 0, 0), Padding = new Thickness(8, 2), FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+    private int _stripRefreshPending;
+
+    /// <summary>What the footer says when nothing runs in the background.</summary>
+    public const string Idle = BackgroundTasks.Idle;
+
+    // The strip only reports, and Dismiss clears a failure; a scan is cancelled where it is started (Add app).
+    private void BuildStrip()
+    {
+        _stripButton.Content = "Dismiss";
+        _stripButton.Click += (_, _) => Tasks.Dismiss();
+        AutomationProperties.SetName(_stripText, "Background status");
+    }
+
+    // The scan runs at its own speed; the footer lags behind it so each line can be read (Pacing.StatusMinimum).
+    // Every change is offered to Tasks.Status the moment it happens, so a scan that starts and ends between two draws
+    // is still shown running before the footer says Idle. At most one draw is queued; the flag clears just before
+    // the draw, so a change during it queues another.
+
+    private void RequestStripRefresh()
+    {
+        if (Interlocked.Exchange(ref _stripRefreshPending, 1) == 0)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(DrawStrip);
+        }
+    }
+
+    private void DrawStrip()
+    {
+        Volatile.Write(ref _stripRefreshPending, 0);
+        _ = Tasks.Status.TryNext(out var wait);
+        _stripText.Text = Tasks.Status.Shown;
+
+        _stripButton.IsVisible = Tasks.Current is { State: BackgroundTaskState.Failed };
+        if (wait > TimeSpan.Zero && Interlocked.Exchange(ref _stripRefreshPending, 1) == 0)
+        {
+            Avalonia.Threading.DispatcherTimer.RunOnce(DrawStrip, wait);
+        }
+    }
+
     public MainWindow(string localFolder, Action checkNow, Action quit, Func<Func<ActionFlow, Task>, Task> operate)
     {
+        Tasks = new BackgroundTasks();
+        _scans = new ScanSession(Tasks);
         _localFolder = localFolder;
         _checkNow = checkNow;
         _operate = operate;
         Title = Texts.AppName;
-        Icon = Icons.For(amber: false);
+        Icon = Icons.App;
         MinWidth = 800;
         MinHeight = 560;
         Width = 1000;
@@ -51,15 +110,33 @@ internal sealed class MainWindow : Window
         FontSize = 15;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        var check = new Button { Content = Texts.CheckNow, VerticalAlignment = VerticalAlignment.Center };
-        check.Click += (_, _) => checkNow();
+        _check.Click += (_, _) => checkNow();
         AutomationProperties.SetName(_headline, "Overall state");
 
-        var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { _dot, _headline, check, _checkedAt } };
+        var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { _dot, _headline, _check, _checkedAt } };
         var header = new StackPanel { Spacing = 4, Children = { _device, _syncRoot, state } };
-        var footer = new TextBlock { Text = $"Local folder: {localFolder}", Opacity = 0.6, FontSize = 13 };
+        var folder = new TextBlock { Text = $"Local folder: {localFolder}", Opacity = 0.6, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        var footer = new DockPanel { MinHeight = 30 };
+        DockPanel.SetDock(_stripButton, Avalonia.Controls.Dock.Right);
+        DockPanel.SetDock(_stripText, Avalonia.Controls.Dock.Right);
+        footer.Children.Add(_stripButton);
+        footer.Children.Add(_stripText);
+        footer.Children.Add(folder);
 
-        _body = new ScrollViewer { Content = _rows, Margin = new Thickness(0, 12, 0, 12) };
+        // The rows' button columns are one width across the list (see Row), so no row's sentence is moved by another row's buttons.
+        Grid.SetIsSharedSizeScope(_rows, true);
+        // Right padding keeps the last button clear of the scroll bar, which is drawn over the content.
+        _body = new ScrollViewer { Content = _rows, Padding = new Thickness(0, 0, 12, 0) };
+        // The box is the scrollable area's frame: always drawn, outside what scrolls.
+        var bodyBox = new Border
+        {
+            Child = _body,
+            Margin = new Thickness(0, 12, 0, 12),
+            Padding = new Thickness(6),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+        };
         _overlay = new Overlay(new DockPanel
         {
             Margin = new Thickness(24),
@@ -68,11 +145,14 @@ internal sealed class MainWindow : Window
                 Dock(header, Avalonia.Controls.Dock.Top),
                 Dock(new Border { Height = 16 }, Avalonia.Controls.Dock.Top),
                 Dock(_banners, Avalonia.Controls.Dock.Top),
+                Dock(_bar, Avalonia.Controls.Dock.Top),
                 Dock(footer, Avalonia.Controls.Dock.Bottom),
-                _body,
+                bodyBox,
             },
         });
         Content = _overlay;
+        BuildStrip();
+        Tasks.Changed += RequestStripRefresh;
         _actions = new ActionFlow(localFolder, _overlay, App.Options.Log);
 
         KeyDown += (_, e) =>
@@ -101,16 +181,19 @@ internal sealed class MainWindow : Window
             "Something went wrong",
             $"Something went wrong: {message}\n\nSaveTether is still running. The details are in gui.log in {_localFolder}.");
 
-    /// <summary>Shows one check's result. <paramref name="iconState"/> is what the tray shows, which may lag while another process works.</summary>
-    public void Show(CheckResult result, OverallStatus? iconState)
+    /// <summary>Shows one check's result. The window keeps the app's icon; the header and the tray show the state.</summary>
+    public void Show(CheckResult result)
     {
         var status = result.Shown;
+        // The device's name in the title, so a rename shows in the window's title bar and the task list at once.
+        Title = status.Report is { } named ? $"{Texts.AppName}: {named.DeviceName}" : Texts.AppName;
         _device.Text = status.Report is { } report ? $"This device: {report.DeviceName}" : Texts.AppName;
         _syncRoot.Text = status.Report is { } r ? $"Sync folder: {r.SyncRoot}" : string.Empty;
         _dot.Fill = new SolidColorBrush(status.IsAmber ? Icons.Amber : Icons.Green);
         _headline.Text = status.Headline;
         _checkedAt.Text = "Checked " + DateTime.Now.ToString("HH:mm", CultureInfo.InvariantCulture);
-        Icon = Icons.For((iconState ?? status).IsAmber);
+        // Nothing to check before setup, and showing the window checks anyway.
+        _check.IsVisible = _checkedAt.IsVisible = status.Condition != OverallCondition.NotSetUp;
 
         // Not set up: the setup pages take the place of the rows (section 6). Made once, so a check in the
         // background does not lose what the owner has typed.
@@ -120,6 +203,7 @@ internal sealed class MainWindow : Window
             _screen = null;
             _setup ??= new SetupView(_localFolder, _overlay, _checkNow);
             _body.Content = _setup;
+            _bar.Content = null;
             return;
         }
 
@@ -134,9 +218,31 @@ internal sealed class MainWindow : Window
             recover.Click += (_, _) => _ = _operate(flow => flow.RecoverAsync());
             _banners.Children.Add(Banner(ActionTexts.Unfinished(Journal.For(new LocalStore(_localFolder)).TryRead()), null, recover));
         }
+        else if (status.Condition == OverallCondition.RemovalUnfinished)
+        {
+            // Phase 3.6: this device started its removal and it did not finish. Choices are asked again (they are not stored).
+            var finish = new Button { Content = RemoveDeviceFlow.FinishRemoval };
+            finish.Click += (_, _) => OpenScreen(new RemoveDeviceScreen(_localFolder, _operate, CloseScreen));
+            _banners.Children.Add(Banner(Texts.Banner(status)!, Texts.BannerDetail(status), finish));
+        }
+        else if (status.Condition == OverallCondition.RemovedByAnother)
+        {
+            // Phase 3.6, D6: another device removed this one. The banner takes the Apps page's place.
+            var finishHere = new Button { Content = RemoveDeviceFlow.FinishRemovalHere };
+            finishHere.Click += (_, _) => OpenScreen(new RemoveDeviceScreen(_localFolder, _operate, CloseScreen));
+            // Set up again: the removal with its defaults (links become folders, nothing shared is deleted), then setup shows.
+            var again = new Button { Content = RemoveDeviceFlow.SetUpAgain };
+            again.Click += (_, _) => _ = _operate(flow => flow.RemoveThisDeviceAsync(new Core.Operations.RemovalChoices()));
+            _banners.Children.Add(Banner(Texts.Banner(status)!, Texts.BannerDetail(status), finishHere, again));
+            _rows.Children.Clear();
+            _pageActions = null;
+            _body.Content = _screen ?? _rows;
+            _bar.Content = (_screen as IScreen)?.Bar;
+            return;
+        }
         else if (Texts.Banner(status) is { } banner)
         {
-            _banners.Children.Add(Banner(banner, status.Detail));
+            _banners.Children.Add(Banner(banner, Texts.BannerDetail(status)));
         }
 
         // Banner B5: the entry that starts the app with the session names a program that is gone (section 11).
@@ -158,15 +264,16 @@ internal sealed class MainWindow : Window
 
         // While B1, B2 or B3 is shown, or another process holds the lock, the core would refuse every action (section 4.1).
         var actionsAllowed = result.LockHeldBy is null
-            && status.Condition is not (OverallCondition.UpdateNeeded or OverallCondition.Unfinished or OverallCondition.SyncRootUnavailable);
+            && status.Condition is not (OverallCondition.UpdateNeeded or OverallCondition.Unfinished or OverallCondition.SyncRootUnavailable
+            or OverallCondition.RemovalUnfinished or OverallCondition.RemovedByAnother);
         _rows.Children.Clear();
         var page = AppsPage.From(status);
 
         // The page's actions (section 5): Add app, and Apply all when at least one row is ready to link
         // (found on the Deck hidden with one left).
-        var pageActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 8) };
+        var pageActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var addApp = new Button { Content = "Add app", IsEnabled = actionsAllowed };
-        addApp.Click += (_, _) => OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, null));
+        addApp.Click += (_, _) => OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Catalog, _scans));
         pageActions.Children.Add(addApp);
         if (page.ForApplyAll.Count > 0)
         {
@@ -182,11 +289,20 @@ internal sealed class MainWindow : Window
         var settings = new Button { Content = "Settings" };
         settings.Click += (_, _) => OpenScreen(new SettingsScreen(_localFolder, App.Session, _overlay, CloseScreen));
         pageActions.Children.Add(settings);
-        _rows.Children.Add(pageActions);
+        var maintenance = new Button { Content = "Maintenance" };
+        maintenance.Click += (_, _) => OpenMaintenance();
+        pageActions.Children.Add(maintenance);
+        // The page's title above its buttons, as on the other pages.
+        _pageActions = new StackPanel
+        {
+            Spacing = 8,
+            Children = { new TextBlock { Text = "Manage links", FontSize = 22, FontWeight = FontWeight.SemiBold }, pageActions },
+        };
+        _bar.Content = _screen is IScreen open ? open.Bar : _pageActions;
 
         foreach (var group in page.Groups)
         {
-            _rows.Children.Add(new TextBlock { Text = group.AppName, FontSize = 17, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 10, 0, 2) });
+            _rows.Children.Add(Navigation.GroupHeader(group.AppName));
             foreach (var row in group.Rows)
             {
                 _rows.Children.Add(Row(row, actionsAllowed));
@@ -206,7 +322,7 @@ internal sealed class MainWindow : Window
             // Rebuilt at every check, so whether it is open is kept here: a check must not close it under the owner.
             var expander = new Expander
             {
-                Header = $"Not on this device ({page.NotOnThisDevice.Count})",
+                Header = $"Sync folders ignored by this device ({page.NotOnThisDevice.Count})",
                 Content = list,
                 IsExpanded = _notHereOpen,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -267,19 +383,45 @@ internal sealed class MainWindow : Window
     {
         var mapping = row.Mapping;
         var name = withApp ? $"{mapping.AppName} {mapping.Role}" : mapping.Role;
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,150,170,*,Auto,Auto"), Margin = new Thickness(0, 4) };
+        // In "Not on this device" every row has the same state, which the section's name already says, so that column is dropped
+        // and its room goes to the name, which there carries the app as well.
+        // The two button columns share their width across every row (the rows' parent is a shared size scope), so a row with an
+        // extra button, such as Delete, does not move the sentence of the rows without one.
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,2*,0,3*" : "Auto,150,170,*")
+            {
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowAction" },
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowMore" },
+            },
+            Margin = new Thickness(0, 4),
+        };
         Add(grid, 0, new Ellipse { Width = 10, Height = 10, Fill = new SolidColorBrush(Icons.ColourOf(mapping.Word.Shade)), Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 1, new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 2, new TextBlock { Text = mapping.Word.Word, VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 3, new StackPanel
+        Add(grid, 1, new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) });
+        if (!withApp)
+        {
+            Add(grid, 2, new TextBlock { Text = mapping.Word.Word, VerticalAlignment = VerticalAlignment.Center });
+        }
+
+        // The folder's line only when there is one: an empty line still takes its height and pushed the sentence up.
+        var text = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
-            Children =
-            {
-                new TextBlock { Text = row.Sentence, TextWrapping = TextWrapping.Wrap },
-                new TextBlock { Text = mapping.Health.Source ?? string.Empty, Opacity = 0.65, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis },
-            },
-        });
+            Children = { new TextBlock { Text = row.Sentence, TextWrapping = TextWrapping.Wrap } },
+        };
+        if (!string.IsNullOrEmpty(mapping.Health.Source))
+        {
+            text.Children.Add(new TextBlock { Text = mapping.Health.Source, Opacity = 0.65, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis });
+        }
+
+        // The devices that have a link are in the sentence's hover text, for any number, with no styling to suggest it: the row
+        // says how many, and hovering shows who.
+        if (row.Devices is { Count: > 0 } devices)
+        {
+            ToolTip.SetTip(text, AppsPage.DevicesTip(devices));
+        }
+
+        Add(grid, 3, text);
 
         var role = $"{mapping.AppName} {mapping.Role}";
         if (row.Main is { } main)
@@ -287,7 +429,19 @@ internal sealed class MainWindow : Window
             var button = new Button { Content = AppsPage.Label(main), IsEnabled = Allowed(main, actionsAllowed), Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             AutomationProperties.SetName(button, $"{AppsPage.Label(main)}: {role}");
             button.Click += (_, _) => Do(main, row);
-            Add(grid, 4, button);
+            // In the not-here list the main action (Add) is the right-most button and Delete sits to its left, so the buttons end
+            // at the same edge as the rows above.
+            Add(grid, withApp ? 5 : 4, button);
+        }
+
+        // An action that deletes for good is its own red button, apart from More (the owner asked for red). Such a row has no More.
+        if (row.Destructive is { } destructive)
+        {
+            var delete = new Button { Content = AppsPage.Label(destructive), IsEnabled = Allowed(destructive, actionsAllowed), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            Danger.Style(delete);
+            AutomationProperties.SetName(delete, $"{AppsPage.Label(destructive)} from the shared folder: {role}");
+            delete.Click += (_, _) => Do(destructive, row);
+            Add(grid, 4, delete);
         }
 
         if (row.Others.Count > 0)
@@ -310,8 +464,8 @@ internal sealed class MainWindow : Window
 
     /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
-        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.StopUsingHere
-            or RowAction.FindAppAgain or RowAction.AddHere);
+        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.Remove or RowAction.Delete
+            or RowAction.FindAppAgain or RowAction.ChooseFolderAgain or RowAction.AddHere);
 
     /// <summary>Banner B5's Fix it (write the entry with this app's path) or Turn it off (remove it); then a check redraws.</summary>
     private void SetSessionStart(bool on)
@@ -332,12 +486,21 @@ internal sealed class MainWindow : Window
     {
         _screen = screen;
         _body.Content = screen;
+        _bar.Content = (screen as IScreen)?.Bar;
     }
+
+    private void OpenMaintenance() => OpenScreen(new MaintenanceScreen(
+        _localFolder,
+        _operate,
+        () => OpenScreen(new BackupsScreen(_localFolder, _operate, CloseScreen, null)),
+        () => OpenScreen(new RemoveDeviceScreen(_localFolder, _operate, OpenMaintenance)),
+        CloseScreen));
 
     private void CloseScreen()
     {
         _screen = null;
         _body.Content = _rows;
+        _bar.Content = _pageActions;
         _checkNow();
     }
 
@@ -356,14 +519,21 @@ internal sealed class MainWindow : Window
             case RowAction.Revert:
                 _ = _operate(flow => flow.RevertAsync(mapping));
                 break;
-            case RowAction.StopUsingHere:
-                _ = _operate(flow => flow.StopUsingAsync(mapping));
+            case RowAction.Remove:
+                _ = _operate(flow => flow.RemoveAsync(mapping));
+                break;
+            case RowAction.Delete:
+                _ = _operate(flow => flow.DeleteMappingAsync(mapping));
                 break;
             case RowAction.CheckAgain:
                 _checkNow();
                 break;
-            case RowAction.FindAppAgain or RowAction.AddHere:
-                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, mapping.AppId));
+            case RowAction.FindAppAgain or RowAction.AddHere when mapping.HasDefinition:
+                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.App(mapping.AppId), _scans));
+                break;
+            case RowAction.ChooseFolderAgain or RowAction.AddHere:
+                // A folder added by hand: the hand form for this mapping (section 8).
+                OpenScreen(new AddAppScreen(_localFolder, _overlay, _operate, CloseScreen, AddAppStart.Folder(mapping.MappingId), _scans));
                 break;
             case RowAction.Backups:
                 OpenScreen(new BackupsScreen(_localFolder, _operate, CloseScreen, mapping.AppId));

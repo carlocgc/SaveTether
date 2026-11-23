@@ -129,7 +129,18 @@ public partial class DefinitionLoaderTests
     [InlineData("{ \"dir\": \"{install_dir}/mlc01\" }", "{ \"steam\": 1.5 }", 8, "\"steam\" must be a whole number, but is 1.5")]
     [InlineData("{ \"dir\": \"{install_dir}/mlc01\" }", "{ \"registry\": \"x\" }", 8, "unknown field \"registry\"")]
     [InlineData("\"base\": \"{install_dir}/mlc01\" }", "\"base\": 7 }", 8, "\"base\" must be a path, or an object")]
-    [InlineData("\"base\": \"{install_dir}/mlc01\" }", "\"base\": { \"winpath\": \"x\" } }", 8, "\"prefix\" is missing")]
+    [InlineData("\"base\": \"{install_dir}/mlc01\" }", "\"base\": { \"prefix\": { \"steam\": 1 } } }", 8, "\"winpath\" is missing")]
+    [InlineData("\"base\": \"{install_dir}/mlc01\" }", "\"base\": { \"winpath\": \"x\", \"prefix\": 3 } }", 8, "\"prefix\" must be an object")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"tier\": \"official\",", 14, "\"tier\" must be one of \"verified\", \"imported\", but is \"official\"")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"origin\": \" \",", 14, "\"origin\" is empty")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"store_ids\": { \"steam\": 0 },", 14, "\"steam\" must be greater than 0")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"store_ids\": { \"gog\": 5 },", 14, "unknown field \"gog\"")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"store_ids\": [1],", 14, "\"store_ids\" must be an object")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"cloud_saves\": [],", 14, "\"cloud_saves\" is empty: leave it out")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"cloud_saves\": [\"itch\"],", 14, "must be one of \"steam\", \"gog\", \"epic\", \"xbox\", \"ubisoft\", \"ea\", but is \"itch\"")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"cloud_saves\": [\"gog\", \"gog\"],", 14, "names \"gog\" twice")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"cloud_saves\": \"steam\",", 14, "\"cloud_saves\" must be a list")]
+    [InlineData("\"quirks\": [\"Link usr/save, not mlc01.\"],", "\"tested_on\": [4],", 14, "an entry of \"tested_on\" must be text")]
     [InlineData("\"base\": \"{install_dir}/mlc01\" }", "\"base\": { \"winpath\": \"x\", \"prefix\": { \"steam\": 1, \"lutris\": \"y\" } } }", 8, "\"prefix\" must have exactly one of")]
     [InlineData("\"base\": \"{install_dir}/mlc01\" }", "}", 8, "\"base\" is missing")]
     [InlineData("\"class\": \"save\"", "\"class\": \"saves\"", 12, "\"class\" must be one of")]
@@ -160,6 +171,140 @@ public partial class DefinitionLoaderTests
         Assert.Contains(message, error.Message, StringComparison.Ordinal);
         Assert.Equal(line, error.Line);
         Assert.StartsWith($"cemu.jsonc({line}): ", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_optional_root_fields_are_read_and_default_to_verified_and_empty()
+    {
+        var plain = Load(Valid);
+        Assert.Equal(DefinitionTier.Verified, plain.Tier);
+        Assert.Null(plain.Origin);
+        Assert.Null(plain.StoreIds);
+        Assert.Empty(plain.CloudSaves);
+        Assert.Empty(plain.TestedOn);
+
+        var full = Load(Valid.Replace(
+            "\"quirks\": [\"Link usr/save, not mlc01.\"],",
+            "\"tier\": \"imported\", \"origin\": \"ludusavi\", \"store_ids\": { \"steam\": 377840 },\n  \"cloud_saves\": [\"steam\", \"epic\"], \"tested_on\": [\"Steam Deck\", \"Windows 11\"],",
+            StringComparison.Ordinal));
+        Assert.Equal(DefinitionTier.Imported, full.Tier);
+        Assert.Equal("ludusavi", full.Origin);
+        Assert.Equal(377840, full.StoreIds!.Steam);
+        Assert.Equal(["steam", "epic"], full.CloudSaves);
+        Assert.Equal(["Steam Deck", "Windows 11"], full.TestedOn);
+
+        Assert.Null(Load(Valid.Replace("\"quirks\"", "\"store_ids\": { }, \"quirks\"", StringComparison.Ordinal)).StoreIds);
+    }
+
+    [Fact]
+    public void A_winpath_may_leave_the_prefix_out()
+    {
+        var definition = Load("""
+            {
+              "schema": 1, "id": "vn", "name": "A Novel", "kind": "game",
+              "installs": [ { "id": "win", "os": ["windows", "linux"], "detect": { "dir": "{install_dir}" },
+                              "base": { "winpath": "{appdata}/Novel" } } ],
+              "roles": [ { "id": "saves", "class": "save", "default": true, "path": "saves", "target": "saves" } ]
+            }
+            """);
+
+        var location = definition.Installs[0].Base;
+        Assert.Equal("{appdata}/Novel", location.WinPath);
+        Assert.Null(location.Prefix);
+    }
+
+    private static MemoryStream Bundle(params string[] lines)
+    {
+        var bytes = new MemoryStream();
+        using (var gzip = new System.IO.Compression.GZipStream(bytes, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true))
+        using (var writer = new StreamWriter(gzip, new System.Text.UTF8Encoding(false)))
+        {
+            foreach (var line in lines)
+            {
+                writer.Write(line);
+                writer.Write('\n');
+            }
+        }
+
+        bytes.Position = 0;
+        return bytes;
+    }
+
+    private static string Line(string id, string extra = "") =>
+        "{\"schema\":1,\"id\":\"" + id + "\",\"name\":\"" + id + "\",\"kind\":\"game\",\"tier\":\"imported\",\"origin\":\"ludusavi\"," + extra +
+        "\"installs\":[{\"id\":\"win\",\"os\":\"windows\",\"detect\":{\"dir\":\"{appdata}/x\"},\"base\":\"{appdata}/x\"}]," +
+        "\"roles\":[{\"id\":\"saves\",\"class\":\"save\",\"default\":true,\"path\":\"s\",\"target\":\"saves\"}]}";
+
+    [Fact]
+    public void A_bundle_gives_one_definition_per_line()
+    {
+        using var stream = Bundle(Line("alpha"), "", Line("beta", "\"store_ids\":{\"steam\":7},"));
+
+        var (definitions, errors) = DefinitionLoader.ParseBundle(stream);
+
+        Assert.Empty(errors);
+        Assert.Equal(["alpha", "beta"], definitions.Select(d => d.Id));
+        Assert.All(definitions, d => Assert.Equal(DefinitionTier.Imported, d.Tier));
+        Assert.Equal(7, definitions[1].StoreIds!.Steam);
+    }
+
+    [Fact]
+    public void A_bad_line_in_a_bundle_is_reported_by_its_line_and_the_others_still_load()
+    {
+        using var stream = Bundle(Line("alpha"), Line("Bad Id"), "not json", Line("alpha"), Line("gamma"));
+
+        var (definitions, errors) = DefinitionLoader.ParseBundle(stream);
+
+        Assert.Equal(["alpha", "gamma"], definitions.Select(d => d.Id));
+        Assert.Equal([2, 3, 4], errors.Select(e => e.Line));
+        Assert.All(errors, e => Assert.Equal("bundle", e.File));
+        Assert.Contains("\"id\" must be lowercase letters", errors[0].Message, StringComparison.Ordinal);
+        Assert.Contains("another line already has the id \"alpha\"", errors[2].Message, StringComparison.Ordinal);
+        Assert.StartsWith("bundle(2): ", errors[0].ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_truncated_bundle_is_reported_once()
+    {
+        using var whole = Bundle(Line("alpha"), Line("beta"), Line("gamma"));
+        var bytes = whole.ToArray();
+
+        foreach (var keep in new[] { bytes.Length - 1, bytes.Length - 9, bytes.Length / 2 })
+        {
+            using var cut = new MemoryStream(bytes[..keep]);
+            var (_, errors) = DefinitionLoader.ParseBundle(cut);
+            Assert.Contains(errors, e => e.Message.Contains("ends early", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void A_bundle_with_invalid_utf8_is_an_error_not_a_garbled_definition()
+    {
+        var bytes = new MemoryStream();
+        using (var gzip = new System.IO.Compression.GZipStream(bytes, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true))
+        {
+            gzip.Write(System.Text.Encoding.UTF8.GetBytes(Line("alpha") + "\n"));
+            gzip.Write([0xFF, 0xFE, (byte)'\n']);
+        }
+
+        bytes.Position = 0;
+        var (_, errors) = DefinitionLoader.ParseBundle(bytes);
+
+        Assert.Contains(errors, e => e.Message.Contains("not valid UTF-8", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_empty_bundle_has_nothing_and_no_errors_and_text_that_is_not_gzip_is_one_error()
+    {
+        using var empty = Bundle();
+        var (none, noErrors) = DefinitionLoader.ParseBundle(empty);
+        Assert.Empty(none);
+        Assert.Empty(noErrors);
+
+        using var notGzip = new MemoryStream("plain text, not a bundle"u8.ToArray());
+        var (nothing, errors) = DefinitionLoader.ParseBundle(notGzip);
+        Assert.Empty(nothing);
+        Assert.Contains("not readable gzip", Assert.Single(errors).Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -272,6 +417,21 @@ public partial class DefinitionLoaderTests
     }
 
     /// <summary>
+    /// The shipped Cemu definition names the portable, Documents, Flatpak and native installs; the Documents and
+    /// Flatpak ones come from the Ludusavi manifest.
+    /// </summary>
+    [Fact]
+    public void The_shipped_cemu_definition_has_its_four_installs()
+    {
+        var definition = DefinitionLoader.LoadFile(Path.Combine(FindRepositoryRoot(), "definitions", "cemu.jsonc")).Definition!;
+
+        Assert.Equal(["win-portable", "win-documents", "linux-flatpak", "linux-native"], definition.Installs.Select(i => i.Id));
+        Assert.Equal("{documents}/mlc01", definition.Installs.Single(i => i.Id == "win-documents").Base.Path);
+        Assert.Equal("{flatpak:info.cemu.Cemu}/data/Cemu/mlc01", definition.Installs.Single(i => i.Id == "linux-flatpak").Base.Path);
+        Assert.All(definition.Roles, r => Assert.True(definition.Installs.All(i => r.Paths.ContainsKey(i.Id))));
+    }
+
+    /// <summary>
     /// definitions/definition.schema.json is for editors, and is written by hand beside the loader.
     /// This keeps the two from drifting apart on what fields and values exist.
     /// </summary>
@@ -297,10 +457,14 @@ public partial class DefinitionLoaderTests
         Assert.Equal(DefinitionLoader.BaseFields, Fields(baseObject));
         Assert.Equal(DefinitionLoader.PrefixFields, Fields(baseObject.GetProperty("properties").GetProperty("prefix")));
         Assert.Equal(DefinitionLoader.RoleFields, Fields(role));
+        Assert.Equal(DefinitionLoader.StoreIdFields, Fields(root.GetProperty("properties").GetProperty("store_ids")));
+        Assert.Equal(["winpath"], baseObject.GetProperty("required").EnumerateArray().Select(v => v.GetString()!));
 
         Assert.Equal(DefinitionLoader.Kinds.Keys, Values(root.GetProperty("properties").GetProperty("kind")));
         Assert.Equal(DefinitionLoader.Systems.Keys, Values(defs.GetProperty("os")));
         Assert.Equal(DefinitionLoader.Classes.Keys, Values(role.GetProperty("properties").GetProperty("class")));
+        Assert.Equal(DefinitionLoader.Tiers.Keys, Values(root.GetProperty("properties").GetProperty("tier")));
+        Assert.Equal(DefinitionLoader.CloudStores, root.GetProperty("properties").GetProperty("cloud_saves").GetProperty("items").GetProperty("enum").EnumerateArray().Select(v => v.GetString()!));
 
         Assert.Equal(AppDefinition.CurrentSchema, root.GetProperty("properties").GetProperty("schema").GetProperty("const").GetInt32());
         Assert.Equal(8, role.GetProperty("properties").GetProperty("entry_depth").GetProperty("maximum").GetInt32());

@@ -1,0 +1,28 @@
+Kinds Game:
+  steam:
+    id: 3003
+  files:
+    "<winAppData>/KindsGame/Saves":
+      tags: [save]
+      when:
+        - os: windows
+    "<xdgData>/KindsGame/saves":
+      tags: [save]
+      when:
+        - os: linux
+    "<home>/.var/app/com.example.Kinds/data/saves":
+      tags: [save]
+      when:
+        - os: linux
+    "<base>/UserData":
+      tags: [save]
+Two Folders Game:
+  files:
+    "<winAppData>/Two/Alpha":
+      tags: [save]
+      when:
+        - os: windows
+    "<winDocuments>/Two/Beta":
+      tags: [save]
+      when:
+        - os: windows

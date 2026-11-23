@@ -1,0 +1,1 @@
+{"schema":1,"id":"file-game","name":"File Game","kind":"game","installs":[{"id":"windows","os":"windows","detect":{"dir":"{documents}/FileGame/Saves"},"base":"{documents}"}],"roles":[{"id":"save","class":"save","default":true,"path":{"windows":"FileGame/Saves"},"target":"save"}],"tier":"imported","origin":"ludusavi"}

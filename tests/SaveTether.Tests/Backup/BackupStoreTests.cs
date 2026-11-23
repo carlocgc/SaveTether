@@ -231,6 +231,69 @@ public class BackupStoreTests
         Assert.Empty(store.Prune("never.used"));
     }
 
+    [Theory]
+    [InlineData(1, BackupCleanup.All, 0)]
+    [InlineData(2, BackupCleanup.All, 0)]
+    [InlineData(5, BackupCleanup.All, 0)]
+    [InlineData(1, BackupCleanup.KeepFirst, 1)]
+    [InlineData(2, BackupCleanup.KeepFirst, 1)]
+    [InlineData(5, BackupCleanup.KeepFirst, 1)]
+    [InlineData(1, BackupCleanup.KeepLast, 1)]
+    [InlineData(2, BackupCleanup.KeepLast, 1)]
+    [InlineData(5, BackupCleanup.KeepLast, 1)]
+    public void RemoveMany_modes_keep_the_right_backups(int count, BackupCleanup mode, int kept)
+    {
+        using var sandbox = new Sandbox();
+        var source = BuildSaves(sandbox);
+        var time = new FakeTime();
+        var store = new BackupStore(sandbox.Dir("backups"), time: time);
+        var all = new List<string>();
+        for (var i = 0; i < count; i++)
+        {
+            all.Add(store.Create(Mapping, source, BackupReason.Snapshot).Id);
+            time.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        var removed = store.RemoveMany(null, mode);
+
+        var expectedLeft = mode switch { BackupCleanup.KeepFirst => all.Take(1), BackupCleanup.KeepLast => all.TakeLast(1), _ => [] };
+        Assert.Equal(expectedLeft, store.List().Select(b => b.Id));
+        Assert.Equal(count - kept, removed.Count);
+    }
+
+    [Fact]
+    public void RemoveMany_with_a_mapping_leaves_the_others_alone_and_Select_deletes_nothing()
+    {
+        using var sandbox = new Sandbox();
+        var source = BuildSaves(sandbox);
+        var time = new FakeTime();
+        var store = new BackupStore(sandbox.Dir("backups"), time: time);
+        var mine = new[] { store.Create(Mapping, source, BackupReason.Snapshot).Id, store.Create(Mapping, source, BackupReason.Snapshot).Id };
+        var other = new[] { store.Create("eden.save", source, BackupReason.Snapshot).Id, store.Create("eden.save", source, BackupReason.Snapshot).Id };
+
+        Assert.Equal([mine[1]], store.Select(Mapping, BackupCleanup.KeepFirst).Select(b => b.Id));
+        Assert.Equal(4, store.List().Count);
+
+        store.RemoveMany(Mapping, BackupCleanup.KeepFirst);
+
+        Assert.Equal([mine[0]], store.List(Mapping).Select(b => b.Id));
+        Assert.Equal(other, store.List("eden.save").Select(b => b.Id));
+    }
+
+    [Fact]
+    public void RemoveMany_clears_unfinished_backups()
+    {
+        using var sandbox = new Sandbox();
+        var store = new BackupStore(sandbox.Dir("backups"));
+        store.Create(Mapping, BuildSaves(sandbox), BackupReason.Baseline);
+        var stale = sandbox.Dir("backups", Mapping, "20200101T000000Z.partial", "data");
+
+        store.RemoveMany(Mapping, BackupCleanup.KeepFirst);
+
+        Assert.Equal(EntryKind.Missing, SafeFs.Probe(Path.GetDirectoryName(stale)!));
+        Assert.Single(store.List());
+    }
+
     [Fact]
     public void Prune_clears_unfinished_backups_left_by_a_crash()
     {

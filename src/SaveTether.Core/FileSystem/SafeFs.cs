@@ -123,6 +123,49 @@ public sealed class SafeFs
         RecreateLink(linkPath, kind, toFolder ? FileAttributes.Directory : FileAttributes.Normal, rawTarget);
     }
 
+    /// <summary>
+    /// Puts the regular file <paramref name="source"/> in place of <paramref name="destination"/>, which must be a
+    /// regular file or nothing: a link or a folder there is refused, never followed. An old file is renamed aside
+    /// first, which Windows allows even for a program that is running, and removed when it can be; one still in use
+    /// is left as "&lt;name&gt;.old-&lt;id&gt;" for <see cref="RemoveFile"/> later. Used to install SaveTether's own programs.
+    /// </summary>
+    public void ReplaceFile(string source, string destination)
+    {
+        var from = RequireAbsolute(source, nameof(source));
+        var to = RequireAbsolute(destination, nameof(destination));
+        if (Probe(from) != EntryKind.File)
+        {
+            throw new SafeFsException($"Cannot put '{from}' in place: it is not a file.");
+        }
+
+        var existing = Probe(to);
+        if (existing is not (EntryKind.Missing or EntryKind.File))
+        {
+            throw new SafeFsException($"Refusing to replace '{to}': it is {Describe(existing)}, not a file.");
+        }
+
+        RefuseInsideProtectedRoot(to, "replace a file");
+        string? aside = null;
+        if (existing == EntryKind.File)
+        {
+            aside = $"{to}.old-{Guid.NewGuid():N}";
+            File.Move(to, aside);
+        }
+
+        File.Move(from, to);
+        if (aside is not null)
+        {
+            try
+            {
+                File.Delete(aside);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Still running (Windows): removed at a later install.
+            }
+        }
+    }
+
     /// <summary>Removes the link at <paramref name="path"/> and nothing else. Refuses anything that is not a link.</summary>
     public void RemoveLink(string path)
     {
@@ -188,13 +231,218 @@ public sealed class SafeFs
     }
 
     /// <summary>
+    /// Deletes one regular file inside the sync root, for a mapping the owner confirmed deleting (design 5.3, invariant 2's third
+    /// exception). Every folder from <paramref name="below"/> (the folder the shared data lives in) down to the file's parent
+    /// must be a real folder: a link in the way, such as an app folder that is a symlink or junction, would take the delete
+    /// somewhere else, so it is refused. A missing file is not an error.
+    /// </summary>
+    public static void RemoveSharedFile(string below, string path)
+    {
+        var filePath = RequireAbsolute(path, nameof(path));
+        RequirePlainFolders(below, filePath);
+        var kind = Probe(filePath);
+        if (kind == EntryKind.Missing)
+        {
+            return;
+        }
+
+        if (kind != EntryKind.File)
+        {
+            throw new SafeFsException($"Refusing to delete '{filePath}' as a file: it is {Describe(kind)}.");
+        }
+
+        var attributes = File.GetAttributes(filePath);
+        ClearReadOnly(filePath, attributes);
+        File.Delete(filePath);
+    }
+
+    /// <summary>
+    /// Moves one regular file in one rename, for <c>map delete</c>: out of the share to a staging folder, or back into it. The path
+    /// that is inside <paramref name="below"/> gets the checks of <see cref="RemoveSharedFile"/> (every folder from
+    /// <paramref name="below"/> down must be a real folder); the other is the tool's own staging folder, which it makes.
+    /// Nothing is overwritten: a destination that exists is refused. The folders the destination needs are made.
+    /// </summary>
+    public static void MoveSharedFile(string below, string from, string to)
+    {
+        var source = RequireAbsolute(from, nameof(from));
+        var destination = RequireAbsolute(to, nameof(to));
+        if (PathRules.IsSameOrInside(source, PathRules.Normalize(below)))
+        {
+            RequirePlainFolders(below, source);
+        }
+
+        if (Probe(source) != EntryKind.File)
+        {
+            throw new SafeFsException($"Refusing to move '{source}': it is {Describe(Probe(source))}, not a file.");
+        }
+
+        if (Probe(destination) != EntryKind.Missing)
+        {
+            throw new SafeFsException($"Refusing to move '{source}' to '{destination}': something is already there.");
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        if (PathRules.IsSameOrInside(destination, PathRules.Normalize(below)))
+        {
+            RequirePlainFolders(below, destination);
+        }
+
+        File.Move(source, destination);
+    }
+
+    /// <summary>
+    /// Deletes a file an earlier build of <c>map delete</c> set aside: with the checks of <see cref="RemoveSharedFile"/> when it is inside the share,
+    /// and as a plain file when it is in the staging folder it used outside it. A link or a folder is refused either way.
+    /// </summary>
+    public static void RemoveStagedFile(string below, string path)
+    {
+        var filePath = RequireAbsolute(path, nameof(path));
+        if (PathRules.IsSameOrInside(filePath, PathRules.Normalize(below)))
+        {
+            RemoveSharedFile(below, filePath);
+            return;
+        }
+
+        var kind = Probe(filePath);
+        if (kind == EntryKind.Missing)
+        {
+            return;
+        }
+
+        if (kind != EntryKind.File)
+        {
+            throw new SafeFsException($"Refusing to delete '{filePath}' as a file: it is {Describe(kind)}.");
+        }
+
+        ClearReadOnly(filePath, File.GetAttributes(filePath));
+        File.Delete(filePath);
+    }
+
+    /// <summary>The empty-folder removal of <see cref="RemoveEmptySharedFolder"/> for a staging folder, inside the share or outside it.</summary>
+    public static bool RemoveEmptyStagedFolder(string below, string path)
+    {
+        var folder = RequireAbsolute(path, nameof(path));
+        if (PathRules.IsSameOrInside(folder, PathRules.Normalize(below)))
+        {
+            return RemoveEmptySharedFolder(below, folder);
+        }
+
+        var kind = Probe(folder);
+        if (kind == EntryKind.Missing)
+        {
+            return true;
+        }
+
+        if (kind != EntryKind.Directory)
+        {
+            throw new SafeFsException($"Refusing to remove '{folder}' as a folder: it is {Describe(kind)}.");
+        }
+
+        if (Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            return false;
+        }
+
+        try
+        {
+            Directory.Delete(folder, recursive: false);
+            return true;
+        }
+        catch (IOException) when (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes an empty folder inside the sync root, with the same checks as <see cref="RemoveSharedFile"/>, and never what is in it:
+    /// answers false, and leaves the folder, when it has anything in it (a sync tool may have just added something). A missing
+    /// folder is not an error.
+    /// </summary>
+    public static bool RemoveEmptySharedFolder(string below, string path)
+    {
+        var folder = RequireAbsolute(path, nameof(path));
+        RequirePlainFolders(below, folder);
+        var kind = Probe(folder);
+        if (kind == EntryKind.Missing)
+        {
+            return true;
+        }
+
+        if (kind != EntryKind.Directory)
+        {
+            throw new SafeFsException($"Refusing to remove '{folder}' as a folder: it is {Describe(kind)}.");
+        }
+
+        if (Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            return false;
+        }
+
+        try
+        {
+            MakeDirectoryDeletable(folder, File.GetAttributes(folder));
+            Directory.Delete(folder, recursive: false);
+            return true;
+        }
+        catch (IOException) when (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            // Something arrived between the look and the removal: it is left alone.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Requires every folder below <paramref name="below"/>, down to the parent of <paramref name="path"/>, to be a real folder, not
+    /// a link or anything else. Lexical on the path as given, each part looked at itself (a link is seen, not followed).
+    /// </summary>
+    public static void RequirePlainFolders(string below, string path)
+    {
+        var root = PathRules.Normalize(RequireAbsolute(below, nameof(below)));
+        var target = PathRules.Normalize(RequireAbsolute(path, nameof(path)));
+
+        // The folder the shared data lives in must itself be a real folder: a link there would put every child outside the share.
+        var rootKind = Probe(root);
+        if (rootKind != EntryKind.Directory)
+        {
+            throw new SafeFsException($"Refusing to delete under '{root}': it is {Describe(rootKind)}, not a plain folder.");
+        }
+
+        if (!PathRules.IsSameOrInside(target, root) || PathRules.AreSame(target, root))
+        {
+            throw new SafeFsException($"Refusing to delete '{target}': it is not inside '{root}'.");
+        }
+
+        var folders = new Stack<string>();
+        for (var folder = Path.GetDirectoryName(target); folder is not null && !PathRules.AreSame(folder, root); folder = Path.GetDirectoryName(folder))
+        {
+            folders.Push(folder);
+        }
+
+        foreach (var folder in folders)
+        {
+            var kind = Probe(folder);
+            if (kind == EntryKind.Missing)
+            {
+                // Nothing below a missing folder exists either: there is nothing to follow.
+                return;
+            }
+
+            if (kind != EntryKind.Directory)
+            {
+                throw new SafeFsException($"Refusing to delete under '{folder}': it is {Describe(kind)}, not a plain folder inside '{root}'.");
+            }
+        }
+    }
+
+    /// <summary>
     /// Deletes the tree at <paramref name="path"/>. Links found inside are removed, never entered,
     /// so nothing outside the tree is touched. A missing path is not an error.
     /// </summary>
     public void DeleteTree(string path, SharedDataDeletion sharedData = SharedDataDeletion.Forbidden)
     {
         var root = RequireAbsolute(path, nameof(path));
-        if (sharedData != SharedDataDeletion.ExplicitlyConfirmed)
+        if (sharedData == SharedDataDeletion.Forbidden)
         {
             RefuseInsideProtectedRoot(root, "delete");
         }

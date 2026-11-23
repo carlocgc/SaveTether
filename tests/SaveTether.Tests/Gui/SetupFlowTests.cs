@@ -9,6 +9,13 @@ namespace SaveTether.Tests.Gui;
 public class SetupFlowTests
 {
     [Fact]
+    public void Step_1_suggests_a_network_share_only_where_setup_accepts_one()
+    {
+        // Windows refuses a share at setup (docs/sharing.md), so its text must not offer one.
+        Assert.Equal(!OperatingSystem.IsWindows(), SetupFlow.SyncFolderIntro.Contains("network share", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Step_1_tells_a_missing_folder_an_empty_one_and_one_set_up_apart_and_writes_nothing()
     {
         using var sandbox = new Sandbox();
@@ -147,6 +154,28 @@ public class SetupFlowTests
         Assert.True(outcome.Succeeded, outcome.Error);
         Assert.Contains(outcome.Result!.Notes, n => n.Text.Contains("does not exist", StringComparison.Ordinal));
         Assert.False(Directory.Exists(sdCard));
+    }
+
+    // Found on the Deck: step 1 on a FUSE mount whose process had died showed "Something went wrong".
+    [Fact]
+    public void Step_1_says_a_folder_that_cannot_be_read_cannot_be_read()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // Making a symbolic link needs a privilege there.
+        }
+
+        using var sandbox = new Sandbox();
+        var (flow, local) = NewFlow(sandbox, "pc");
+        var loop = sandbox.At("loop");
+        File.CreateSymbolicLink(loop, "loop");
+
+        var check = flow.CheckSyncFolder(loop);
+
+        Assert.Equal(SyncFolderFinding.Missing, check.Finding);
+        Assert.Contains("cannot be read", check.Sentence, StringComparison.Ordinal);
+        Assert.False(check.CanContinue);
+        Assert.Null(local.TryReadBootstrap());
     }
 
     [Fact]

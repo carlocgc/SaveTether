@@ -73,7 +73,122 @@ public class AppAddCliTests
             var entry = new DefinitionCatalog(null).Find(id)!;
             Assert.True(entry.IsValid, string.Join("\n", entry.Errors));
             Assert.Equal(DefinitionSource.BuiltIn, entry.Source);
+
+            // Two roles on one folder, or one inside another's, would put a link inside a linked folder.
+            foreach (var install in entry.Definition!.Installs)
+            {
+                var paths = entry.Definition.Roles.Where(r => r.Paths.ContainsKey(install.Id)).Select(r => r.Paths[install.Id] + "/").ToList();
+                var nested = paths.SelectMany((a, i) => paths.Skip(i + 1)
+                    .Where(b => b.StartsWith(a, StringComparison.OrdinalIgnoreCase) || a.StartsWith(b, StringComparison.OrdinalIgnoreCase))
+                    .Select(b => $"{a} and {b}")).ToList();
+                Assert.True(nested.Count == 0, $"{id} ({install.Id}): {string.Join(", ", nested)}");
+            }
         }
+    }
+
+    // ---- Imported definitions (the real bundle; "aaaaxy" is a small linux-and-windows entry) ----
+
+    private static string[] Lines(string text) => text.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    [Fact]
+    public void App_list_search_shows_imported_apps_as_unverified_with_aligned_columns_and_a_count()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+
+        Assert.Equal(["aaaaxy  AAAAXY  (imported (unverified))", "1 app(s)."], Lines(deck.Ok("app", "list", "--search", "AAAAXY").Out));
+
+        // The name column starts in the same place on every row, however long the IDs are.
+        var rows = deck.Ok("app", "list", "--search", "a").Out.Replace("\r", string.Empty, StringComparison.Ordinal).Split('\n')
+            .Where(l => l.StartsWith("  ", StringComparison.Ordinal)).ToList();
+        Assert.True(rows.Count > 10);
+        Assert.Single(rows.Select(l => System.Text.RegularExpressions.Regex.Match(l, @"^  \S+ *  ").Length).Distinct());
+
+        Assert.Contains("(built-in)", deck.Ok("app", "list", "--search", "cemu").Out, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void App_list_search_with_no_match_lists_nothing_and_counts_zero()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+
+        Assert.Equal(["0 app(s)."], Lines(deck.Ok("app", "list", "--search", "zzzzqqqq").Out));
+    }
+
+    [Fact]
+    public void App_list_json_marks_imported_apps_unverified()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+
+        var apps = deck.Ok("app", "list", "--search", "aaaaxy", "--json").Json().GetProperty("apps");
+
+        Assert.Equal(1, apps.GetArrayLength());
+        Assert.Equal("imported", apps[0].GetProperty("source").GetString());
+        Assert.False(apps[0].GetProperty("verified").GetBoolean());
+    }
+
+    [Fact]
+    public void App_list_found_lists_apps_on_this_device_newest_save_first_and_marks_imported_ones()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        var cemu = Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save");
+        CliDevice.Write(cemu, "a.sav", "x");
+        CliDevice.Write(Path.Combine(deck.Home, ".local", "share", "AAAAXY"), "save.json", "{}");
+        File.SetLastWriteTimeUtc(Path.Combine(cemu, "a.sav"), DateTime.UtcNow.AddDays(-30));
+
+        var found = deck.Ok("app", "list", "--found", "--json").Json().GetProperty("found");
+        var ids = found.EnumerateArray().Select(f => f.GetProperty("id").GetString()).ToList();
+
+        Assert.Contains("cemu", ids);
+        Assert.True(ids.IndexOf("aaaaxy") < ids.IndexOf("cemu"), "the newer save comes first");
+        var row = found.EnumerateArray().Single(f => f.GetProperty("id").GetString() == "aaaaxy");
+        Assert.False(row.GetProperty("verified").GetBoolean());
+        Assert.Equal(cemu, found.EnumerateArray().Single(f => f.GetProperty("id").GetString() == "cemu").GetProperty("save_folder").GetString());
+
+        var text = deck.Ok("app", "list", "--found").Out;
+        Assert.Contains("(unverified)", text, StringComparison.Ordinal);
+        Assert.Contains("app(s) found on this device.", text, StringComparison.Ordinal);
+        var searched = deck.Ok("app", "list", "--found", "--search", "cemu", "--json").Json().GetProperty("found");
+        Assert.Equal(["cemu"], searched.EnumerateArray().Select(f => f.GetProperty("id").GetString()).ToList());
+    }
+
+    [Fact]
+    public void App_list_found_search_matches_a_steam_app_id_as_the_plain_list_does()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        ShareDefinition(deck, "testapp", TestApp.Replace("\"quirks\"", "\"store_ids\": { \"steam\": 424242 }, \"quirks\"", StringComparison.Ordinal));
+        var install = Path.Combine(deck.Home, "portable");
+        CliDevice.Write(install, "app.cfg", "config");
+        CliDevice.Write(install, "saves/slot1.sav", "save");
+        deck.Ok("app", "add", "testapp", "--install-dir", install);
+
+        var plain = deck.Ok("app", "list", "--search", "424242", "--json").Json().GetProperty("apps");
+        var found = deck.Ok("app", "list", "--found", "--search", "424242", "--json").Json().GetProperty("found");
+
+        Assert.Equal(["testapp"], plain.EnumerateArray().Select(a => a.GetProperty("id").GetString()).ToList());
+        Assert.Equal(["testapp"], found.EnumerateArray().Select(a => a.GetProperty("id").GetString()).ToList());
+        Assert.Equal(0, deck.Ok("app", "list", "--found", "--search", "999999", "--json").Json().GetProperty("found").GetArrayLength());
+    }
+
+    [Fact]
+    public void App_add_of_an_imported_app_says_it_is_unverified()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        CliDevice.Write(Path.Combine(deck.Home, ".local", "share", "AAAAXY"), "save.json", "{}");
+
+        Assert.Contains("Unverified: this definition was converted from the Ludusavi manifest", deck.Ok("app", "add", "aaaaxy", "--dry-run").Out, StringComparison.Ordinal);
+        var plan = deck.Ok("app", "add", "aaaaxy", "--dry-run", "--json").Json().GetProperty("app").GetProperty("plan");
+        Assert.Equal("imported", plan.GetProperty("definition_source").GetString());
+        Assert.False(plan.GetProperty("verified").GetBoolean());
+
+        // A built-in app's plan carries no such note.
+        CliDevice.Write(Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save"), "a.sav", "x");
+        Assert.DoesNotContain("Unverified", deck.Ok("app", "add", "cemu", "--dry-run").Out, StringComparison.Ordinal);
     }
 
     // ---- Cemu, the shipped definition ----
@@ -107,6 +222,25 @@ public class AppAddCliTests
     }
 
     [Fact]
+    public void A_winpath_with_no_prefix_in_the_definition_asks_for_the_wine_prefix_flag()
+    {
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        ShareDefinition(deck, "winapp", """
+            {
+              "schema": 1, "id": "winapp", "name": "Win App", "kind": "game",
+              "installs": [ { "id": "win", "os": "linux", "detect": { "dir": "{install_dir}" }, "base": { "winpath": "{appdata}/WinApp" } } ],
+              "roles": [ { "id": "saves", "class": "save", "default": true, "path": "saves", "target": "saves" } ],
+            }
+            """);
+
+        var run = deck.Expect(CliApp.ExitRefused, "app", "add", "winapp");
+
+        Assert.Contains("--wine-prefix", run.Out + run.Err, StringComparison.Ordinal);
+        Assert.False(MappingExists(deck, "winapp"));
+    }
+
+    [Fact]
     public void An_app_that_is_not_installed_is_refused_with_what_was_looked_at_and_nothing_is_written()
     {
         using var sandbox = new Sandbox();
@@ -116,8 +250,9 @@ public class AppAddCliTests
         var json = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu", "--json").Json();
 
         Assert.Equal("not-installed", json.GetProperty("app").GetProperty("problem").GetString());
-        var candidate = json.GetProperty("app").GetProperty("candidates")[0];
-        Assert.Equal("linux-native", candidate.GetProperty("id").GetString());
+        var candidates = json.GetProperty("app").GetProperty("candidates").EnumerateArray().ToList();
+        Assert.Equal(["linux-flatpak", "linux-native"], candidates.Select(c => c.GetProperty("id").GetString()));
+        var candidate = candidates.Single(c => c.GetProperty("id").GetString() == "linux-native");
         Assert.Contains("No folder at", candidate.GetProperty("reason").GetString(), StringComparison.Ordinal);
         Assert.Equal(before, DeviceFile(deck).ToString());
         Assert.False(MappingExists(deck, "cemu.save"));
@@ -131,7 +266,8 @@ public class AppAddCliTests
 
         var run = deck.Expect(CliApp.ExitRefused, "app", "add", "nope");
 
-        Assert.Contains("There is no definition for 'nope'. Known apps: cemu", run.Err, StringComparison.Ordinal);
+        Assert.Contains("There is no definition for 'nope'. Known apps: ", run.Err, StringComparison.Ordinal);
+        Assert.Contains("cemu, ", run.Err, StringComparison.Ordinal);
     }
 
     // ---- Shared definitions ----
@@ -152,12 +288,14 @@ public class AppAddCliTests
         Directory.CreateDirectory(Path.Combine(deck.Home, "cemu", "save"));
 
         var list = deck.Ok("app", "list", "--json").Json().GetProperty("apps").EnumerateArray()
+            .Where(a => a.GetProperty("source").GetString() is "shared") // built-in ones grow with each new definition
             .Select(a => (a.GetProperty("id").GetString(), a.GetProperty("name").GetString(), a.GetProperty("source").GetString()))
             .ToList();
         Assert.Equal([("cemu", "Cemu (mine)", "shared"), ("testapp", "Test App", "shared")], list);
 
         var plan = deck.Ok("app", "add", "cemu", "--json").Json().GetProperty("app").GetProperty("plan");
         Assert.Equal("shared", plan.GetProperty("definition_source").GetString());
+        Assert.True(plan.GetProperty("verified").GetBoolean());
         Assert.Equal("here", plan.GetProperty("install").GetString());
     }
 
@@ -504,6 +642,28 @@ public class AppAddCliTests
     }
 
     // ---- Dry run and file formats ----
+
+    [Fact]
+    public void A_dry_run_refuses_a_role_whose_target_another_mapping_uses()
+    {
+        // Found on the Deck, 2026-11-22: the dry run showed "(new mapping)" where the real add refused.
+        using var sandbox = new Sandbox();
+        var deck = NewDevice(sandbox);
+        var save = Path.Combine(deck.Home, ".local", "share", "Cemu", "mlc01", "usr", "save");
+        Directory.CreateDirectory(save);
+        deck.Ok("map", "add", "cemu.hand", "--target", "cemu/save", "--source", Path.Combine(deck.Home, "elsewhere"));
+
+        var dry = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu", "--dry-run");
+        var real = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu");
+
+        const string Message = "Mapping 'cemu.hand' already uses the same target ('cemu/save'). On Windows the two would be one folder.";
+        Assert.Contains(Message, dry.Err, StringComparison.Ordinal);
+        Assert.Contains(Message, real.Err, StringComparison.Ordinal);
+        var app = deck.Expect(CliApp.ExitRefused, "app", "add", "cemu", "--dry-run", "--json").Json().GetProperty("app");
+        Assert.Equal("conflict", app.GetProperty("problem").GetString());
+        Assert.Equal("target-in-use", app.GetProperty("conflict").GetProperty("kind").GetString());
+        Assert.False(MappingExists(deck, "cemu.save"));
+    }
 
     [Fact]
     public void A_dry_run_writes_nothing()

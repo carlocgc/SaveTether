@@ -132,6 +132,7 @@ public class JsonContractTests
         Record("apply-dry-run", 0, "apply", Id, "--copy", "--dry-run");
         Record("apply-completed", 0, "apply", Id, "--copy");
         Record("apply-all", 0, "apply", "--all");
+        Record("device-list", 0, "device", "list");
 
         var aside = sandbox.At("pc", "sync-unplugged");
         Directory.Move(pc.SyncRoot, aside);
@@ -149,7 +150,22 @@ public class JsonContractTests
         var backupId = pc.Ok("backup", "list", "--json").Json().GetProperty("backups")[0].GetProperty("id").GetString()!;
         Record("backup-restore", 0, "backup", "restore", backupId);
         Record("backup-delete", 0, "backup", "delete", backupId, "--confirm-delete");
+        Record("backup-cleanup", 0, "backup", "delete", "--all", "--confirm-delete");
         Record("recover", 0, "recover");
+
+        // An install laid out by hand, so the recording does not depend on the system: uninstall removes the files
+        // and leaves one that is not SaveTether's, which gives both lists entries.
+        var installed = Core.Startup.InstallLayout.For(sandbox.Dir("pc", "install-home"), null);
+        Directory.CreateDirectory(installed.AppFolder);
+        Directory.CreateDirectory(installed.BinFolder);
+        File.WriteAllText(installed.AppPath, "app");
+        File.WriteAllText(installed.CliPath, "cli");
+        File.WriteAllText(Path.Combine(installed.AppFolder, "notes.txt"), "the owner's");
+        pc.Install = installed;
+        Record("uninstall", 0, "uninstall", "--confirm-uninstall");
+        Record("uninstall-not-installed", 1, "uninstall", "--confirm-uninstall");
+        pc.Install = null;
+
         Record("map-remove", 0, "map", "remove", Id);
         Record("refused", 1, "revert", Id);
         using (OperationLock.Acquire(new LocalStore(pc.LocalFolder), "gui", "apply"))
@@ -158,6 +174,9 @@ public class JsonContractTests
         }
 
         Record("usage-error", 64, "apply");
+
+        // Unused now (this device forgot its folder, and no other device has one): its shared record and folder go.
+        Record("map-delete", 0, "map", "delete", Id, "--confirm-delete");
 
         // "app add" and "app list", on a second device with a shared definition.
         var deck = new CliDevice(sandbox, "deck");
@@ -171,9 +190,18 @@ public class JsonContractTests
         RecordOn(deck, "app-add-dry-run", 0, "app", "add", "testapp", "--install-dir", install, "--dry-run");
         RecordOn(deck, "app-add", 0, "app", "add", "testapp", "--install-dir", install);
         deck.Ok("apply", "testapp.saves", "--copy");
+        RecordOn(deck, "app-list-found", 0, "app", "list", "--found", "--search", "testapp");
         var moved = Path.Combine(deck.Home, "moved");
         CliDevice.Write(moved, "app.cfg", "config");
         RecordOn(deck, "app-add-conflict", 1, "app", "add", "testapp", "--install-dir", moved);
+        var old = new CliDevice(sandbox, "old");
+        deck.DeliverTo(old);
+        old.Ok("init", "--sync-root", old.SyncRoot, "--device", "old");
+        old.DeliverTo(deck);
+        RecordOn(deck, "device-remove-other-dry-run", 0, "device", "remove", "--other", "old");
+        RecordOn(deck, "device-rename", 0, "device", "rename", "deck2");
+        RecordOn(deck, "device-remove-dry-run", 0, "device", "remove");
+        RecordOn(deck, "device-remove", 0, "device", "remove", "--confirm-remove");
 
         // Not enough space cannot be staged on a real drive, so the planner's refusal is
         // written the way the CLI writes it.

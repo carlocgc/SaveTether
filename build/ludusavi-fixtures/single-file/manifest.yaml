@@ -1,0 +1,10 @@
+File Game:
+  files:
+    "<winDocuments>/FileGame/profile.dat":
+      tags: [save]
+    "<winDocuments>/FileGame/Saves":
+      tags: [save]
+Only File:
+  files:
+    "<winLocalAppData>/OnlyFile/settings.json":
+      tags: [save]

@@ -1,0 +1,12 @@
+Foo:
+  files:
+    "<winAppData>/Foo":
+      tags: [save]
+Foo!:
+  files:
+    "<winAppData>/FooBang":
+      tags: [save]
+Foo 2:
+  files:
+    "<winAppData>/FooTwo":
+      tags: [save]

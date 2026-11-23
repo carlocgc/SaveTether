@@ -83,4 +83,29 @@ public sealed class LocalStore
         Directory.CreateDirectory(Folder);
         JsonFiles.Write(Path.Combine(Folder, StateName), state, StorageJsonContext.Default.StateFile, StateFile.CurrentSchema);
     }
+
+    /// <summary>
+    /// Deletes this device's local files for "device remove": the state, the journal and the lock's holder note, then the
+    /// bootstrap last. The bootstrap is the commit point: until it goes the device still counts as set up. The lock file is
+    /// tried too, but the caller holds it, and Windows will not delete an open file. <c>gui.log</c> stays.
+    /// </summary>
+    public void DeleteDeviceFiles(string syncRoot)
+    {
+        var fs = new SafeFs(syncRoot);
+        foreach (var name in new[] { StateName, "journal.json", "operation-holder.json" })
+        {
+            fs.RemoveFile(Path.Combine(Folder, name));
+        }
+
+        try
+        {
+            fs.RemoveFile(Path.Combine(Folder, "operation.lock"));
+        }
+        catch (IOException)
+        {
+            // Held by this process: an empty file, and harmless.
+        }
+
+        fs.RemoveFile(Path.Combine(Folder, BootstrapName));
+    }
 }

@@ -115,6 +115,11 @@ public static class Autostart
                 {
                     program.Append(value[++i]);
                 }
+                else if (value[i] == '%' && i + 1 < value.Length && value[i + 1] == '%')
+                {
+                    program.Append('%');
+                    i++;
+                }
                 else if (value[i] == '"')
                 {
                     return program.ToString();
@@ -147,7 +152,7 @@ public static class Autostart
     }
 
     /// <summary>The program as one quoted Exec argument, then escaped again as a desktop entry string.</summary>
-    private static string QuoteExec(string program)
+    internal static string QuoteExec(string program)
     {
         var quoted = new StringBuilder("\"");
         foreach (var c in program)
@@ -158,6 +163,10 @@ public static class Autostart
             }
 
             quoted.Append(c);
+            if (c == '%')
+            {
+                quoted.Append('%'); // A literal percent sign is %%, since %f and the like are field codes.
+            }
         }
 
         quoted.Append('"');

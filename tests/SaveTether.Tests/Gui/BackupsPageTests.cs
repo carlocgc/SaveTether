@@ -35,7 +35,7 @@ public class BackupsPageTests
 
         var group = Assert.Single(groups);
         Assert.Equal(Id, group.MappingId);
-        Assert.Equal(Role, group.Name);
+        Assert.Equal("PPSSPP savedata", group.Name);
         Assert.Equal(2, group.Rows.Count);
         Assert.Single(group.Rows, r => r.OfSharedCopy);
         Assert.Single(group.Rows, r => !r.OfSharedCopy);
@@ -47,7 +47,7 @@ public class BackupsPageTests
         Assert.All(group.Rows, r => Assert.True(Directory.Exists(r.DataFolder)));
         Assert.Equal("Shared copy", group.Rows.Single(r => r.OfSharedCopy).Of);
 
-        Assert.Equal([("ppsspp", "ppsspp")], BackupsPage.Apps(groups, appName));
+        Assert.Equal([("ppsspp", "PPSSPP")], BackupsPage.Apps(groups, appName));
         Assert.Same(groups, BackupsPage.Filter(groups, null));
         Assert.Empty(BackupsPage.Filter(groups, "cemu"));
         foreach (var reason in Enum.GetValues<BackupReason>())
@@ -81,7 +81,7 @@ public class BackupsPageTests
         using (restore)
         {
             var plan = restore!.PlanRestore(row.Info.Id, new RestoreRequest()).Plan!;
-            Assert.Equal($"Restore the backup into {pc.Source}?", ActionTexts.Confirmation(plan, Role).Title);
+            Assert.Equal($"Restore the backup into {pc.Source}?", ActionTexts.Confirmation(plan, Role, others: false).Title);
             var result = restore.Run(plan, null);
             Assert.Equal(ExecutionStatus.Completed, result.Status);
             Assert.Equal("The backup is restored.", ActionTexts.Result(result, Role).Title);
@@ -111,7 +111,7 @@ public class BackupsPageTests
         }
 
         Assert.Equal("theirs", pc.SharedFiles()["GAME1/save.bin"]);
-        Assert.Equal($"Restore the shared saves for {Role} on every device?", BackupsPage.RestoreSharedTitle(Role));
+        Assert.Equal($"Restore the shared copy of {Role}?", BackupsPage.RestoreSharedTitle(Role));
         sandbox.AssertCanaryIntact();
     }
 

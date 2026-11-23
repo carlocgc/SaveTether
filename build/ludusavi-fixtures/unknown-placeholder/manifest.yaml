@@ -1,0 +1,22 @@
+Unknown Game:
+  files:
+    "<root>/UnknownGame/Saves":
+      tags: [save]
+    "<winPublic>/UnknownGame":
+      tags: [save]
+    "<winProgramData>/UnknownGame":
+      tags: [save]
+    "<winDir>/UnknownGame":
+      tags: [save]
+    "<winAppData>/UnknownGame/<osUserName>":
+      tags: [save]
+    "<winAppData>/UnknownGame/Saves":
+      tags: [save]
+Only Unknown:
+  files:
+    "<root>/OnlyUnknown":
+      tags: [save]
+    "<winAppData>":
+      tags: [save]
+    "C:/OnlyUnknown/Saves":
+      tags: [save]

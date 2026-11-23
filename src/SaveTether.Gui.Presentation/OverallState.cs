@@ -27,6 +27,12 @@ public enum OverallCondition
     /// <summary>Row 4: the sync folder cannot be used.</summary>
     SyncRootUnavailable,
 
+    /// <summary>Phase 3.6, D6: another device removed this one from the sync folder. Texts come with the Maintenance screen.</summary>
+    RemovedByAnother,
+
+    /// <summary>Phase 3.6, D6: this device's own removal did not finish.</summary>
+    RemovalUnfinished,
+
     /// <summary>Row 5: another install uses this device's name.</summary>
     DeviceNameInUse,
 
@@ -51,6 +57,9 @@ public sealed record MappingState(string MappingId, string AppName, string Role,
     /// <summary>For a save folder that is a link elsewhere (Retargeted, Foreign link): where it points.</summary>
     public string? LinkTarget { get; init; }
 
+    /// <summary>What a linked folder is: "Symlink" or "Junction". Null when it is not linked, or the kind could not be told.</summary>
+    public string? LinkKind { get; init; }
+
     /// <summary>True when the catalog has a usable definition for the app, so Add app can find it (section 8).</summary>
     public bool HasDefinition { get; init; }
 
@@ -73,13 +82,33 @@ public sealed record OverallStatus(
         OverallCondition.CannotCheck => "Cannot check this device",
         OverallCondition.Unfinished => "An operation did not finish",
         OverallCondition.SyncRootUnavailable => "Sync folder not available",
+        OverallCondition.RemovedByAnother => "Removed from the sync folder",
+        OverallCondition.RemovalUnfinished => "Removal not finished",
         OverallCondition.DeviceNameInUse => "Device name used by another install",
         OverallCondition.NeedsAttention => AttentionHeadline(),
         OverallCondition.CheckFailed => "Health check failed",
-        _ => "All linked",
+        _ => GreenHeadline(),
     };
 
     public IReadOnlyList<MappingState> Attention => Mappings.Where(m => m.Word.NeedsAttention).ToList();
+
+    /// <summary>
+    /// Green, so nothing needs the owner, but "All linked" only when it is so: the folders this device has and has not
+    /// linked yet ("Ready to link") are counted, as "Apply all" counts them. "Not on this device" is not counted: a
+    /// mapping set up on another device and not wanted here is normal (5.14). Found by the owner on 2026-11-20, with
+    /// every link reverted and the header still saying "All linked".
+    /// </summary>
+    private string GreenHeadline()
+    {
+        var ready = Mappings.Count(m => m.Health.State == HealthState.NotApplied && m.Health.Reason != HealthReason.NoSaveFolder);
+        if (ready == 0)
+        {
+            return "All linked";
+        }
+
+        var linked = Mappings.Count(m => m.Health.State == HealthState.Ok);
+        return linked == 0 ? $"{ready} ready to link" : $"{linked} linked, {ready} ready to link";
+    }
 
     private string AttentionHeadline()
     {
@@ -115,6 +144,7 @@ public static class StatusCheck
                             ? others.Where(d => d.Value.Contains(m.MappingId)).Select(d => d.Key).Order(StringComparer.Ordinal).ToList()
                             : [],
                         LinkTarget = m.State is HealthState.Retargeted or HealthState.ForeignLink ? LinkTargetOf(m.Source) : null,
+                        LinkKind = m.State == HealthState.Ok && m.Source is { } linked ? LinkKindOf(linked) : null,
                     };
                 })
                 .OrderBy(m => m.Word.NeedsAttention ? 0 : 1)
@@ -125,10 +155,16 @@ public static class StatusCheck
             var condition =
                 report.JournalOpen ? OverallCondition.Unfinished
                 : !report.SyncRootAvailable ? OverallCondition.SyncRootUnavailable
+                : report.Removal == RemovalKind.RemovedByAnother ? OverallCondition.RemovedByAnother
+                : report.Removal == RemovalKind.Unfinished ? OverallCondition.RemovalUnfinished
                 : report.DeviceFileMismatch ? OverallCondition.DeviceNameInUse
                 : mappings.Any(m => m.Word.NeedsAttention) ? OverallCondition.NeedsAttention
                 : OverallCondition.AllLinked;
-            return new OverallStatus(condition, report, mappings, report.SyncRootProblem);
+            // Banner B3 is one sentence with the reason in a few words; the core's longer message would repeat it.
+            var detail = condition == OverallCondition.SyncRootUnavailable
+                ? new SharedStore(report.SyncRoot).NotAvailableReason
+                : report.SyncRootProblem;
+            return new OverallStatus(condition, report, mappings, detail);
         }
         catch (StoreException e) when (e.Problem == StoreProblem.SchemaTooNew)
         {
@@ -143,16 +179,16 @@ public static class StatusCheck
     /// <summary>The app's name from its definition, and whether there is a usable one; the ID and false otherwise.</summary>
     private static (string Name, bool Defined) AppOf(Workspace workspace, string mappingId)
     {
-        var appId = mappingId.Split('.')[0];
-        try
-        {
-            return workspace.Definitions.Find(appId)?.Definition is { } definition ? (definition.Name, true) : (appId, false);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return (appId, false);
-        }
+        var parts = mappingId.Split('.', 2);
+        return AppNames.Resolve(workspace.Definitions, parts[0], parts.Length == 2 ? parts[1] : null, () => workspace.Shared.TryReadMapping(mappingId)?.Target);
     }
+
+    private static string? LinkKindOf(string folder) => SafeFs.Probe(folder) switch
+    {
+        EntryKind.Symlink => "Symlink",
+        EntryKind.Junction => "Junction",
+        _ => null,
+    };
 
     /// <summary>Each other device's mappings with a folder set. A device file that cannot be read is left out.</summary>
     private static Dictionary<string, HashSet<string>> OtherDevicesPaths(Workspace workspace)
@@ -188,12 +224,4 @@ public static class StatusCheck
     }
 
     private static string RoleOf(string mappingId) => mappingId.Contains('.', StringComparison.Ordinal) ? mappingId[(mappingId.IndexOf('.', StringComparison.Ordinal) + 1)..] : mappingId;
-
-    /// <summary>A status check runs no plan, so it never asks which processes are running.</summary>
-    private sealed class NoProcesses : IProcessLister
-    {
-        public static readonly NoProcesses Instance = new();
-
-        public IReadOnlyList<string> RunningProcessNames() => [];
-    }
 }

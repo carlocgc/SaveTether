@@ -84,6 +84,47 @@ public class BackupDeleteTests
     }
 
     [Fact]
+    public void Cleanup_all_without_a_person_or_the_flag_only_lists_and_with_the_flag_deletes()
+    {
+        using var sandbox = new Sandbox();
+        var (pc, _, _) = WithTwoBackups(sandbox);
+        var before = Ids(pc);
+
+        var dry = pc.Ok("backup", "delete", "--all", "--json").Json().GetProperty("backups_cleaned");
+        Assert.True(dry.GetProperty("dry_run").GetBoolean());
+        Assert.Equal(before.Count, dry.GetProperty("removed").GetArrayLength());
+        Assert.Equal(before, Ids(pc));
+
+        var listed = pc.Ok("backup", "delete", "--all");
+        Assert.Contains("Would delete", listed.Out, StringComparison.Ordinal);
+        Assert.Equal(before, Ids(pc));
+
+        pc.Ok("backup", "delete", "--all", "--confirm-delete");
+        Assert.Empty(Ids(pc));
+        sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void Cleanup_keep_modes_go_ahead_without_asking_and_scope_to_a_mapping()
+    {
+        using var sandbox = new Sandbox();
+        var (pc, first, second) = WithTwoBackups(sandbox);
+        var all = Ids(pc);
+
+        // A mapping with no backups is a different scope: nothing here may go.
+        pc.Ok("backup", "delete", "--keep-last", "--mapping", "other.saves");
+        Assert.Equal(all, Ids(pc));
+
+        pc.Ok("backup", "delete", "--keep-last", "--mapping", Id);
+        Assert.Equal([second], Ids(pc));
+
+        pc.Expect(CliApp.ExitUsage, "backup", "delete", "--keep-first", "--all");
+        pc.Expect(CliApp.ExitUsage, "backup", "delete", second, "--keep-last");
+        Assert.Equal([second], Ids(pc));
+        Assert.DoesNotContain(first, Ids(pc));
+    }
+
+    [Fact]
     public void An_unknown_backup_is_refused()
     {
         using var sandbox = new Sandbox();
@@ -108,6 +149,7 @@ public class BackupDeleteTests
         var workspace = Workspace.Open(new LocalStore(pc.LocalFolder), new NoProcesses());
         var refused = Assert.Throws<BackupException>(() => workspace.DeleteBackup(first));
         Assert.Contains("Recover first", refused.Message, StringComparison.Ordinal);
+        Assert.Throws<BackupException>(() => workspace.CleanUpBackups(null, BackupCleanup.All));
         Assert.Contains(first, workspace.ListBackups().Select(b => b.Id));
     }
 

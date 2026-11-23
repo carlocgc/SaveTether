@@ -1,0 +1,1 @@
+{"schema":1,"id":"mac-game","name":"Mac Game","kind":"game","installs":[{"id":"linux","os":"linux","detect":{"dir":"{home}/.local/share/MacGame"},"base":"{home}"}],"roles":[{"id":"linux-save","class":"save","default":true,"path":{"linux":".local/share/MacGame"},"target":"linux-save"}],"tier":"imported","origin":"ludusavi"}

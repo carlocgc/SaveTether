@@ -70,6 +70,16 @@ public class PrecheckTests
     }
 
     [Fact]
+    public void The_home_folder_or_a_folder_holding_it_is_not_a_save_folder()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        foreach (var broad in new[] { home, Path.GetDirectoryName(home) }.OfType<string>())
+        {
+            Assert.Equal([PrecheckKind.SourceUnusable], Failures(Snap.WithLocalSaves() with { ResolvedSource = broad }));
+        }
+    }
+
+    [Fact]
     public void A_missing_parent_folder_is_refused_so_a_typo_cannot_create_a_link()
     {
         var snapshot = Snap.Base() with { SourceKind = EntryKind.Missing, SourceParentExists = false };
@@ -132,6 +142,12 @@ public class PrecheckTests
     public void A_network_target_is_refused()
     {
         Assert.Equal([PrecheckKind.TargetNotLocal], Failures(Snap.WithLocalSaves() with { TargetOnLocalVolume = false }));
+    }
+
+    [Fact]
+    public void A_network_folder_to_link_is_refused_before_any_step()
+    {
+        Assert.Equal([PrecheckKind.SourceNotLocal], Failures(Snap.WithLocalSaves() with { SourceOnLocalVolume = false }));
     }
 
     [Fact]
@@ -283,7 +299,7 @@ public class PlanRendererTests
         Assert.Contains($"1. Back up '{Snap.Source}' and verify the backup", text, StringComparison.Ordinal);
         Assert.Contains($"5. Link '{Snap.Source}' to '{Snap.Target}'", text, StringComparison.Ordinal);
         Assert.Contains("9. Delete", text, StringComparison.Ordinal);
-        Assert.Contains("wait until that has synced", text, StringComparison.Ordinal);
+        Assert.Contains("make sure no other device is still writing to the sync folder", text, StringComparison.Ordinal);
     }
 
     [Fact]

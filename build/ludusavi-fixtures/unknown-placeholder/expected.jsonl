@@ -1,0 +1,1 @@
+{"schema":1,"id":"unknown-game","name":"Unknown Game","kind":"game","installs":[{"id":"windows","os":"windows","detect":{"dir":"{appdata}/UnknownGame/Saves"},"base":"{appdata}"}],"roles":[{"id":"save","class":"save","default":true,"path":{"windows":"UnknownGame/Saves"},"target":"save"}],"tier":"imported","origin":"ludusavi"}

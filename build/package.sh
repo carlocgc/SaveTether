@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds one platform's release package: the CLI and the desktop app with its native libraries,
-# README.md and LICENSE, in a folder named after the package. Debug symbols are left out.
+# README.md and LICENSE (and on Linux the app's icon, savetether.png), in a folder named after the package. Debug symbols are left out.
 #
 #   build/package.sh <rid> <package-name> <cli-publish-dir> <gui-publish-dir> <out-dir>
 #
@@ -41,7 +41,7 @@ copy_binaries() {
 
 copy_binaries "$cli"
 copy_binaries "$gui"
-cp "$root/README.md" "$root/LICENSE" "$stage/$name/"
+cp "$root/README.md" "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$stage/$name/"
 
 if [[ $rid == win-* ]]; then
   archive="$out/$name.zip"
@@ -53,6 +53,8 @@ if [[ $rid == win-* ]]; then
     (cd "$stage" && "${WINDIR:-C:/Windows}/System32/tar.exe" -a -cf "$(cygpath -w "$archive" 2> /dev/null || echo "$archive")" "$name")
   fi
 else
+  # The app's icon, for the menu entry its install writes (Windows has it inside the program).
+  cp "$root/src/SaveTether.Gui/Assets/savetether.png" "$stage/$name/"
   chmod +x "$stage/$name/savetether" "$stage/$name/savetether-gui"
   archive="$out/$name.tar.gz"
   tar -C "$stage" -czf "$archive" "$name"

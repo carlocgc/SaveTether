@@ -200,6 +200,10 @@ public enum PrecheckKind
     [JsonStringEnumMemberName("target-not-local")]
     TargetNotLocal,
 
+    /// <summary>S is on a network drive on Windows, where a junction cannot be created.</summary>
+    [JsonStringEnumMemberName("source-not-local")]
+    SourceNotLocal,
+
     [JsonStringEnumMemberName("not-enough-space")]
     NotEnoughSpace,
 

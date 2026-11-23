@@ -12,12 +12,23 @@ namespace SaveTether.Gui;
 /// The Settings page (desktop-app-spec.md, section 11), in place of the Apps page while open. Built so far:
 /// Start with the session, and About. The backup location and This device come later.
 /// </summary>
-internal sealed class SettingsScreen : UserControl
+internal sealed class SettingsScreen : UserControl, IScreen
 {
+    /// <summary>The way back, shown by the window above the scrolling page.</summary>
+    public ContentControl Bar { get; } = new();
+
     public SettingsScreen(string localFolder, SessionStart session, Overlay overlay, Action close)
     {
         var page = new StackPanel { Spacing = 10, MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Left };
-        page.Children.Add(new TextBlock { Text = "Settings", FontSize = 22, FontWeight = FontWeight.SemiBold });
+        Bar.Content = new StackPanel
+        {
+            Spacing = 8,
+            Children =
+            {
+                new TextBlock { Text = "Settings", FontSize = 22, FontWeight = FontWeight.SemiBold },
+                Navigation.BackRow("Back to apps", close),
+            },
+        };
 
         page.Children.Add(Heading("Start with the session"));
         if (session.Available)
@@ -55,9 +66,66 @@ internal sealed class SettingsScreen : UserControl
             page.Children.Add(Note("This desktop has no place for programs that start with the session."));
         }
 
+        // Linux, in the installed copy only (section 11, "Installing"). On Windows, Settings > Apps uninstalls what the installer put there.
+        if (InstallOffer.ForSystem(localFolder, AppContext.BaseDirectory, Program.Version) is { CanUninstall: true } installed)
+        {
+            page.Children.Add(Heading("Uninstall"));
+            page.Children.Add(Note($"SaveTether is installed in {installed.Layout.AppFolder}. Uninstalling removes it; your setup and linked folders stay."));
+            var uninstall = new Button { Content = "Uninstall SaveTether" };
+            uninstall.Click += async (_, _) =>
+            {
+                if (!await overlay.ConfirmAsync(InstallOffer.UninstallTitle, installed.UninstallText(), "Uninstall"))
+                {
+                    return;
+                }
+
+                var (done, problem) = installed.Uninstall(Core.Startup.Autostart.ForSystem());
+                App.Options.Log.Write(done ? $"uninstalled from {installed.Layout.AppFolder}" : $"uninstall failed: {problem}");
+                if (problem is not null)
+                {
+                    await overlay.InformAsync(done ? "Uninstalled, with files left" : "Not uninstalled", problem);
+                }
+
+                if (done)
+                {
+                    App.Instance?.Quit();
+                }
+            };
+            page.Children.Add(uninstall);
+        }
+
+        // Linux, in an unpacked copy: the offer made at start, for someone who chose Not now (or the update, when a newer copy is unpacked).
+        if (InstallOffer.ForSystem(localFolder, AppContext.BaseDirectory, Program.Version) is { } installer && installer.Offer(ignoreDeclined: true) is { } offer)
+        {
+            page.Children.Add(Heading(offer.IsUpdate ? "Update" : "Install"));
+            page.Children.Add(Note(offer.Text));
+            var install = new Button { Content = offer.Confirm + " SaveTether" };
+            install.Click += async (_, _) =>
+            {
+                if (!await overlay.ConfirmAsync(offer.Title, offer.Text, offer.Confirm))
+                {
+                    return;
+                }
+
+                var (installed, problem) = await overlay.WorkAsync(offer.Confirm, offer.IsUpdate ? "Updating SaveTether…" : "Installing SaveTether…", installer.Install);
+                if (!installed)
+                {
+                    App.Options.Log.Write(problem ?? "install failed");
+                    await overlay.InformAsync("Nothing was installed", problem ?? "SaveTether could not be installed.");
+                    return;
+                }
+
+                if (App.Instance is { } app)
+                {
+                    await app.LaunchInstalledAsync(installer, (title, text) => overlay.InformAsync(title, text));
+                }
+            };
+            page.Children.Add(install);
+        }
+
         page.Children.Add(Heading("About"));
         // The build stamps "<version>+<commit>"; the commit is shortened as git shows it.
-        var stamped = typeof(SettingsScreen).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        var stamped = Program.Version;
         var parts = stamped.Split('+', 2);
         var version = parts.Length == 2 ? $"{parts[0]} ({parts[1][..Math.Min(7, parts[1].Length)]})" : stamped;
         page.Children.Add(new TextBlock { Text = $"SaveTether {version}" });
@@ -69,11 +137,15 @@ internal sealed class SettingsScreen : UserControl
             Spacing = 10,
             Children = { new TextBlock { Text = $"Local folder: {localFolder}", VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap }, open },
         });
-        page.Children.Add(Note("MIT licence."));
+        page.Children.Add(Note("MIT licence. Game definitions marked unverified come from the Ludusavi manifest, compiled from PCGamingWiki."));
+        var notices = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.md");
+        if (File.Exists(notices))
+        {
+            var openNotices = new Button { Content = "Open third-party notices", HorizontalAlignment = HorizontalAlignment.Left };
+            openNotices.Click += (_, _) => FolderOpener.Open(notices, App.Options.Log);
+            page.Children.Add(openNotices);
+        }
 
-        var back = new Button { Content = "Back to apps", Margin = new Thickness(0, 12, 0, 0) };
-        back.Click += (_, _) => close();
-        page.Children.Add(back);
         Content = page;
     }
 

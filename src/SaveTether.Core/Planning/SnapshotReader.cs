@@ -76,6 +76,7 @@ public static class SnapshotReader
             FreeBytesAtTarget = FreeBytesAt(shared.SyncRoot),
             FreeBytesAtSource = FreeBytesAt(source),
             TargetOnLocalVolume = IsOnLocalVolume(target),
+            SourceOnLocalVolume = IsOnLocalVolume(source),
         };
     }
 
@@ -165,25 +166,5 @@ public static class SnapshotReader
         }
     }
 
-    private static bool IsOnLocalVolume(string path)
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return true;
-        }
-
-        if (path.StartsWith(@"\\", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        try
-        {
-            return Path.GetPathRoot(path) is { Length: > 0 } root && new DriveInfo(root).DriveType != DriveType.Network;
-        }
-        catch (Exception e) when (e is IOException or ArgumentException)
-        {
-            return true;
-        }
-    }
+    private static bool IsOnLocalVolume(string path) => !PathRules.IsOnNetworkDrive(path);
 }

@@ -20,6 +20,9 @@ public enum SyncFolderFinding
     /// <summary>The path is empty or not absolute.</summary>
     NotAPath,
 
+    /// <summary>On Windows, the folder is on a network drive, where no link SaveTether makes can point.</summary>
+    NetworkDrive,
+
     /// <summary>Nothing is there. On a drive or share that is not connected, say.</summary>
     Missing,
 
@@ -63,9 +66,15 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
 {
     public const string NameRule = "Lowercase letters, digits, '-' and '_', starting with a letter or digit; up to 40 characters.";
 
+    /// <summary>Step 1's sentence. Windows leaves out a network share, which setup refuses there: junctions only point to local drives (docs/sharing.md).</summary>
+    public static string SyncFolderIntro { get; } =
+        "Where SaveTether keeps the folders it manages, each with a link left in its place. " +
+        "To share them between devices, choose a folder a sync tool keeps the same on each: " +
+        (OperatingSystem.IsWindows() ? "Syncthing, OneDrive or Nextcloud." : "Syncthing, OneDrive, Nextcloud or a network share.");
+
     public const string FirstDeviceWarning =
-        "Only do this on the first device. If SaveTether is set up on another device, wait until the sync tool has delivered " +
-        "the SaveTether folder here instead; setting it up twice creates two separate setups.";
+        "Only on the first device. If SaveTether is set up on another device, wait for its folder to arrive here instead; " +
+        "setting up twice makes two separate setups.";
 
     private SyncFolderCheck? _syncFolder;
 
@@ -106,6 +115,20 @@ public sealed class SetupFlow(LocalStore local, string defaultBackupRoot, string
         }
 
         path = PathRules.Normalize(Path.GetFullPath(path));
+
+        // Before looking at the folder: on Windows nothing could be linked into a share, and probing one that is
+        // not there can stall. The core's init refuses it too; saying so here keeps it at step 1.
+        if (PathRules.IsOnNetworkDrive(path))
+        {
+            return _syncFolder = new SyncFolderCheck(SyncFolderFinding.NetworkDrive, path, [], Workspace.NetworkSyncRootMessage(path));
+        }
+
+        if (SharedStore.ReadProblem(path) is { } problem)
+        {
+            return _syncFolder = new SyncFolderCheck(
+                SyncFolderFinding.Missing, path, [], $"{path} cannot be read ({problem}). If it is on a network share or a mounted drive, reconnect or mount it again.");
+        }
+
         if (SafeFs.Probe(PathRules.ResolveAll(path)) != EntryKind.Directory)
         {
             return _syncFolder = new SyncFolderCheck(

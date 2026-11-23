@@ -1,0 +1,10 @@
+Cemu:
+  steam:
+    id: 4004
+  files:
+    "<winAppData>/Cemu/mlc01":
+      tags: [save]
+Kept Game:
+  files:
+    "<winAppData>/KeptGame":
+      tags: [save]

@@ -1,0 +1,52 @@
+// ScummVM (point-and-click adventure engine). Shipped with SaveTether. The folders come from ScummVM's source
+// (backends/saves/windows/windows-saves.cpp: AppData/Roaming/ScummVM/Saved games; backends/saves/posix/posix-saves.cpp:
+// $XDG_DATA_HOME/scummvm/saves), read 2026-11-22. The Flatpak and EmuDeck folders come from EmuDeck's ScummVM script, which moves the
+// saves to Emulation/saves/scummvm/saves. Not yet tried with `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "scummvm",
+  "name": "ScummVM",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-appdata",
+      "os": "windows",
+      "detect": { "dir": "{appdata}/ScummVM/Saved games" },
+      "base": "{appdata}/ScummVM"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:org.scummvm.ScummVM}/data/scummvm/saves" },
+      "base": "{flatpak:org.scummvm.ScummVM}/data/scummvm"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/scummvm/saves" },
+      "base": "{xdg_data}/scummvm"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/saves/scummvm/saves" },
+      "base": "{emudeck}/saves/scummvm"
+    }
+  ],
+  "roles": [
+    {
+      "id": "saves",
+      "class": "save",
+      "default": true,
+      "path": { "win-appdata": "Saved games", "linux-flatpak": "saves", "linux-native": "saves", "emudeck": "saves" },
+      "target": "saves",
+      "notes": "Saves for every game, in one folder (file names start with the game's ID)."
+    }
+  ],
+  "quirks": [
+    "scummvm.ini stays on each device: it lists the game folders on that device.",
+    "The save path can be set in Options > Paths, also for each game; Add app follows the default location and EmuDeck's only.",
+    "Process name for the running check: scummvm.exe on Windows, scummvm on Linux."
+  ]
+}

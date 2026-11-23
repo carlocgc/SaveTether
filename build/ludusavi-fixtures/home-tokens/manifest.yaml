@@ -1,0 +1,6 @@
+Home Game:
+  files:
+    "<home>/AppData/LocalLow/HomeStudio/Home Game":
+      tags: [save]
+    "<home>/Documents/HomeStudio/Home Game Docs":
+      tags: [save]

@@ -364,6 +364,34 @@ public class SharedStoreTests
         Files = [new SeedFile("ULUS10041/DATA.BIN", 4096), new SeedFile("readme.txt", 12)],
     };
 
+    // Found on the Deck: a FUSE mount whose process had died still looked present, then failed when read ("Transport
+    // endpoint is not connected"), and setup and status showed an unexpected error. A link that points at itself is a
+    // folder no Linux can read, the nearest a test can come to a mount that stopped answering.
+    [Fact]
+    public void A_sync_root_that_cannot_be_read_is_not_initialized_and_says_why()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // Making a symbolic link needs a privilege there.
+        }
+
+        using var sandbox = new Sandbox();
+        var loop = sandbox.At("loop");
+        File.CreateSymbolicLink(loop, "loop");
+        var shared = new SharedStore(loop);
+
+        Assert.False(shared.IsInitialized);
+        Assert.NotNull(SharedStore.ReadProblem(loop));
+        Assert.StartsWith("it cannot be read (", shared.NotAvailableReason, StringComparison.Ordinal);
+        Assert.Contains("cannot be read", shared.NotAvailableMessage, StringComparison.Ordinal);
+
+        // Not there, or there and readable: no problem to report.
+        Assert.Null(SharedStore.ReadProblem(sandbox.At("absent")));
+        Assert.Null(SharedStore.ReadProblem(sandbox.Dir("fine")));
+        Assert.Equal("it does not exist", new SharedStore(sandbox.At("absent")).NotAvailableReason);
+        Assert.Equal("the SaveTether folder is not in it", new SharedStore(sandbox.Dir("fine")).NotAvailableReason);
+    }
+
     private static Dictionary<string, string> Snapshot(string folder) =>
         SafeFs.EnumerateTree(folder)
             .Where(e => e.Kind == EntryKind.File)

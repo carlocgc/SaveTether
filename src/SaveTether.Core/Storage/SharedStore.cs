@@ -16,6 +16,7 @@ public sealed class SharedStore
     private const string MappingsFolder = "mappings";
     private const string DevicesFolder = "devices";
     private const string SeedFolder = "seed";
+    private const string RemovedFolder = "removed";
 
     public SharedStore(string syncRoot)
     {
@@ -39,21 +40,62 @@ public sealed class SharedStore
     public string MetaRoot { get; }
 
     /// <summary>
-    /// True when the marker folder is present. Without it nothing may run (design 5.3, invariant 5):
-    /// an unmounted drive or a sync that has not arrived yet both look like "not initialized".
+    /// True when the marker folder is present and can be read. Without it nothing may run (design 5.3, invariant 5):
+    /// an unmounted drive, a mount that stopped answering, and a sync that has not arrived yet all look like "not
+    /// initialized".
     /// </summary>
-    public bool IsInitialized => SafeFs.Probe(MetaRoot) == EntryKind.Directory;
+    public bool IsInitialized => ReadProblem(MetaRoot) is null && SafeFs.Probe(MetaRoot) == EntryKind.Directory;
+
+    /// <summary>
+    /// Why <paramref name="folder"/> cannot be read, or null when it can be or is simply not there. A network share or
+    /// a FUSE mount whose server or process has gone ("Transport endpoint is not connected") can still look present,
+    /// from what the system has cached, until something is read from it; so this opens the folder as well as looking
+    /// at it. Found on the Deck with a dead FUSE mount, which setup and status reported as an unexpected error.
+    /// </summary>
+    public static string? ReadProblem(string folder)
+    {
+        try
+        {
+            var resolved = PathRules.ResolveAll(folder);
+            if (SafeFs.Probe(resolved) == EntryKind.Directory)
+            {
+                using var entries = Directory.EnumerateFileSystemEntries(resolved).GetEnumerator();
+                entries.MoveNext();
+            }
+
+            return null;
+        }
+        catch (IOException e) when (e is not (FileNotFoundException or DirectoryNotFoundException))
+        {
+            // The system's own words, without the path it appends (" : '<path>'"), which the caller names already.
+            var cut = e.Message.IndexOf(" : '", StringComparison.Ordinal);
+            return (cut > 0 ? e.Message[..cut] : e.Message).TrimEnd('.');
+        }
+    }
 
     /// <summary>
     /// Why the sync root cannot be used, for when <see cref="IsInitialized"/> is false. A missing
     /// sync root folder and a missing marker folder get different advice.
     /// </summary>
+    /// <summary>
+    /// Why the sync root cannot be used, in a few words, for when <see cref="IsInitialized"/> is false: "it cannot be
+    /// read (...)", "it does not exist", or "the SaveTether folder is not in it". The desktop app's banner B3 puts it
+    /// in its one sentence.
+    /// </summary>
+    public string NotAvailableReason =>
+        (ReadProblem(SyncRoot) ?? ReadProblem(MetaRoot)) is { } problem ? $"it cannot be read ({problem})"
+        : SafeFs.Probe(PathRules.ResolveAll(SyncRoot)) == EntryKind.Directory ? "the SaveTether folder is not in it"
+        : "it does not exist";
+
     public string NotAvailableMessage =>
-        SafeFs.Probe(PathRules.ResolveAll(SyncRoot)) == EntryKind.Directory
-            ? $"'{SyncRoot}' is not set up for SaveTether: the folder '{Path.Combine(ToolFolderName, MetaFolderName)}' is missing. " +
-              "If this device syncs with one that is already set up, wait for the sync to finish. " +
-              "If the sync root is on a removable drive, check that it is connected."
-            : $"The sync root '{SyncRoot}' does not exist. If it is on a removable drive, check that it is connected.";
+        (ReadProblem(SyncRoot) ?? ReadProblem(MetaRoot)) is { } problem
+            ? $"The sync root '{SyncRoot}' cannot be read ({problem}). If it is on a network share or a mounted drive, " +
+              "reconnect or mount it again."
+            : SafeFs.Probe(PathRules.ResolveAll(SyncRoot)) == EntryKind.Directory
+                ? $"'{SyncRoot}' is not set up for SaveTether: the folder '{Path.Combine(ToolFolderName, MetaFolderName)}' is missing. " +
+                  "If this device syncs with one that is already set up, wait for the sync to finish. " +
+                  "If the sync root is on a removable drive, check that it is connected."
+                : $"The sync root '{SyncRoot}' does not exist. If it is on a removable drive, check that it is connected.";
 
     /// <summary>
     /// Creates the marker folder. Only for the first device ever ("init --create-root"); every
@@ -175,6 +217,91 @@ public sealed class SharedStore
         JsonFiles.Write(DevicePathOf(device.DeviceName), device, StorageJsonContext.Default.DeviceFile, DeviceFile.CurrentSchema);
     }
 
+    /// <summary>Deletes a device's file, through <see cref="SafeFs.RemoveSharedFile"/>. Nothing else of the device's is touched.</summary>
+    public void DeleteDevice(string deviceName)
+    {
+        RequireInitialized();
+        RequireDeviceName(deviceName);
+        SafeFs.RemoveSharedFile(DataRoot, DevicePathOf(deviceName));
+    }
+
+    /// <summary>Deletes the tombstone for a device name, if there is one: a new install is taking the name (phase 3.6, D6).</summary>
+    public void DeleteTombstone(string deviceName)
+    {
+        RequireInitialized();
+        RequireDeviceName(deviceName);
+        var file = Path.Combine(MetaRoot, RemovedFolder, deviceName + ".json");
+        if (SafeFs.Probe(file) == EntryKind.File)
+        {
+            SafeFs.RemoveSharedFile(DataRoot, file);
+        }
+    }
+
+    /// <summary>The shared files that belong to one device and no one else: its seed markers, then its device file. Only those that exist.</summary>
+    public IReadOnlyList<string> FilesOf(string deviceName)
+    {
+        RequireInitialized();
+        RequireDeviceName(deviceName);
+        var files = ListMappings()
+            .Select(m => Path.Combine(SeedFolderOf(m.Id), deviceName + ".json"))
+            .Where(f => SafeFs.Probe(f) == EntryKind.File)
+            .ToList();
+        if (SafeFs.Probe(DevicePathOf(deviceName)) == EntryKind.File)
+        {
+            files.Add(DevicePathOf(deviceName));
+        }
+
+        return files;
+    }
+
+    /// <summary>
+    /// Every tombstone: the devices that were removed from this sync folder (phase 3.6). One that cannot be read is skipped, so a stray
+    /// file in the folder cannot stop "device list" or a removal.
+    /// </summary>
+    public IReadOnlyList<TombstoneFile> ReadTombstones()
+    {
+        RequireInitialized();
+        var tombstones = new List<TombstoneFile>();
+        foreach (var file in JsonFiles.ListJson(Path.Combine(MetaRoot, RemovedFolder)))
+        {
+            try
+            {
+                tombstones.Add(JsonFiles.Read(file, StorageJsonContext.Default.TombstoneFile, TombstoneFile.CurrentSchema));
+            }
+            catch (StoreException)
+            {
+                // Not one this version can read: left as it is.
+            }
+        }
+
+        return tombstones;
+    }
+
+    public void WriteTombstone(TombstoneFile tombstone)
+    {
+        RequireInitialized();
+        ArgumentNullException.ThrowIfNull(tombstone);
+        RequireDeviceName(tombstone.DeviceName);
+        var folder = Path.Combine(MetaRoot, RemovedFolder);
+        Directory.CreateDirectory(folder);
+        JsonFiles.Write(
+            Path.Combine(folder, tombstone.DeviceName + ".json"),
+            tombstone, StorageJsonContext.Default.TombstoneFile, TombstoneFile.CurrentSchema);
+    }
+
+    /// <summary>Deletes the device's seed marker for the mapping, if it has one.</summary>
+    public void DeleteSeedMarker(string mappingId, string deviceName)
+    {
+        RequireInitialized();
+        RequireMappingId(mappingId);
+        RequireDeviceName(deviceName);
+        var file = Path.Combine(SeedFolderOf(mappingId), deviceName + ".json");
+        if (SafeFs.Probe(file) == EntryKind.File)
+        {
+            SafeFs.RemoveSharedFile(DataRoot, file);
+        }
+    }
+
     /// <summary>All seed markers for a mapping, active or superseded, by device name.</summary>
     public IReadOnlyList<SeedMarker> ReadSeedMarkers(string mappingId)
     {
@@ -229,6 +356,65 @@ public sealed class SharedStore
 
         return superseded;
     }
+
+    /// <summary>
+    /// When the device last wrote to the shared folder: the newest of its device file and the seed markers it
+    /// wrote for <paramref name="mappingIds"/>, by their times when they were seeded.
+    /// </summary>
+    public DateTimeOffset LastActivityOf(string deviceName, IEnumerable<string> mappingIds)
+    {
+        RequireInitialized();
+        RequireDeviceName(deviceName);
+        var newest = new DateTimeOffset(File.GetLastWriteTimeUtc(DevicePathOf(deviceName)), TimeSpan.Zero);
+        foreach (var id in mappingIds)
+        {
+            var file = Path.Combine(SeedFolderOf(id), deviceName + ".json");
+            if (SafeFs.Probe(file) != EntryKind.File)
+            {
+                continue;
+            }
+
+            try
+            {
+                var seeded = JsonFiles.Read(file, StorageJsonContext.Default.SeedMarker, SeedMarker.CurrentSchema).SeededUtc;
+                newest = seeded > newest ? seeded : newest;
+            }
+            catch (StoreException)
+            {
+                // Only the device's own marker is read, and an unreadable one just adds nothing: the time is advisory.
+            }
+        }
+
+        return newest;
+    }
+
+    /// <summary>
+    /// Deletes a mapping's seed markers and then its mapping file (design 5.3, invariant 2: the tool's own metadata may be retired).
+    /// The caller has checked the mapping is unused and dealt with its shared folder. Each delete refuses a link in the way
+    /// (<see cref="SafeFs.RemoveSharedFile"/>), and a markers folder that has gained anything is left.
+    /// </summary>
+    public void RetireMapping(string mappingId)
+    {
+        RequireInitialized();
+        RequireMappingId(mappingId);
+        var seed = SeedFolderOf(mappingId);
+        if (SafeFs.Probe(seed) == EntryKind.Directory)
+        {
+            foreach (var marker in Directory.EnumerateFiles(seed))
+            {
+                SafeFs.RemoveSharedFile(DataRoot, marker);
+            }
+
+            SafeFs.RemoveEmptySharedFolder(DataRoot, seed);
+        }
+
+        // The folder a delete that stopped part way used for what it had set aside, once it holds nothing.
+        SafeFs.RemoveEmptySharedFolder(DataRoot, Path.Combine(MetaRoot, DeletingFolder, mappingId));
+        SafeFs.RemoveSharedFile(DataRoot, MappingPath(mappingId));
+    }
+
+    /// <summary>Where <c>map delete</c> sets a file aside, in one rename, before it checks the file and deletes it: below <see cref="MetaRoot"/>.</summary>
+    public const string DeletingFolder = "deleting";
 
     private string MappingPath(string mappingId) => Path.Combine(MetaRoot, MappingsFolder, mappingId + ".json");
 

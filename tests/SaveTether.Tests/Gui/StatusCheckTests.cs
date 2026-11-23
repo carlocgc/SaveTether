@@ -56,6 +56,69 @@ public class StatusCheckTests
     }
 
     [Fact]
+    public void A_manual_mapping_named_like_an_imported_app_keeps_its_choose_folder_action_when_its_folder_is_missing()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", pc.Name, "--create-root");
+        var local = new LocalStore(pc.LocalFolder);
+        var source = sandbox.Dir("pc", "aaaaxy");
+        File.WriteAllText(Path.Combine(source, "save.bin"), "one");
+        pc.Ok("map", "add", "aaaaxy.savedata", "--target", "aaaaxy/savedata", "--source", source);
+        pc.Ok("apply", "aaaaxy.savedata", "--copy");
+        Directory.Delete(source, recursive: true);
+
+        // aaaaxy.savedata is a hand-made mapping: the imported AAAAXY definition has no 'savedata' role.
+        var row = Assert.Single(StatusCheck.Run(local).Mappings);
+        Assert.False(row.HasDefinition);
+        Assert.Equal(HealthReason.FolderMissing, row.Health.Reason);
+        Assert.Equal((RowAction?)RowAction.ChooseFolderAgain, AppsPage.Row(row).Main);
+    }
+
+    [Fact]
+    public void A_row_of_an_imported_app_has_a_definition_only_when_its_role_and_target_match_the_definitions()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.Ok("init", "--sync-root", pc.SyncRoot, "--device", "pc", "--create-root");
+        var catalog = new Core.Definitions.DefinitionCatalog(null);
+        var id = catalog.AvailableIds().First(i => catalog.Find(i)!.Source == Core.Definitions.DefinitionSource.Imported);
+        var role = catalog.Find(id)!.Definition!.Roles[0];
+        var folder = sandbox.Dir("pc", "apps", "game");
+
+        // Made by hand with the target the definition gives: Add app can reuse it.
+        pc.Ok("map", "add", $"{id}.{role.Id}", "--target", role.MappingTargetFor(id), "--source", folder);
+        Assert.True(Assert.Single(StatusCheck.Run(new LocalStore(pc.LocalFolder)).Mappings).HasDefinition);
+
+        // The same app and role made by hand with a target of its own: Add app would refuse it (the target differs), so the
+        // hand form, which reuses the mapping's target, stays.
+        var hand = new CliDevice(sandbox, "hand");
+        hand.Ok("init", "--sync-root", hand.SyncRoot, "--device", "hand", "--create-root");
+        hand.Ok("map", "add", $"{id}.{role.Id}", "--target", $"{id}/custom", "--source", sandbox.Dir("hand", "apps", "game"));
+        Assert.False(Assert.Single(StatusCheck.Run(new LocalStore(hand.LocalFolder)).Mappings).HasDefinition);
+    }
+
+    [Fact]
+    public void A_linked_row_says_what_kind_of_link_its_folder_is_and_an_unlinked_one_says_original()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Save("GAME1/save.bin", "one");
+        var local = new LocalStore(pc.LocalFolder);
+
+        var before = AppsPage.From(StatusCheck.Run(local)).Groups.Single().Rows.Single();
+        Assert.Null(before.Mapping.LinkKind);
+        Assert.Equal("Original", before.Sentence);
+
+        pc.Ok("apply", Id, "--copy");
+
+        var after = AppsPage.From(StatusCheck.Run(local)).Groups.Single().Rows.Single();
+        Assert.True(after.Mapping.LinkKind is "Symlink" or "Junction", after.Mapping.LinkKind);
+        Assert.Equal(after.Mapping.LinkKind, after.Sentence);
+    }
+
+    [Fact]
     public void Linked_and_not_applied_mappings_are_green_and_a_replaced_link_is_amber()
     {
         using var sandbox = new Sandbox();
@@ -68,12 +131,29 @@ public class StatusCheckTests
         Assert.Equal(OverallCondition.AllLinked, ready.Condition);
         Assert.Equal("Ready to link", Assert.Single(ready.Mappings).Word.Word);
 
+        // Green, but not "All linked" while nothing is (found by the owner with every link reverted).
+        Assert.Equal("1 ready to link", ready.Headline);
+        Assert.False(ready.IsAmber);
+
         pc.Save("GAME1/save.bin", "one");
         pc.Ok("apply", Id, "--copy");
         var linked = StatusCheck.Run(local);
         Assert.Equal(OverallCondition.AllLinked, linked.Condition);
         Assert.Equal("All linked", linked.Headline);
         Assert.False(linked.IsAmber);
+
+        // A second folder here, not linked yet: both counted. A mapping only another device has is not counted.
+        var states = sandbox.Dir("pc", "states");
+        pc.Ok("map", "add", "ppsspp.states", "--target", "ppsspp/STATES", "--source", states);
+        var deck = new CliDevice(sandbox, "deck");
+        deck.Ok("init", "--sync-root", pc.SyncRoot, "--device", "deck");
+        deck.Ok("map", "add", "other.saves", "--target", "other/Saves", "--source", sandbox.Dir("deck", "other"));
+        var mixed = StatusCheck.Run(local);
+        Assert.Equal(OverallCondition.AllLinked, mixed.Condition);
+        Assert.Contains(mixed.Mappings, m => m.Word.Word == "Not on this device");
+        Assert.Equal("1 linked, 1 ready to link", mixed.Headline);
+        pc.Ok("apply", "ppsspp.states");
+        Assert.Equal("All linked", StatusCheck.Run(local).Headline);
 
         // The link replaced by a real folder with files: the app's folder was restored from a backup, say.
         Directory.Delete(pc.Source);
@@ -82,7 +162,7 @@ public class StatusCheckTests
         Assert.Equal(OverallCondition.NeedsAttention, replaced.Condition);
         Assert.Equal("1 app needs attention", replaced.Headline);
         var row = Assert.Single(replaced.Attention);
-        Assert.Equal(("ppsspp", "savedata", "Not linked"), (row.AppName, row.Role, row.Word.Word));
+        Assert.Equal(("PPSSPP", "savedata", "Not linked"), (row.AppName, row.Role, row.Word.Word));
     }
 
     [Fact]
@@ -113,8 +193,22 @@ public class StatusCheckTests
         Directory.Move(pc.SyncRoot, aside);
         var unplugged = StatusCheck.Run(local);
         Assert.Equal(OverallCondition.SyncRootUnavailable, unplugged.Condition);
-        Assert.NotNull(unplugged.Detail);
-        Assert.Contains(pc.SyncRoot, Texts.Banner(unplugged), StringComparison.Ordinal);
+        Assert.Equal("it does not exist", unplugged.Detail);
+        Assert.Equal($"The sync folder {pc.SyncRoot} is not available: it does not exist. If it is on a drive or a network share, connect it.", Texts.Banner(unplugged));
+
+        // One sentence, with the reason in it: no second line repeating it.
+        Assert.Null(Texts.BannerDetail(unplugged));
+
+        // A sync folder that cannot be read (on the Deck, a FUSE mount whose process had died) is row 4 too, not a failed check.
+        if (!OperatingSystem.IsWindows())
+        {
+            File.CreateSymbolicLink(pc.SyncRoot, Path.GetFileName(pc.SyncRoot));
+            var unreadable = StatusCheck.Run(local);
+            Assert.Equal(OverallCondition.SyncRootUnavailable, unreadable.Condition);
+            Assert.Contains("is not available: it cannot be read (", Texts.Banner(unreadable), StringComparison.Ordinal);
+            File.Delete(pc.SyncRoot);
+        }
+
         Directory.Move(aside, pc.SyncRoot);
 
         // Row 5: another install took the device name over.

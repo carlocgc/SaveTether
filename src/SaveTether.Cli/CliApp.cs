@@ -1,9 +1,12 @@
 using SaveTether.Core;
+using SaveTether.Core.Backup;
 using SaveTether.Core.Diagnostics;
 using SaveTether.Core.Execution;
+using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Planning;
+using SaveTether.Core.Startup;
 using SaveTether.Core.Storage;
 
 namespace SaveTether.Cli;
@@ -102,6 +105,13 @@ internal static class CliApp
               the unit --add-missing copies in. Give it again later to change it.
           savetether map remove <id>
               Remove this device's save folder for a mapping. Other devices keep theirs.
+          savetether map delete <id> [--confirm-delete]
+              Delete a mapping no device uses from the sync folder: its shared copy, its record and its seed
+              markers. Other devices may use that folder. Each device's own save folders and backups are not
+              touched. The shared copy is backed up on this device first. It cannot be undone from the share,
+              so it asks first, or needs --confirm-delete, which says that every write to the role's shared
+              folder is complete and the sync folder is up to date on every device that uses it. Refused while any
+              device has a folder set for it.
 
           savetether app add <app> [--install <id>] [--role <id>]... [--install-dir <path>]
                                    [--sd-card <path>] [--wine-prefix <path>] [--dry-run]
@@ -110,8 +120,10 @@ internal static class CliApp
               --install picks the install when more than one is found. --role picks roles other
               than the default ones. The path options give what cannot be found by looking; they
               are remembered for this device, so running app add again later finds moved folders.
-          savetether app list
-              List the apps that have a definition: built in, or in the shared definitions folder.
+          savetether app list [--found] [--search <text>]
+              List the apps that have a definition: built in, imported (unverified), or in the
+              shared definitions folder. --search keeps those whose name or ID contains the text,
+              or whose Steam app ID it is.
 
           savetether status [<id>]
               Show each mapping's state on this device.
@@ -123,7 +135,7 @@ internal static class CliApp
                 --copy            they become the shared copy (only when the shared folder is empty)
                 --no-copy         use the shared saves; this device's are kept in the backup only
                 --add-missing     also add what the shared copy lacks; nothing is overwritten
-                --replace-shared  they replace the shared copy on every device (needs --confirm-replace)
+                --replace-shared  they replace the shared copy in the sync folder (needs --confirm-replace)
               --assume-synced  go ahead although the shared copy may not have fully arrived
               --assume-closed  go ahead although the app appears to be running
               --grant-sandbox  when a Flatpak app cannot write the shared folder, allow it (that
@@ -133,16 +145,43 @@ internal static class CliApp
           savetether revert <id> [--assume-closed] [--dry-run]
               Make the save folder a real folder again, holding a copy of the shared saves.
 
+          savetether device list
+              The devices in the sync folder, the mappings, and this device's backups.
+
+          savetether device rename <new-name>
+              Give this device a new name, here and in the sync folder.
+
+          savetether device remove [--delete-orphan <mapping>[:saves]]... [--delete-backups] [--delete-everything] [--confirm-remove] [--confirm-delete]
+              Take this device out of the sync folder: linked folders become real folders again, and this
+              device's files in the sync folder and its local setup are deleted. Without --confirm-remove
+              it asks you to type the device name, or, with no terminal, only lists what it would do.
+              --delete-orphan <mapping> deletes a mapping only this device used; with :saves, its shared saves too.
+              --delete-everything also deletes the whole SaveTether folder in the sync folder; refused while another
+              device is registered. It needs --confirm-remove and --confirm-delete, or both phrases typed.
+              Run on a device that another device removed, it finishes the removal here.
+
+          savetether device remove --other <name> [--confirm-remove]
+              Remove a device that is gone (the old PC): its files in the sync folder are deleted and
+              its removal is recorded. Nobody's links are touched. This device cannot be named.
+
           savetether backup list [<id>]
           savetether backup restore <backup-id> [--confirm-replace] [--assume-closed] [--dry-run]
               Put a backup back where it was taken from. What is there now is backed up first.
               --confirm-replace is needed for a backup of a shared folder.
           savetether backup delete <backup-id> [--confirm-delete]
               Delete one backup. It cannot be undone, so it asks first, or needs --confirm-delete.
+          savetether backup delete (--all | --keep-first | --keep-last) [--mapping <id>] [--confirm-delete]
+              Delete many: all, all but the first ever taken, or all but the newest, for one mapping or all.
+              --all asks first, or needs --confirm-delete; without either it only lists what it would delete.
               The first backup of a folder is usually the only copy from before SaveTether changed it.
 
           savetether recover
               Undo or finish an operation that was interrupted.
+
+          savetether uninstall [--confirm-uninstall]
+              Linux: remove SaveTether's programs, which the desktop app installed for this user, and
+              its app menu entry; a running SaveTether is asked to quit first. Your setup, linked
+              folders, backups and the sync folder stay. It asks first, or needs --confirm-uninstall. On Windows, use Settings > Apps instead.
 
           savetether --version
           savetether --help
@@ -176,7 +215,7 @@ internal static class CliApp
                 using var held = Writes ? OperationLock.Acquire(_local, "cli", command.Name) : null;
 
                 // While an operation is unfinished, only looking and recovering are allowed.
-                var readOnly = command.Name is "status" or "backup list" or "recover" or "app list"
+                var readOnly = command.Name is "status" or "backup list" or "recover" or "app list" or "device list"
                     || (command.Name == "app add" && command.Has(ArgParser.DryRun));
                 if (!readOnly && Journal.For(_local).IsOpen)
                 {
@@ -188,9 +227,19 @@ internal static class CliApp
                     "init" => Init(),
                     "map add" => MapAdd(),
                     "map remove" => MapRemove(),
+                    "map delete" => MapDelete(),
                     "app add" => AppAdd(),
                     "app list" => AppList(),
                     "status" => Status(),
+                    "device list" => new CliOutput
+                    {
+                        Command = command.Name, ExitCode = ExitSuccess, Devices = Maintenance.Overview(Open()),
+                    },
+                    "device rename" => new CliOutput
+                    {
+                        Command = command.Name, ExitCode = ExitSuccess, Renamed = Open().RenameDevice(command.Positionals[0]),
+                    },
+                    "device remove" => DeviceRemove(),
                     "apply" => Apply(),
                     "revert" => Revert(),
                     "backup list" => new CliOutput
@@ -200,6 +249,7 @@ internal static class CliApp
                     },
                     "backup restore" => Restore(),
                     "backup delete" => DeleteBackup(),
+                    "uninstall" => Uninstall(),
                     _ => Recover(),
                 };
             }
@@ -222,7 +272,7 @@ internal static class CliApp
         /// guarded against.
         /// </remarks>
         private bool Writes =>
-            command.Name is not ("status" or "backup list" or "app list")
+            command.Name is not ("status" or "backup list" or "app list" or "device list" or "uninstall")
             && !command.Has(ArgParser.DryRun)
             && (command.Name != "init" || Directory.Exists(_local.Folder));
 
@@ -312,6 +362,38 @@ internal static class CliApp
             };
         }
 
+        /// <summary>
+        /// "map delete": a mapping no device uses, after a confirmation at a terminal or with --confirm-delete. The
+        /// deletion reaches every device through the sync tool, so what goes is said before it is asked.
+        /// </summary>
+        private CliOutput MapDelete()
+        {
+            var id = command.Positionals[0];
+            var workspace = Open();
+            var described = workspace.DescribeMappingDeletion(id);
+            if (!command.Has("--confirm-delete"))
+            {
+                var what = described.TargetExists
+                    ? $"its shared folder '{described.TargetFolder}' ({described.Files} file(s), {OutputWriter.FormatBytes(described.Bytes)})"
+                    : "its record (the shared folder is already gone)";
+                if (!CanAsk)
+                {
+                    return Failed(ExitRefused, $"Deleting '{id}' removes {what} from the sync folder, which other devices may use. Each device's own save folders and backups are not touched. Add --confirm-delete to go ahead, once all writes to its shared folder are complete and the sync folder is up to date on every device that uses it.");
+                }
+
+                var question =
+                    $"Delete '{id}' from the shared folder? This removes {what}, and the deletion reaches every device that uses the sync folder. Each device's own save folders and backups are not touched." +
+                    "\nBefore confirming, make sure all writes to this role's shared folder are complete and the sync folder is up to date on every device that uses it." +
+                    "\nThe shared copy is backed up on this device first.";
+                if (!Confirm(question))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was deleted.");
+                }
+            }
+
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, MappingDeleted = workspace.DeleteMapping(id) };
+        }
+
         private CliOutput AppAdd()
         {
             var appId = command.Positionals[0];
@@ -343,7 +425,8 @@ internal static class CliApp
 
             if (outcome.Plan is not { } plan)
             {
-                return AppFailed(appId, outcome, Hints.Compose(outcome.Message!));
+                var error = Hints.Compose(outcome.Message!);
+                return AppFailed(appId, outcome, outcome.Problem == AppAddProblem.UnknownApp ? error + " Find one with 'savetether app list --search <name>'." : error);
             }
 
             var dryRun = command.Has(ArgParser.DryRun);
@@ -369,17 +452,30 @@ internal static class CliApp
         {
             var workspace = Open();
             var catalog = workspace.Definitions;
-            var apps = catalog.AvailableIds().Select(id =>
+            var search = command.Value("--search");
+            if (command.Has("--found"))
             {
-                var entry = catalog.Find(id)!;
-                return new AppListEntry(id, entry.Definition?.Name, entry.Source, entry.IsValid ? null : string.Join("; ", entry.Errors));
-            }).ToList();
+                // The same match as the plain list's --search (name, ID or Steam app ID), so the two agree.
+                var matching = search is null ? null : catalog.Search(search).ToHashSet(StringComparer.Ordinal);
+                var found = workspace.ScanFound(environment.Resolver, SaveTether.Core.Detection.ScanOptions.Default)
+                    .Where(f => matching is null || matching.Contains(f.Hit.AppId))
+                    .OrderByDescending(f => f.Hit.NewestWrite ?? DateTime.MinValue)
+                    .ThenBy(f => f.Entry.Definition!.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(f => new FoundEntry(f.Hit.AppId, f.Entry.Definition!.Name, f.Entry.Source, f.Hit.InstallId, f.Hit.SaveFolder, f.Hit.NewestWrite))
+                    .ToList();
+                return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Found = found };
+            }
+
+            var ids = search is null ? catalog.AvailableIds() : catalog.Search(search);
+            var apps = catalog.FindAll(ids)
+                .Select(e => new AppListEntry(e.Id, e.Entry.Definition?.Name, e.Entry.Source, e.Entry.IsValid ? null : string.Join("; ", e.Entry.Errors)))
+                .ToList();
             return new CliOutput
             {
                 Command = command.Name, ExitCode = ExitSuccess, Apps = apps,
                 Message = workspace.Shared.IsInitialized
                     ? null
-                    : $"Only the built-in definitions are listed: the shared ones could not be read. {workspace.Shared.NotAvailableMessage}",
+                    : $"Only the built-in and imported definitions are listed: the shared ones could not be read. {workspace.Shared.NotAvailableMessage}",
             };
         }
 
@@ -493,6 +589,16 @@ internal static class CliApp
         /// </summary>
         private CliOutput DeleteBackup()
         {
+            if (BulkMode() is { } mode)
+            {
+                return CleanUpBackups(mode);
+            }
+
+            if (command.Positionals.Count != 1)
+            {
+                throw new UsageException("Give a backup ID, or one of --all, --keep-first, --keep-last.");
+            }
+
             var backupId = command.Positionals[0];
             var workspace = Open();
             var deletion = workspace.DescribeBackupDeletion(backupId);
@@ -518,6 +624,210 @@ internal static class CliApp
 
             var deleted = workspace.DeleteBackup(backupId);
             return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, BackupDeleted = deleted };
+        }
+
+        /// <summary>
+        /// "device remove": the plan, then the removal after the device's name is typed at a terminal or --confirm-remove is given.
+        /// With neither it deletes nothing and lists what it would do.
+        /// </summary>
+        private CliOutput DeviceRemove()
+        {
+            if (command.Value("--other") is { } other)
+            {
+                if (command.Has("--delete-backups") || command.Has("--delete-everything") || command.Has("--confirm-delete") || command.Values("--delete-orphan").Any())
+                {
+                    throw new UsageException("'--other' takes no other option than --confirm-remove.");
+                }
+
+                return DeviceRemoveOther(other);
+            }
+
+            var orphans = new Dictionary<string, OrphanChoice>();
+            foreach (var value in command.Values("--delete-orphan"))
+            {
+                var parts = value.Split(':');
+                if (parts.Length > 2 || (parts.Length == 2 && parts[1] != "saves") || !Identifiers.IsValidMappingId(parts[0]))
+                {
+                    throw new UsageException($"'--delete-orphan' needs a mapping ID, or '<mapping>:saves': '{value}'");
+                }
+
+                orphans[parts[0]] = parts.Length == 2 ? OrphanChoice.DeleteWithSaves : OrphanChoice.DeleteMapping;
+            }
+
+            if (command.Has("--confirm-delete") && !command.Has("--delete-everything"))
+            {
+                throw new UsageException("'--confirm-delete' goes with '--delete-everything'.");
+            }
+
+            var workspace = Open();
+            var plan = workspace.PlanDeviceRemoval(new RemovalChoices(orphans, command.Has("--delete-backups"), command.Has("--delete-everything")));
+            if (plan.IsRefused)
+            {
+                return Failed(ExitRefused, string.Concat(plan.Refusals.Select(r => PlanRenderer.ToText(new PlanOutcome(null, r)))));
+            }
+
+            DeviceRemovalOutput Summary(bool dryRun, DeviceRemovalResult? done) => new(
+                dryRun, done?.GivenBack ?? plan.GivenBack, plan.NotLinked, done?.OrphansDeleted ?? plan.Orphans,
+                plan.SharedFiles, done?.BackupsDeleted ?? plan.Backups.Count, DeleteEverything: plan.DeleteEverything);
+
+            // From a script both flags are needed; at a terminal a typed phrase takes the place of --confirm-delete.
+            var everythingConfirmed = !plan.DeleteEverything || command.Has("--confirm-delete");
+            if (command.Has("--confirm-remove") && !everythingConfirmed && !CanAsk)
+            {
+                return Failed(ExitRefused, "Deleting the SaveTether folder cannot be undone. Add --confirm-delete to go ahead.");
+            }
+
+            if (!command.Has("--confirm-remove"))
+            {
+                if (!CanAsk)
+                {
+                    return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Removal = Summary(dryRun: true, null) };
+                }
+
+                var question =
+                    $"Remove '{workspace.DeviceName}' from the sync folder? {plan.Reverts.Count} linked folder(s) become real folders again, " +
+                    $"{plan.SharedFiles.Count} shared file(s) of this device are deleted, and this device's local setup goes. " +
+                    (plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves) ? "Shared saves of the mappings named with :saves are deleted. " : string.Empty) +
+                    (plan.DeleteEverything ? "The whole SaveTether folder in the sync folder is deleted too. " : string.Empty) +
+                    (plan.DeleteBackups && plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves) ? "The backup taken of them first is deleted too. " : string.Empty) +
+                    $"Type the device name '{workspace.DeviceName}' to go ahead: ";
+                if (!string.Equals(Ask(question), workspace.DeviceName, StringComparison.OrdinalIgnoreCase)
+                    || (plan.Orphans.Any(o => o.Choice == OrphanChoice.DeleteWithSaves)
+                        && !string.Equals(Ask("Type 'delete everything' to delete those shared saves: "), "delete everything", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was changed.");
+                }
+            }
+
+            if (!everythingConfirmed
+                && !string.Equals(Ask("Type 'delete everything' to delete the whole SaveTether folder in the sync folder (it cannot be undone): "), "delete everything", StringComparison.OrdinalIgnoreCase))
+            {
+                return Failed(ExitRefused, "Cancelled. Nothing was changed.");
+            }
+
+            var result = workspace.RemoveDevice(plan);
+            if (result.Failure is { } failure)
+            {
+                var exit = failure.Status switch
+                {
+                    ExecutionStatus.RolledBack => ExitRolledBack,
+                    ExecutionStatus.RecoveryNeeded => ExitRecoveryNeeded,
+                    _ => ExitRefused,
+                };
+                var error = failure.Error is { } note ? Hints.Compose(note) : "A link could not be reverted, so the device was not removed.";
+                return Failed(exit, error + " Nothing was deleted from the sync folder. Run the command again once that is dealt with.");
+            }
+
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Removal = Summary(dryRun: false, result) };
+        }
+
+        private CliOutput DeviceRemoveOther(string name)
+        {
+            var workspace = Open();
+            var files = workspace.RemoveOtherDevice(name, dryRun: true);
+            DeviceRemovalOutput Summary(bool dryRun) => new(dryRun, [], [], [], files, 0, name);
+            if (!command.Has("--confirm-remove"))
+            {
+                if (!CanAsk)
+                {
+                    return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Removal = Summary(dryRun: true) };
+                }
+
+                var question =
+                    $"Remove the device '{name}' from the sync folder? Its {files.Count} file(s) there are deleted; nobody's links are touched. " +
+                    $"Type the device name '{name}' to go ahead: ";
+                if (!string.Equals(Ask(question), name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was changed.");
+                }
+            }
+
+            workspace.RemoveOtherDevice(name);
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Removal = Summary(dryRun: false) };
+        }
+
+        private BackupCleanup? BulkMode()
+        {
+            var modes = new[] { ("--all", BackupCleanup.All), ("--keep-first", BackupCleanup.KeepFirst), ("--keep-last", BackupCleanup.KeepLast) }
+                .Where(m => command.Has(m.Item1)).ToList();
+            if (modes.Count > 1 || (modes.Count == 1 && command.Positionals.Count > 0) || (modes.Count == 0 && command.Value("--mapping") is not null))
+            {
+                throw new UsageException("Give a backup ID, or one of --all, --keep-first, --keep-last (with --mapping), not a mix.");
+            }
+
+            return modes.Count == 1 ? modes[0].Item2 : null;
+        }
+
+        /// <summary>
+        /// "backup delete" in bulk. The two keep modes always leave a backup, so they go ahead. --all needs a yes
+        /// or --confirm-delete; with neither it deletes nothing and lists what it would.
+        /// </summary>
+        private CliOutput CleanUpBackups(BackupCleanup mode)
+        {
+            var mappingId = command.Value("--mapping");
+            var workspace = Open();
+            var found = workspace.DescribeBackupCleanup(mappingId, mode);
+            if (mode == BackupCleanup.All && found.Count > 0 && !command.Has("--confirm-delete"))
+            {
+                var bytes = OutputWriter.FormatBytes(found.Sum(b => b.TotalBytes));
+                if (!CanAsk)
+                {
+                    return new CliOutput
+                    {
+                        Command = command.Name, ExitCode = ExitSuccess, BackupsCleaned = new BackupCleanupResult(found, DryRun: true),
+                    };
+                }
+
+                if (!Confirm($"Delete all {found.Count} backup(s) ({bytes}), including the first of each folder, which is usually the only copy from before SaveTether changed it?\nIt cannot be undone."))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was deleted.");
+                }
+            }
+
+            var removed = workspace.CleanUpBackups(mappingId, mode);
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, BackupsCleaned = new BackupCleanupResult(removed, DryRun: false) };
+        }
+
+        /// <summary>
+        /// "uninstall" (Linux): removes what the desktop app's install put in place, after a confirmation at a terminal or
+        /// with --confirm-uninstall. Changes no setup, link, backup or shared file. On Windows the installer's own
+        /// uninstaller does this.
+        /// </summary>
+        private CliOutput Uninstall()
+        {
+            if (environment.Install is not { } layout)
+            {
+                return Failed(ExitRefused, "On Windows, SaveTether is uninstalled from Settings > Apps > Installed apps. Nothing was changed.");
+            }
+
+            if (SafeFs.Probe(layout.AppPath) != EntryKind.File && SafeFs.Probe(layout.CliPath) != EntryKind.File)
+            {
+                return Failed(ExitRefused, $"SaveTether is not installed in {layout.AppFolder}. Nothing was changed.");
+            }
+
+            if (!command.Has("--confirm-uninstall"))
+            {
+                if (!CanAsk)
+                {
+                    return Failed(ExitRefused, "Uninstalling removes SaveTether's programs. Add --confirm-uninstall to go ahead.");
+                }
+
+                var question =
+                    $"Remove SaveTether's programs from {layout.AppFolder} and {layout.BinFolder}, and its app menu entry?" +
+                    " A running SaveTether is asked to quit first." +
+                    "\nYour setup, linked folders, backups and the sync folder stay; linked folders keep syncing, but nothing checks on them.";
+                if (!Confirm(question))
+                {
+                    return Failed(ExitRefused, "Cancelled. Nothing was removed.");
+                }
+            }
+
+            // The installed app, left running, would go on from removed files until the end of the session.
+            var stillRunning = Installer.QuitRunning(layout, environment.LocalFolder, environment.RunningPrograms, environment.QuitWait);
+            var (removed, left) = Installer.Uninstall(layout, environment.Autostart);
+            var leftAll = left.Concat(stillRunning.Select(id =>
+                $"SaveTether is still running (process {id}) and did not quit when asked: quit it from its tray menu.")).ToList();
+            return new CliOutput { Command = command.Name, ExitCode = ExitSuccess, Uninstalled = new UninstallOutput(removed, leftAll) };
         }
 
         private CliOutput Recover()
@@ -607,7 +917,7 @@ internal static class CliApp
 
             if (made.NeedsFirstSeedConfirmation && CanAsk && !Confirm(
                 "No other device has set this mapping up, as far as this device can see. " +
-                "If you already set it up on another device, wait until that has synced.\nMake this device's saves the shared copy?"))
+                "If you already set it up on another device, make sure no other device is still writing to the sync folder.\nMake this device's saves the shared copy?"))
             {
                 return Ended(OperationOutcome.Cancelled, made);
             }

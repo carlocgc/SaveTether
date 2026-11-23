@@ -35,6 +35,7 @@ $.app.plan.roles[]: object
 $.app.plan.values.install: string
 $.app.plan.values.install_dir: string
 $.app.plan.values: object
+$.app.plan.verified: boolean
 $.app.plan: object
 $.app: object
 $.command: string
@@ -97,6 +98,7 @@ $.app.plan.roles[]: object
 $.app.plan.values.install: string
 $.app.plan.values.install_dir: string
 $.app.plan.values: object
+$.app.plan.verified: boolean
 $.app.plan: object
 $.app: object
 $.command: string
@@ -126,9 +128,24 @@ $.apps: array
 $.apps[].id: string
 $.apps[].name: string
 $.apps[].source: string
+$.apps[].verified: boolean
 $.apps[]: object
 $.command: string
 $.exit_code: number
+$.schema: number
+$: object
+
+## app-list-found
+$.command: string
+$.exit_code: number
+$.found: array
+$.found[].id: string
+$.found[].install: string
+$.found[].name: string
+$.found[].save_folder: string
+$.found[].source: string
+$.found[].verified: boolean
+$.found[]: object
 $.schema: number
 $: object
 
@@ -314,6 +331,24 @@ $.operations[]: object
 $.schema: number
 $: object
 
+## backup-cleanup
+$.backups_cleaned.dry_run: boolean
+$.backups_cleaned.removed: array
+$.backups_cleaned.removed[].created_utc: string
+$.backups_cleaned.removed[].file_count: number
+$.backups_cleaned.removed[].id: string
+$.backups_cleaned.removed[].location: string
+$.backups_cleaned.removed[].mapping_id: string
+$.backups_cleaned.removed[].reason: string
+$.backups_cleaned.removed[].source_path: string
+$.backups_cleaned.removed[].total_bytes: number
+$.backups_cleaned.removed[]: object
+$.backups_cleaned: object
+$.command: string
+$.exit_code: number
+$.schema: number
+$: object
+
 ## backup-delete
 $.backup_deleted.backup.created_utc: string
 $.backup_deleted.backup.file_count: number
@@ -375,6 +410,88 @@ $.operations[]: object
 $.schema: number
 $: object
 
+## device-list
+$.command: string
+$.devices.backup_bytes: number
+$.devices.backup_count: number
+$.devices.devices: array
+$.devices.devices[].install_id: string
+$.devices.devices[].is_this_device: boolean
+$.devices.devices[].last_activity_utc: string
+$.devices.devices[].mapping_count: number
+$.devices.devices[].name: string
+$.devices.devices[].tombstoned: boolean
+$.devices.devices[]: object
+$.devices.linked_here: array
+$.devices.linked_here[]: string
+$.devices.mappings: array
+$.devices.mappings[]: string
+$.devices.mappings_here: array
+$.devices.mappings_here[]: string
+$.devices.orphans: array
+$.devices.sync_root: string
+$.devices: object
+$.exit_code: number
+$.schema: number
+$: object
+
+## device-remove
+$.command: string
+$.exit_code: number
+$.removal.backups_deleted: number
+$.removal.dry_run: boolean
+$.removal.given_back: array
+$.removal.given_back[]: string
+$.removal.not_linked: array
+$.removal.orphans: array
+$.removal.shared_files: array
+$.removal.shared_files[]: string
+$.removal: object
+$.schema: number
+$: object
+
+## device-remove-dry-run
+$.command: string
+$.exit_code: number
+$.removal.backups_deleted: number
+$.removal.dry_run: boolean
+$.removal.given_back: array
+$.removal.given_back[]: string
+$.removal.not_linked: array
+$.removal.orphans: array
+$.removal.orphans[].choice: string
+$.removal.orphans[].mapping_id: string
+$.removal.orphans[]: object
+$.removal.shared_files: array
+$.removal.shared_files[]: string
+$.removal: object
+$.schema: number
+$: object
+
+## device-remove-other-dry-run
+$.command: string
+$.exit_code: number
+$.removal.backups_deleted: number
+$.removal.dry_run: boolean
+$.removal.given_back: array
+$.removal.not_linked: array
+$.removal.orphans: array
+$.removal.other: string
+$.removal.shared_files: array
+$.removal.shared_files[]: string
+$.removal: object
+$.schema: number
+$: object
+
+## device-rename
+$.command: string
+$.exit_code: number
+$.renamed.new_name: string
+$.renamed.old_name: string
+$.renamed: object
+$.schema: number
+$: object
+
 ## init
 $.command: string
 $.exit_code: number
@@ -416,6 +533,27 @@ $.conflict: object
 $.error: string
 $.exit_code: number
 $.problem: string
+$.schema: number
+$: object
+
+## map-delete
+$.command: string
+$.exit_code: number
+$.mapping_deleted.backup.created_utc: string
+$.mapping_deleted.backup.file_count: number
+$.mapping_deleted.backup.id: string
+$.mapping_deleted.backup.location: string
+$.mapping_deleted.backup.mapping_id: string
+$.mapping_deleted.backup.reason: string
+$.mapping_deleted.backup.source_path: string
+$.mapping_deleted.backup.total_bytes: number
+$.mapping_deleted.backup: object
+$.mapping_deleted.bytes: number
+$.mapping_deleted.files: number
+$.mapping_deleted.mapping_id: string
+$.mapping_deleted.target_exists: boolean
+$.mapping_deleted.target_folder: string
+$.mapping_deleted: object
 $.schema: number
 $: object
 
@@ -529,6 +667,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status: object
@@ -549,6 +688,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status: object
@@ -569,10 +709,29 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status.sync_root_problem: string
 $.status: object
+$: object
+
+## uninstall
+$.command: string
+$.exit_code: number
+$.schema: number
+$.uninstalled.left: array
+$.uninstalled.left[]: string
+$.uninstalled.removed: array
+$.uninstalled.removed[]: string
+$.uninstalled: object
+$: object
+
+## uninstall-not-installed
+$.command: string
+$.error: string
+$.exit_code: number
+$.schema: number
 $: object
 
 ## usage-error

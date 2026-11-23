@@ -1,0 +1,46 @@
+// Flycast (Dreamcast, Naomi and Atomiswave emulator). Shipped with SaveTether. The folders come from Flycast's source
+// (core/windows/winmain.cpp: a data folder beside flycast.exe; core/linux-dist/main.cpp: $XDG_DATA_HOME/flycast; core/oslib/oslib.cpp
+// for what goes there), read 2026-11-22. The Flatpak folder comes from EmuDeck's Flycast script, which links
+// Emulation/saves/flycast/saves to it. Not yet tried with `app add`. Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "flycast",
+  "name": "Flycast",
+  "kind": "emulator",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-portable",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/data" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "linux-flatpak",
+      "os": "linux",
+      "detect": { "dir": "{flatpak:org.flycast.Flycast}/data/flycast" },
+      "base": "{flatpak:org.flycast.Flycast}/data"
+    },
+    {
+      "id": "linux-native",
+      "os": "linux",
+      "detect": { "dir": "{xdg_data}/flycast" },
+      "base": "{xdg_data}"
+    }
+  ],
+  "roles": [
+    {
+      "id": "data",
+      "class": "save",
+      "default": true,
+      "path": { "win-portable": "data", "linux-flatpak": "flycast", "linux-native": "flycast" },
+      "target": "data",
+      "notes": "VMU saves, arcade NVRAM and EEPROM, save states, and the BIOS files and custom textures that Flycast reads from here."
+    }
+  ],
+  "quirks": [
+    "Flycast keeps saves, states and BIOS files together in one folder, so they are shared as one role.",
+    "emu.cfg and the controller mappings stay on each device (beside flycast.exe on Windows, ~/.config/flycast on Linux).",
+    "Process name for the running check: flycast.exe on Windows, flycast on Linux."
+  ]
+}

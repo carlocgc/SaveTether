@@ -26,6 +26,10 @@ public enum ConflictKind
     /// </summary>
     [JsonStringEnumMemberName("target-in-use")]
     TargetInUse,
+
+    /// <summary>A device still has a folder set for the mapping, so it is not deleted. <see cref="ConflictFacts.MappingId"/> is this mapping.</summary>
+    [JsonStringEnumMemberName("in-use-on-devices")]
+    InUseOnDevices,
 }
 
 /// <summary>

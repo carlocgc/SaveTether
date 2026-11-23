@@ -65,7 +65,18 @@ internal sealed record AppOutput(
     ConflictFacts? Conflict = null);
 
 /// <summary>"app list": one app that can be added.</summary>
-internal sealed record AppListEntry(string Id, string? Name, DefinitionSource Source, string? Error);
+internal sealed record AppListEntry(string Id, string? Name, DefinitionSource Source, string? Error)
+{
+    /// <summary>False for an imported definition.</summary>
+    public bool Verified => Source != DefinitionSource.Imported;
+}
+
+/// <summary>"app list --found": an app found on this device, with its install and when its save folder last changed.</summary>
+internal sealed record FoundEntry(string Id, string Name, DefinitionSource Source, string Install, string SaveFolder, DateTime? NewestWrite)
+{
+    /// <summary>False for an imported definition.</summary>
+    public bool Verified => Source != DefinitionSource.Imported;
+}
 
 internal sealed record MappingOutput(
     string Id, string Target, string Source, IReadOnlyList<string> ProcessNames, int EntryDepth,
@@ -107,7 +118,19 @@ internal sealed record CliOutput
 
     public IReadOnlyList<AppListEntry>? Apps { get; init; }
 
+    /// <summary>"app list --found": the apps found on this device, newest save first.</summary>
+    public IReadOnlyList<FoundEntry>? Found { get; init; }
+
     public StatusReport? Status { get; init; }
+
+    /// <summary>"device list": the devices, the mappings and the backups.</summary>
+    public MaintenanceOverview? Devices { get; init; }
+
+    /// <summary>"device rename": the old and the new name.</summary>
+    public RenameResult? Renamed { get; init; }
+
+    /// <summary>"device remove": what was done, or with a dry run what would be.</summary>
+    public DeviceRemovalOutput? Removal { get; init; }
 
     public IReadOnlyList<OperationOutput>? Operations { get; init; }
 
@@ -115,7 +138,36 @@ internal sealed record CliOutput
 
     /// <summary>"backup delete": the backup removed, whether it was its mapping's first, and how many are left.</summary>
     public BackupDeletion? BackupDeleted { get; init; }
+
+    /// <summary>"backup delete --all/--keep-first/--keep-last": the backups deleted, or with a dry run, the ones that would be.</summary>
+    public BackupCleanupResult? BackupsCleaned { get; init; }
+
+    /// <summary>"map delete": the shared folder and record removed, and the backup taken first.</summary>
+    public MappingDeletion? MappingDeleted { get; init; }
+
+    /// <summary>"uninstall": what was removed, and what was left and why.</summary>
+    public UninstallOutput? Uninstalled { get; init; }
 }
+
+/// <summary>"device remove". With <paramref name="DryRun"/> nothing was changed and the rest is what would be done.</summary>
+/// <param name="GivenBack">The save folders that are (or would be) ordinary folders again, copied back from the shared saves.</param>
+/// <param name="NotLinked">Mappings this device has a folder for that are not linked, and so were skipped.</param>
+/// <param name="Orphans">Mappings only this device used, with what is done to each.</param>
+/// <param name="SharedFiles">This device's files in the sync folder that go.</param>
+/// <param name="BackupsDeleted">How many backups were (or would be) deleted; 0 when they are kept.</param>
+/// <param name="Other">The name of the device removed with "--other"; null when this device was removed.</param>
+public sealed record DeviceRemovalOutput(
+    bool DryRun,
+    IReadOnlyList<string> GivenBack,
+    IReadOnlyList<string> NotLinked,
+    IReadOnlyList<OrphanRemoval> Orphans,
+    IReadOnlyList<string> SharedFiles,
+    int BackupsDeleted,
+    string? Other = null,
+    [property: JsonIgnore] bool DeleteEverything = false);
+
+/// <summary>"uninstall": the paths removed, and each one left with the reason.</summary>
+public sealed record UninstallOutput(IReadOnlyList<string> Removed, IReadOnlyList<string> Left);
 
 [JsonSourceGenerationOptions(
     WriteIndented = true,
@@ -155,16 +207,50 @@ internal static class OutputWriter
 
         if (output.Apps is { } apps)
         {
+            var width = apps.Count == 0 ? 0 : apps.Max(e => e.Id.Length);
             foreach (var entry in apps)
             {
-                var from = entry.Source == DefinitionSource.Shared ? "shared" : "built-in";
-                stdout.WriteLine(entry.Error is null ? $"  {entry.Id,-20} {entry.Name}  ({from})" : $"  {entry.Id,-20} not usable: {entry.Error}  ({from})");
+                var from = entry.Source switch { DefinitionSource.Shared => "shared", DefinitionSource.Imported => "imported (unverified)", _ => "built-in" };
+                var id = entry.Id.PadRight(width);
+                stdout.WriteLine(entry.Error is null ? $"  {id}  {entry.Name}  ({from})" : $"  {id}  not usable: {entry.Error}  ({from})");
             }
+
+            stdout.WriteLine($"{apps.Count.ToString("N0", CultureInfo.InvariantCulture)} app(s).");
+        }
+
+        if (output.Found is { } found)
+        {
+            var width = found.Count == 0 ? 0 : found.Max(e => e.Id.Length);
+            foreach (var entry in found)
+            {
+                var when = entry.NewestWrite is { } w ? w.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) : "no files";
+                var mark = entry.Verified ? string.Empty : "  (unverified)";
+                stdout.WriteLine($"  {entry.Id.PadRight(width)}  {entry.Name}  last played {when}{mark}");
+            }
+
+            stdout.WriteLine($"{found.Count.ToString("N0", CultureInfo.InvariantCulture)} app(s) found on this device.");
         }
 
         if (output.Status is { } status)
         {
             WriteStatus(status, stdout, stderr);
+        }
+
+        if (output.Devices is { } overview)
+        {
+            WriteDevices(overview, stdout);
+        }
+
+        if (output.Renamed is { } renamed)
+        {
+            stdout.WriteLine(renamed.OldName == renamed.NewName
+                ? $"This device is already '{renamed.NewName}'. Any files left by an earlier rename were cleared."
+                : $"Renamed this device from '{renamed.OldName}' to '{renamed.NewName}'.");
+        }
+
+        if (output.Removal is { } removal)
+        {
+            WriteRemoval(removal, stdout);
         }
 
         foreach (var operation in output.Operations ?? [])
@@ -180,6 +266,42 @@ internal static class OutputWriter
         if (output.BackupDeleted is { } deleted)
         {
             stdout.WriteLine($"Deleted backup {deleted.Backup.Id}. {deleted.Remaining} backup(s) of {deleted.Backup.MappingId} left.");
+        }
+
+        if (output.BackupsCleaned is { } cleaned)
+        {
+            var verb = cleaned.DryRun ? "Would delete" : "Deleted";
+            foreach (var backup in cleaned.Removed)
+            {
+                stdout.WriteLine($"{verb} {backup.Id} ({backup.FileCount} file(s), {FormatBytes(backup.TotalBytes)})");
+            }
+
+            stdout.WriteLine($"{verb} {cleaned.Removed.Count} backup(s).");
+        }
+
+        if (output.MappingDeleted is { } mappingDeleted)
+        {
+            stdout.WriteLine($"Deleted '{mappingDeleted.MappingId}' from the shared folder.");
+            if (mappingDeleted.Backup is { } backup)
+            {
+                stdout.WriteLine($"  The shared saves ({backup.FileCount} file(s), {FormatBytes(backup.TotalBytes)}) are backed up as {backup.Id}.");
+            }
+        }
+
+        if (output.Uninstalled is { } uninstalled)
+        {
+            stdout.WriteLine("Uninstalled SaveTether. Removed:");
+            foreach (var path in uninstalled.Removed)
+            {
+                stdout.WriteLine($"  {path}");
+            }
+
+            foreach (var left in uninstalled.Left)
+            {
+                stdout.WriteLine($"  left: {left}");
+            }
+
+            stdout.WriteLine("Your setup, linked folders, backups and the sync folder were not touched.");
         }
 
         if (output.Message is { } message)
@@ -247,6 +369,11 @@ internal static class OutputWriter
 
         var from = plan.DefinitionSource == DefinitionSource.Shared ? $" (definition: {plan.DefinitionLocation})" : string.Empty;
         stdout.WriteLine($"{plan.AppName}, install '{plan.Install}'{from}:");
+        if (!plan.Verified)
+        {
+            stdout.WriteLine("  Unverified: this definition was converted from the Ludusavi manifest and has not been tried by hand. Check the save folders below before you apply.");
+        }
+
         foreach (var role in plan.Roles)
         {
             var size = !role.Exists ? "not there yet"
@@ -311,7 +438,7 @@ internal static class OutputWriter
                     : "The sync root is not available. These are the save folders this device linked, from its own record:");
             stderr.WriteLine($"Warning: {problem}");
         }
-        else if (status.Mappings.Count == 0)
+        else if (status.Mappings.Count == 0 && status.Removal is null)
         {
             stdout.WriteLine("No mappings yet. Add one with 'savetether map add'.");
         }
@@ -334,12 +461,105 @@ internal static class OutputWriter
             stderr.WriteLine("Warning: an earlier operation did not finish. Run 'savetether recover'.");
         }
 
+        if (status.Removal == RemovalKind.RemovedByAnother)
+        {
+            stderr.WriteLine(
+                $"Warning: this device was removed from the sync folder by '{status.RemovedBy}'. " +
+                "Run 'savetether device remove' to finish the removal here, or set it up again with 'savetether init'.");
+        }
+        else if (status.Removal == RemovalKind.Unfinished)
+        {
+            stderr.WriteLine("Warning: the removal of this device did not finish. Run 'savetether device remove' again.");
+        }
+
+        foreach (var name in status.ReturnedDevices)
+        {
+            stderr.WriteLine(
+                $"Warning: the device '{name}' was removed from the sync folder, but its file came back (a sync tool restored it). " +
+                "Delete it with 'savetether device remove --other " + name + "' if it is gone for good.");
+        }
+
         if (status.AutostartMissing is { } program)
         {
             stderr.WriteLine(
                 $"Warning: SaveTether is set to start with the session, but the entry points to '{program}', which is missing. " +
                 "Start the desktop app from where it is now to fix the entry, or turn starting with the session off in its settings.");
         }
+    }
+
+    private static void WriteDevices(MaintenanceOverview overview, TextWriter stdout)
+    {
+        stdout.WriteLine($"Sync root '{overview.SyncRoot}'");
+        var width = overview.Devices.Select(d => d.Name.Length).DefaultIfEmpty(0).Max();
+        foreach (var device in overview.Devices)
+        {
+            var when = device.LastActivityUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture);
+            var notes = (device.IsThisDevice ? "  (this device)" : string.Empty) + (device.Tombstoned ? "  (removed)" : string.Empty);
+            stdout.WriteLine($"  {device.Name.PadRight(width)}  last active {when}  {device.MappingCount} mapping(s){notes}");
+        }
+
+        stdout.WriteLine(
+            $"{overview.Mappings.Count} mapping(s): {overview.MappingsHere.Count} with a save folder here, {overview.LinkedHere.Count} linked here.");
+        if (overview.Orphans.Count > 0)
+        {
+            stdout.WriteLine($"No device uses: {string.Join(", ", overview.Orphans)}. 'savetether map delete <id>' removes one.");
+        }
+
+        stdout.WriteLine($"Backups on this device: {overview.BackupCount}, {FormatBytes(overview.BackupBytes)}.");
+    }
+
+    private static void WriteRemoval(DeviceRemovalOutput removal, TextWriter stdout)
+    {
+        if (removal.Other is { } other)
+        {
+            stdout.WriteLine(removal.DryRun ? $"Would remove the device '{other}' from the sync folder:" : $"Removed the device '{other}' from the sync folder.");
+            stdout.WriteLine($"  Its {removal.SharedFiles.Count} file(s) in the sync folder {(removal.DryRun ? "would be" : "were")} deleted. Nobody's links are touched.");
+            stdout.WriteLine(removal.DryRun ? "Dry run: nothing was changed. Add --confirm-remove to go ahead." : "Its removal is recorded in the sync folder.");
+            return;
+        }
+
+        stdout.WriteLine(removal.DryRun ? "Would remove this device from the sync folder:" : "Removed this device from the sync folder.");
+        if (removal.DeleteEverything)
+        {
+            stdout.WriteLine(removal.DryRun
+                ? "  The whole SaveTether folder in the sync folder would be deleted: every mapping and shared save. It cannot be undone."
+                : "  The whole SaveTether folder in the sync folder was deleted.");
+        }
+
+        if (removal.GivenBack.Count > 0)
+        {
+            stdout.WriteLine(removal.DryRun
+                ? "  Linked folders that become real folders again, with a copy of the shared saves:"
+                : "  These folders are real folders again, yours to keep or delete:");
+            foreach (var folder in removal.GivenBack)
+            {
+                stdout.WriteLine($"    {folder}");
+            }
+        }
+
+        foreach (var skipped in removal.NotLinked)
+        {
+            stdout.WriteLine($"  '{skipped}' is not linked here, so its folder is left as it is.");
+        }
+
+        foreach (var orphan in removal.Orphans)
+        {
+            var what = orphan.Choice switch
+            {
+                OrphanChoice.DeleteMapping => "mapping deleted, shared saves kept",
+                OrphanChoice.DeleteWithSaves => "mapping and shared saves deleted",
+                _ => "kept in the sync folder",
+            };
+            stdout.WriteLine($"  Only this device used '{orphan.MappingId}': {(removal.DryRun ? "to be: " : string.Empty)}{what}.");
+        }
+
+        stdout.WriteLine($"  This device's {removal.SharedFiles.Count} file(s) in the sync folder {(removal.DryRun ? "would be" : "were")} deleted.");
+        stdout.WriteLine(removal.BackupsDeleted > 0
+            ? $"  {removal.BackupsDeleted} backup(s) {(removal.DryRun ? "would be" : "were")} deleted."
+            : "  Backups are kept.");
+        stdout.WriteLine(removal.DryRun
+            ? "Dry run: nothing was changed. Add --confirm-remove to go ahead."
+            : "SaveTether itself stays installed; to remove it, uninstall it (Settings, Apps on Windows; 'savetether uninstall' on Linux). Run 'init' to set this device up again.");
     }
 
     private static void WriteOperation(OperationOutput operation, TextWriter stdout, TextWriter stderr)
@@ -442,6 +662,7 @@ internal static class OutputWriter
         BackupReason.PreApply => "pre-apply",
         BackupReason.PreRevert => "pre-revert",
         BackupReason.PreRestore => "pre-restore",
+        BackupReason.PreDelete => "pre-delete",
         BackupReason.Baseline => "baseline",
         _ => "snapshot",
     };

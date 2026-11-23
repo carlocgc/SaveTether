@@ -72,6 +72,15 @@ internal sealed class CliDevice
     /// <summary>The autostart entry status reads. Null, the default, means none: tests never read the machine's own.</summary>
     public SaveTether.Core.Startup.IAutostartStore? Autostart { get; set; }
 
+    /// <summary>Where "uninstall" looks: under this device's sandbox home unless a test sets another.</summary>
+    public SaveTether.Core.Startup.InstallLayout? Install { get; set; }
+
+    /// <summary>Which processes "uninstall" sees running the installed app. Null, the default, means none.</summary>
+    public SaveTether.Core.Startup.IRunningPrograms? RunningPrograms { get; set; }
+
+    /// <summary>How long "uninstall" waits for the installed app to quit.</summary>
+    public TimeSpan QuitWait { get; set; } = TimeSpan.FromSeconds(5);
+
     /// <summary>The home folder the default <see cref="Resolver"/> uses.</summary>
     public string Home => Path.Combine(Path.GetDirectoryName(LocalFolder)!, "home");
 
@@ -88,6 +97,9 @@ internal sealed class CliDevice
             Faults = Faults,
             Flatpak = Flatpak,
             Autostart = Autostart,
+            Install = Install ?? SaveTether.Core.Startup.InstallLayout.For(Home, null),
+            RunningPrograms = RunningPrograms ?? new RunningProgramsStub(),
+            QuitWait = QuitWait,
             Resolver = Resolver ?? new ResolverEnvironment { Os = TargetOs.Linux, Home = Home, UserName = Name },
         };
         var exit = CliApp.Run(args, stdout, stderr, environment);

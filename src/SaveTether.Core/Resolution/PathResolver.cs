@@ -30,10 +30,23 @@ public sealed class PathResolver
     private readonly ResolverEnvironment _env;
 
     public PathResolver(ResolverEnvironment environment)
+        : this(environment, cacheSteamLibraries: false)
+    {
+    }
+
+    /// <param name="cacheSteamLibraries">
+    /// Read Steam's library files once for this resolver's lifetime. For a scan of many apps; a resolver
+    /// that lives longer than one scan would not see a library added meanwhile.
+    /// </param>
+    public PathResolver(ResolverEnvironment environment, bool cacheSteamLibraries)
     {
         ArgumentNullException.ThrowIfNull(environment);
         _env = environment;
+        _cacheSteam = cacheSteamLibraries;
     }
+
+    private readonly bool _cacheSteam;
+    private SteamLibraries? _steam;
 
     /// <summary>The tokens a plain (not winpath) template may start with.</summary>
     public static IReadOnlyList<string> PlainTokens { get; } =
@@ -311,7 +324,13 @@ public sealed class PathResolver
             : ResolveResult.Fail(ResolveProblem.Missing, $"Windows did not report a folder for {{{name}}}.");
     }
 
-    private SteamLibraries Steam() => new(_env.Home, Xdg("XDG_DATA_HOME", Path.Combine(".local", "share")));
+    private SteamLibraries Steam() =>
+        _cacheSteam
+            ? LazyInitializer.EnsureInitialized(ref _steam, () => new SteamLibraries(_env.Home, Xdg("XDG_DATA_HOME", Path.Combine(".local", "share")), cache: true, _env.SteamRoots))
+            : new(_env.Home, Xdg("XDG_DATA_HOME", Path.Combine(".local", "share")), cache: false, _env.SteamRoots);
+
+    /// <summary>Whether Steam has the game installed in a library: null when no Steam is found, so it cannot be told.</summary>
+    public bool? IsSteamInstalled(long appId) => appId > 0 ? Steam().IsInstalled((ulong)appId) : null;
 
     private ResolveResult? LinuxOnly(string name) =>
         _env.Os == TargetOs.Linux

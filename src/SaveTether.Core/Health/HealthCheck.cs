@@ -182,8 +182,23 @@ public static class HealthCheck
         var kind = SafeFs.Probe(recorded.Source);
         if (kind is EntryKind.Symlink or EntryKind.Junction)
         {
-            var linkTarget = PathRules.ResolveAll(SafeFs.ReadLinkTarget(recorded.Source));
-            return PathRules.AreSame(linkTarget, PathRules.ResolveAll(recorded.Target))
+            // Resolving goes through the sync root, which may be what cannot be read (a mount that stopped answering, or
+            // a link that loops): then the link and the record are compared as written.
+            var written = SafeFs.ReadLinkTarget(recorded.Source);
+            string linkTarget;
+            bool same;
+            try
+            {
+                linkTarget = PathRules.ResolveAll(written);
+                same = PathRules.AreSame(linkTarget, PathRules.ResolveAll(recorded.Target));
+            }
+            catch (IOException)
+            {
+                linkTarget = written;
+                same = PathRules.AreSame(PathRules.Normalize(written), PathRules.Normalize(recorded.Target));
+            }
+
+            return same
                 ? Is(HealthState.Broken, "The link is in place, but the sync root is not available.", HealthReason.SyncRootUnavailable)
                 : Is(HealthState.Retargeted, $"The save folder now links to '{linkTarget}' instead of the shared folder.");
         }

@@ -39,6 +39,35 @@
       "description": "Things the owner should know about this app. Shown, not acted on.",
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
+    },
+    "tier": {
+      "description": "Who vouches for this definition. Default \"verified\": written and tried by hand. \"imported\" is converted from another source and not tried.",
+      "enum": ["verified", "imported"]
+    },
+    "origin": {
+      "description": "Where an imported definition came from, for example \"ludusavi\".",
+      "type": "string",
+      "minLength": 1
+    },
+    "store_ids": {
+      "description": "The app's IDs in stores, for search.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "steam": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "cloud_saves": {
+      "description": "The stores whose copies of this game keep saves in the cloud. Shown, not acted on.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["steam", "gog", "epic", "xbox", "ubisoft", "ea"] }
+    },
+    "tested_on": {
+      "description": "Where this definition was tried, for example \"Steam Deck, Flatpak\".",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
     }
   },
   "$defs": {
@@ -88,11 +117,11 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["winpath", "prefix"],
+              "required": ["winpath"],
               "properties": {
                 "winpath": { "type": "string", "minLength": 1 },
                 "prefix": {
-                  "description": "Which Wine prefix, on Linux. Exactly one field.",
+                  "description": "Which Wine prefix, on Linux. Exactly one field. Leave it out to use the prefix set for the device (--wine-prefix).",
                   "type": "object",
                   "additionalProperties": false,
                   "minProperties": 1,

@@ -1,69 +1,106 @@
+<div align="center">
+
+<img src="src/SaveTether.Gui/Assets/savetether.png" alt="SaveTether icon: a save disk with two linked rings" width="96">
+
 # SaveTether
 
-Redirects app and game save folders into one synced folder, so saves follow you between devices (for example a Windows PC and a Steam Deck). SaveTether makes the links and keeps verified backups; a sync tool of your choice, such as Syncthing, moves the folder between devices.
+**Keep game save folders in one place, and let your sync tool share them between machines.**
 
-**Status: early development.** The command line works and is tested, and has been used on the author's own Windows PC and Steam Deck (Cemu, Eden, PPSSPP and a Lutris game). It has not been used by anyone else yet. Keep your own backup of saves you care about.
+[![CI](https://github.com/carlocgc/SaveTether/actions/workflows/ci.yml/badge.svg?branch=development)](https://github.com/carlocgc/SaveTether/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/carlocgc/SaveTether)](https://github.com/carlocgc/SaveTether/releases/latest)
+[![Licence: MIT](https://img.shields.io/github/license/carlocgc/SaveTether)](LICENSE)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
+[![Definitions](https://img.shields.io/github/last-commit/carlocgc/SaveTether/development?path=definitions%2Fimported%2Fludusavi.jsonl.gz&label=game%20definitions&display_timestamp=committer)](https://github.com/carlocgc/SaveTether/actions/workflows/update-definitions.yml)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Steam%20Deck-informational)
 
-- Design: [docs/design/save-redirection-design.md](docs/design/save-redirection-design.md)
-- Implementation and test plan: [docs/plans/implementation-plan.md](docs/plans/implementation-plan.md)
-- Branches and releases: [docs/releasing.md](docs/releasing.md). Work lands on `development`; releases are tags on `main`.
+<img src="docs/images/apps-page.png" alt="The SaveTether desktop app on a Steam Deck: Dolphin and PCSX2 save folders linked to the shared folder, one ready to link, and a folder from another device that this one ignores" width="760">
 
-## Using it
+</div>
 
-On the first device, whose saves become the shared copy:
+## What it is
 
-```bash
-savetether init --sync-root ~/Sync --device desktop --create-root
-savetether map add ppsspp.savedata --target ppsspp/SAVEDATA --source /path/to/PSP/SAVEDATA --process PPSSPPSDL
-savetether apply ppsspp.savedata --copy
+SaveTether moves an app's save folder into one folder you choose and leaves a link in its place, so the app reads and writes where it always did. Put that folder under a sync tool you already use, such as [Syncthing](https://syncthing.net/), and a PC and a Steam Deck play from the same saves. SaveTether does no syncing itself; it sets up and looks after the links at each end. Cloud folders and network shares can work too: see [ways to share the folder](docs/sharing.md).
+
+```mermaid
+flowchart LR
+  subgraph PC["Windows PC"]
+    PA["Cemu's save folder"] --- |"link →"| PSA[("cemu\save")]
+    PB["PPSSPP's SAVEDATA"] --- |"link →"| PSB[("ppsspp\savedata")]
+    PG["A PC game's saves"] --- |"link →"| PSG[("game\saves")]
+    subgraph PCS["Sync\savetether\ (the real saves)"]
+      PSA
+      PSB
+      PSG
+    end
+  end
+  subgraph Deck["Steam Deck"]
+    DSA[("cemu/save")] --- |"← link"| DAA["Cemu's save folder<br/>(Flatpak)"]
+    DSB[("ppsspp/savedata")] --- |"← link"| DAB["PPSSPP's SAVEDATA<br/>(Flatpak)"]
+    DSG[("game/saves")] --- |"← link"| DAG["The game's saves<br/>(Proton prefix)"]
+    subgraph DS["~/Sync/savetether/ (the real saves)"]
+      DSA
+      DSB
+      DSG
+    end
+  end
+  PCS <-. "Syncthing, or any<br/>file sync tool" .-> DS
 ```
 
-On each other device, after the sync tool has delivered the `savetether` folder:
+## What it does
 
-```bash
-savetether init --sync-root ~/Sync --device deck
-savetether map add ppsspp.savedata --source /path/to/PSP/SAVEDATA
-savetether apply ppsspp.savedata
-```
+- **Links, not copies:** a junction on Windows, a symbolic link on Linux. No administrator or root rights.
+- **Backs up first.** Every change is preceded by a verified copy outside the synced folder, which can be restored.
+- **Never picks a winner silently.** When a device and the synced folder both hold saves, it compares them game by game and asks which to keep.
+- **Survives interruption.** Operations are journalled; a crash part way is finished or undone with Recover.
+- **Keeps watch.** The app sits in the tray and turns amber when a link is replaced or broken, for example by an emulator update.
+- **Finds save folders for you:** popular emulators and frontends built in, and thousands of PC games from the [Ludusavi manifest](https://github.com/mtkennerly/ludusavi-manifest), refreshed monthly. It looks inside Flatpak sandboxes, Wine and Proton prefixes, EmuDeck and SD cards. Any other folder can be added by path.
 
-For an app that has a definition, `app add` finds its save folders instead of you typing them. `savetether app list` shows which apps have one; so far only Cemu is built in, and you can add your own as `<sync root>/savetether/.savetether/definitions/<app>.jsonc` (format in the design, section 5.2):
+## Limits
 
-```bash
-savetether app add cemu --dry-run   # shows the save folders it found, with sizes
-savetether app add cemu
-savetether apply cemu.save
-```
+- **One device in use at a time.** Let the sync tool finish before switching devices; two devices writing the same saves at once is left to the sync tool's conflict handling.
+- **Early days.** Tested on Windows, Linux and the Steam Deck. Keep your own backup of saves you care about too.
+- **Imported game definitions are unverified:** they are converted from the manifest, not tried by hand, so check the save folders the plan shows before applying.
 
-If that device has saves of its own, `apply` stops, shows how they differ from the shared copy, and lists the choices. A verified backup is taken before anything is changed; see `savetether backup list`. `savetether status` shows each mapping's state, `savetether revert <id>` undoes a link, and `savetether --help` lists everything. Add `--dry-run` to see what a command would do, and `--json` for machine-readable output. That output is a stable contract for scripts, described in [docs/cli-json.md](docs/cli-json.md).
+## Install
 
-### Moving an app's folder
+Download your platform's package from the [latest release](https://github.com/carlocgc/SaveTether/releases/latest):
 
-After moving an app that has linked save folders, run `savetether app add <app> --install-dir <new folder>` and then `savetether apply --all`.
+| Platform | Package |
+|---|---|
+| Windows 10 or 11, x64 | `savetether-<version>-win-x64-setup.exe`, or the `.zip` |
+| Linux x64, including the Steam Deck | `savetether-<version>-linux-x64.tar.gz` |
+| Linux ARM64 | `savetether-<version>-linux-arm64.tar.gz` |
 
-On Windows, move it to another drive with Explorer, or `savetether revert` each of its mappings first. PowerShell `Move-Item` and `robocopy /MOVE` follow the links: they copy the shared saves into the new folder and then delete them from the shared folder, and your sync tool deletes them on every other device too. If that has happened, `apply` says so and how to make the moved copy the shared one again.
+Each holds the desktop app (`savetether-gui`) and the command line (`savetether`). Neither needs administrator rights.
+
+- **Windows:** the installer puts SaveTether in `%LOCALAPPDATA%\Programs\SaveTether` with a Start menu entry; uninstall it from Settings > Apps. From the `.zip`, keep the files together.
+- **Linux:** unpack it anywhere and start `savetether-gui`. The first run offers to install it for your user (into `~/.local` and the app menu); Settings > Uninstall removes it.
+
+## Getting started
+
+Start the desktop app. The first run asks for your synced folder, a name for this device, and where to keep backups. Then **Add app** finds the apps on this device and their save folders, and **Apply** links them. On the first device its saves become the shared copy; on the others, SaveTether shows how their saves differ and asks what to keep.
+
+Everything the app does is also in the command line, with a stable `--json` output for scripts: see the [command line reference](docs/cli.md).
+
+## Documentation
+
+| | |
+|---|---|
+| [Ways to share the folder](docs/sharing.md) | Sync tools, cloud folders, network shares, and what each needs |
+| [Command line reference](docs/cli.md) and [JSON output](docs/cli-json.md) | Every command, with examples; the `--json` contract |
+| [Design](docs/design/save-redirection-design.md) and [desktop app specification](docs/design/desktop-app-spec.md) | What SaveTether guarantees and why; every screen and refusal |
+| [Implementation plan](docs/plans/implementation-plan.md) and [hardware testing](docs/testing/hardware-testing.md) | What is built and next; how it is tested on real devices |
+| [Releasing](docs/releasing.md) | Branches, versions and packages |
 
 ## Building
 
-Requires the .NET 10 SDK.
+Requires the .NET 10 SDK: `dotnet build` and `dotnet test`. Release builds are Native AOT and need the platform's native toolchain (the Visual Studio C++ build tools on Windows, `clang` and `zlib1g-dev` on Linux):
 
 ```bash
-dotnet build
-dotnet test
+dotnet publish src/SaveTether.Gui -c Release -r linux-x64   # or win-x64, linux-arm64; src/SaveTether.Cli likewise
 ```
 
-Native binary (needs the platform's native toolchain: Visual Studio C++ build tools on Windows, `clang` and `zlib1g-dev` on Linux):
-
-```bash
-dotnet publish src/SaveTether.Cli -c Release -r linux-x64
-```
-
-Use `win-x64` or `linux-arm64` for the other targets. The desktop app is `src/SaveTether.Gui`, published the same way. It needs the native libraries its publish folder holds beside it (Skia, HarfBuzz, and ANGLE on Windows), so run it from that folder, not from `bin/`. To build the package a release ships, publish both, then run `build/package.sh` (see [docs/releasing.md](docs/releasing.md)).
-
-On Windows, if publishing fails with `'vswhere.exe' is not recognized`, put Visual Studio's installer folder on `PATH` for that shell first:
-
-```powershell
-$env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
-```
+Run the app from its publish folder, not from `bin/`. Platform quirks are in [hardware testing](docs/testing/hardware-testing.md#building-for-linux); packaging is in [Releasing](docs/releasing.md).
 
 ## Licence
 

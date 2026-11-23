@@ -58,7 +58,7 @@ public class ActionTests
             ActionTexts.Result(new ExecutionResult(ExecutionStatus.RolledBack, Id, PlanOperation.Apply, [], []), Role).Title);
 
         var all = Refusal(RefusalKind.ChoiceNeeded, []) with { AllowedChoices = Enum.GetValues<SetupChoice>() };
-        Assert.Equal(Enum.GetValues<SetupChoice>(), ActionTexts.Choices(all, "PPSSPP").Select(c => c.Choice));
+        Assert.Equal(Enum.GetValues<SetupChoice>(), ActionTexts.Choices(all, "PPSSPP", others: true).Select(c => c.Choice));
 
         HealthReason?[] reasons = [null, .. Enum.GetValues<HealthReason>()];
         foreach (var state in Enum.GetValues<HealthState>())
@@ -81,19 +81,24 @@ public class ActionTests
     {
         var firstDevice = Planner.Plan(Snap.WithLocalSaves(), new ApplyRequest()).Refusal!;
         Assert.Equal(RefusalKind.ChoiceNeeded, firstDevice.Kind);
-        var offered = ActionTexts.Choices(firstDevice, "PPSSPP");
+        var offered = ActionTexts.Choices(firstDevice, "PPSSPP", others: false);
         Assert.Equal(firstDevice.AllowedChoices, offered.Select(c => c.Choice));
-        Assert.Equal(["Share this device's saves", "Start empty"], offered.Select(c => c.Label));
+        Assert.Equal(["Share this device's data", "Start empty"], offered.Select(c => c.Label));
 
         var guard = Planner.Plan(Snap.Guarded(), new ApplyRequest()).Refusal!;
-        var guardOffered = ActionTexts.Choices(guard, "PPSSPP");
+        var guardOffered = ActionTexts.Choices(guard, "PPSSPP", others: false);
         Assert.Equal(guard.AllowedChoices, guardOffered.Select(c => c.Choice));
         Assert.DoesNotContain(guardOffered, c => c.Choice == SetupChoice.Copy);
-        Assert.Equal("Use the shared saves", guardOffered.Single(c => c.Choice == SetupChoice.NoCopy).Label);
+        Assert.Equal("Use the shared copy", guardOffered.Single(c => c.Choice == SetupChoice.NoCopy).Label);
 
-        // The comparison's groups, with the identical ones counted.
+        // Other devices are named only when there are some; the backup is said once, under the choices.
+        Assert.All(guardOffered, c => Assert.DoesNotContain("other device", c.Sentence, StringComparison.OrdinalIgnoreCase));
+        Assert.All(guardOffered, c => Assert.DoesNotContain("backed up", c.Sentence, StringComparison.Ordinal));
+        Assert.Contains(ActionTexts.OthersGetChange, ActionTexts.Choices(guard, "PPSSPP", others: true).Single(c => c.Choice == SetupChoice.ReplaceShared).Sentence, StringComparison.Ordinal);
+
+        // The comparison's groups, each counted.
         var groups = ActionTexts.ComparisonGroups(guard.Comparison!);
-        Assert.Contains(groups, g => g.Group == "Only on this device");
+        Assert.Contains(groups, g => g.Group.StartsWith("Only on this device (", StringComparison.Ordinal));
         Assert.All(groups, g => Assert.NotEmpty(g.Entries));
     }
 
@@ -106,7 +111,8 @@ public class ActionTests
         var view = ActionTexts.Describe(refusal, Role, App, sandboxGrantPossible: false);
 
         // The app is closed, not its save folder: found on the Deck as "Close test saves first".
-        Assert.Equal([$"Close {App} first. SaveTether looked for: PPSSPPSDL, PPSSPPQt."], view.Sentences);
+        // The warning that a separate dialog used to give is part of the refusal now.
+        Assert.Equal([$"Close {App} first. SaveTether looked for: PPSSPPSDL, PPSSPPQt. {ActionTexts.AssumeClosedWarning(App)}"], view.Sentences);
         Assert.Equal([RefusalAction.CheckAgain, RefusalAction.AssumeClosed], view.Actions);
         Assert.Contains("appears to be running", view.Details, StringComparison.Ordinal);
 
@@ -128,6 +134,9 @@ public class ActionTests
         Assert.Null(refused);
         using (session)
         {
+            // One device in the sync folder: the dialogs name no other device.
+            Assert.False(session!.HasOtherDevices);
+
             // While the window holds it, the CLI and a second window are refused.
             Assert.Equal("operation-running", pc.Expect(CliApp.ExitRefused, "apply", Id, "--copy", "--json").Json().GetProperty("problem").GetString());
             Assert.Contains("Another SaveTether operation is running", OperationSession.Begin(local, "apply", new Processes(), null).Refused, StringComparison.Ordinal);
@@ -135,15 +144,25 @@ public class ActionTests
             var choice = session!.PlanApply(Id, new ApplyRequest()).Refusal!;
             Assert.Equal(RefusalKind.ChoiceNeeded, choice.Kind);
             var plan = session.PlanApply(Id, new ApplyRequest(SetupChoice.Copy)).Plan!;
-            var (title, sentences) = ActionTexts.Confirmation(plan, Role);
-            Assert.Equal($"Link {Role} on this device to the shared folder?", title);
-            Assert.Contains("A backup is taken first.", sentences);
+            var view = ActionTexts.Confirmation(plan, Role, session.HasOtherDevices);
+            Assert.Equal($"Link {Role} on this device to the shared folder?", view.Title);
+            Assert.Contains("A backup is taken first.", view.Sentences);
+            Assert.Null(view.Phrase);
+            Assert.DoesNotContain(view.Sentences, s => s.Contains("another device", StringComparison.Ordinal));
 
             var steps = new List<StepProgress>();
             var result = session.Run(plan, new Collect(steps));
             Assert.Equal(ExecutionStatus.Completed, result.Status);
             Assert.Equal($"{Role} is linked.", ActionTexts.Result(result, Role).Title);
             Assert.Equal(plan.Steps.Count * 2, steps.Count);
+
+            // The finished dialog keeps the plan's steps above the result; a run with no plan has none.
+            var finished = ActionTexts.FinishedView(plan, result, Role);
+            Assert.Equal(plan.Steps.Select(ActionTexts.Step), finished.Steps);
+            Assert.Equal($"{Role} is linked.", finished.Title);
+            Assert.Contains(result.BackupIds.Select(id => $"Backup taken: {id}").First(), finished.Sentences);
+            Assert.Empty(ActionTexts.FinishedView(null, result, Role, recovery: true).Steps);
+            Assert.Empty(ActionTexts.FinishedView(plan, new ExecutionResult(ExecutionStatus.Refused, Id, PlanOperation.Apply, [], []), Role).Steps);
         }
 
         Assert.Equal(OverallCondition.AllLinked, StatusCheck.Run(local).Condition);
@@ -154,12 +173,29 @@ public class ActionTests
         using (revert)
         {
             var plan = revert!.PlanRevert(Id, assumeClosed: false).Plan!;
-            Assert.Equal($"Give this device its own copy of {Role}?", ActionTexts.Confirmation(plan, Role).Title);
+            var view = ActionTexts.Confirmation(plan, Role, others: false);
+            Assert.Equal($"Give this device its own copy of {Role}?", view.Title);
+
+            // The core's note says what the app's own sentence says, so it is shown once.
+            Assert.Contains(Planner.RevertLeavesSharedNote, plan.Notes.Select(n => n.Text));
+            Assert.DoesNotContain(Planner.RevertLeavesSharedNote, view.Sentences);
             Assert.Equal(ExecutionStatus.Completed, revert.Run(plan, null).Status);
         }
 
         Assert.False(pc.IsLinked);
         Assert.Equal(new Dictionary<string, string> { ["GAME1/save.bin"] = "one" }, pc.LocalFiles());
+
+        // A second device in the sync folder: now the dialogs may name other devices.
+        var deck = new CliDevice(sandbox, "deck");
+        pc.DeliverTo(deck, metadataOnly: true);
+        deck.SetUp();
+        deck.DeliverTo(pc, metadataOnly: true);
+        var (two, _) = OperationSession.Begin(local, "apply", new Processes(), null);
+        using (two)
+        {
+            Assert.True(two!.HasOtherDevices);
+        }
+
         sandbox.AssertCanaryIntact();
     }
 
