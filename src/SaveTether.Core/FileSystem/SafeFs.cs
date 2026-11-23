@@ -37,7 +37,9 @@ public sealed class SafeFs
 
     /// <summary>
     /// Makes <paramref name="link"/> a directory link to <paramref name="target"/>: a junction on
-    /// Windows (no privilege needed), a symlink elsewhere. Verifies the result before returning.
+    /// Windows (no privilege needed), a symlink elsewhere. On Windows a target on a network share gets a
+    /// symlink to its UNC form, which needs Developer Mode or elevation; without either this throws
+    /// <see cref="SymlinkPrivilegeException"/>. Verifies the result before returning.
     /// </summary>
     public void CreateDirectoryLink(string link, string target)
     {
@@ -61,13 +63,15 @@ public sealed class SafeFs
             throw new SafeFsException($"Cannot link to '{targetPath}': it is not an existing folder.");
         }
 
-        if (OperatingSystem.IsWindows())
+        // A junction cannot point to a share, so a share gets a symlink, to its UNC form (design 5.16).
+        var junction = OperatingSystem.IsWindows() && !PathRules.IsOnNetworkDrive(targetPath);
+        if (!junction && OperatingSystem.IsWindows())
         {
-            if (targetPath.StartsWith(@"\\", StringComparison.Ordinal))
-            {
-                throw new SafeFsException($"Cannot link to '{targetPath}': a junction needs a target on a local drive.");
-            }
+            targetPath = PathRules.ToUncIfMapped(targetPath);
+        }
 
+        if (junction && OperatingSystem.IsWindows())
+        {
             Directory.CreateDirectory(linkPath);
             try
             {
@@ -81,10 +85,17 @@ public sealed class SafeFs
         }
         else
         {
-            Directory.CreateSymbolicLink(linkPath, targetPath);
+            try
+            {
+                Directory.CreateSymbolicLink(linkPath, targetPath);
+            }
+            catch (IOException e) when (SymlinkCapability.IsPrivilegeNotHeld(e))
+            {
+                throw new SymlinkPrivilegeException($"Could not link '{linkPath}' to '{targetPath}'. {SymlinkCapability.DeveloperModeFix}", e);
+            }
         }
 
-        var expectedKind = OperatingSystem.IsWindows() ? EntryKind.Junction : EntryKind.Symlink;
+        var expectedKind = junction ? EntryKind.Junction : EntryKind.Symlink;
         if (Probe(linkPath) != expectedKind || !PathRules.AreSame(ReadLinkTarget(linkPath), targetPath))
         {
             throw new SafeFsException($"The link at '{linkPath}' did not verify after it was created.");
@@ -778,6 +789,10 @@ public sealed class SafeFs
             {
                 File.CreateSymbolicLink(destination, target);
             }
+        }
+        catch (IOException e) when (SymlinkCapability.IsPrivilegeNotHeld(e))
+        {
+            throw new SymlinkPrivilegeException($"Could not recreate the link '{destination}' -> '{target}'. {SymlinkCapability.DeveloperModeFix}", e);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException && e is not SafeFsException)
         {

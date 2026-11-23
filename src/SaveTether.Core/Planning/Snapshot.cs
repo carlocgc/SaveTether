@@ -166,6 +166,12 @@ public sealed record Snapshot
     /// <summary>False on Windows when T is on a network drive, where a junction cannot point.</summary>
     public bool TargetOnLocalVolume { get; init; } = true;
 
+    /// <summary>
+    /// When T is on a network share on Windows: whether a symlink to it can be made here (design 5.16).
+    /// Set by the caller, because finding out makes a test link and <see cref="SnapshotReader"/> only reads.
+    /// </summary>
+    public ShareLinkSupport ShareLink { get; init; } = ShareLinkSupport.Available;
+
     /// <summary>False on Windows when S is on a network drive, where a junction cannot be created.</summary>
     public bool SourceOnLocalVolume { get; init; } = true;
 

@@ -7,13 +7,15 @@ using SaveTether.Tests.Cli;
 namespace SaveTether.Tests.FileSystem;
 
 /// <summary>
-/// A sync root on a network drive: on Windows no junction can point there, so it is refused when the device is
-/// set up, by the CLI and by the app, not first at apply. On Linux a symbolic link into a mounted share works.
-/// The paths here are decided from their text alone, so no test reaches for a network.
+/// A sync root on a network share (design 5.16). On Windows a save folder is linked there with a symlink, which
+/// needs Developer Mode or elevation, so init checks it can make one first. On Linux a symbolic link into a
+/// mounted share works. The paths here are decided from their text alone, or are this PC's admin share
+/// <c>\\localhost\C$</c>, so no test reaches for another machine.
 /// </summary>
 public class NetworkDriveTests
 {
-    private const string Share = @"\\nas\games\Sync";
+    // .invalid never resolves (RFC 2606), so a share there does not answer.
+    private const string Share = @"\\savetether-no-such-host.invalid\games\Sync";
 
     [Fact]
     public void Network_paths_are_told_from_local_ones_on_windows_and_never_on_linux()
@@ -35,7 +37,7 @@ public class NetworkDriveTests
     }
 
     [Fact]
-    public void Init_refuses_a_network_sync_root_on_windows_before_writing_or_reaching_for_it()
+    public void Init_refuses_a_share_that_does_not_answer_before_writing_anything()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -47,10 +49,56 @@ public class NetworkDriveTests
 
         var json = pc.Expect(CliApp.ExitRefused, "init", "--sync-root", Share, "--device", "pc", "--create-root", "--json").Json();
 
-        Assert.Equal("invalid", json.GetProperty("problem").GetString());
-        Assert.Contains("is on a network drive", json.GetProperty("error").GetString(), StringComparison.Ordinal);
-        Assert.Contains("junctions", json.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Equal("not-found", json.GetProperty("problem").GetString());
+        Assert.Contains("does not answer", json.GetProperty("error").GetString(), StringComparison.Ordinal);
         Assert.Null(new LocalStore(pc.LocalFolder).TryReadBootstrap());
+    }
+
+    [Fact]
+    public void A_device_on_a_share_links_with_a_symlink_and_reverts()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        if (LocalAdminShare(pc.SyncRoot) is not { } share)
+        {
+            return; // Not Windows, no admin share, or neither Developer Mode nor elevation.
+        }
+
+        pc.Ok("init", "--sync-root", share, "--device", "pc", "--create-root");
+        Assert.Equal(share, new LocalStore(pc.LocalFolder).TryReadBootstrap()!.SyncRoot, ignoreCase: true);
+        pc.Ok("map", "add", CliDevice.MappingId, "--target", "ppsspp/SAVEDATA", "--source", pc.Source);
+        pc.Save("GAME1/save.bin", "one");
+
+        pc.Ok("apply", CliDevice.MappingId, "--copy");
+
+        Assert.Equal(EntryKind.Symlink, SafeFs.Probe(pc.Source));
+        Assert.StartsWith(@"\\localhost\", SafeFs.ReadLinkTarget(pc.Source), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("one", File.ReadAllText(Path.Combine(pc.Target, "GAME1", "save.bin")));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(pc.LocalFolder, ".link-probe-*"));
+
+        pc.Ok("revert", CliDevice.MappingId);
+
+        Assert.Equal(EntryKind.Directory, SafeFs.Probe(pc.Source));
+        Assert.Equal("one", File.ReadAllText(Path.Combine(pc.Source, "GAME1", "save.bin")));
+    }
+
+    /// <summary>
+    /// <paramref name="localFolder"/> as a path on this PC's admin share, when a symlink can be made to it;
+    /// otherwise null. CI runners are elevated, so there it must be a real share link: a silent skip there would
+    /// leave share links untested.
+    /// </summary>
+    internal static string? LocalAdminShare(string localFolder)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        var full = Path.GetFullPath(localFolder);
+        var unc = $@"\\localhost\{full[0]}${full[2..]}";
+        var usable = Directory.Exists(unc) && SymlinkCapability.Probe(Path.GetTempPath(), unc) == ShareLinkSupport.Available;
+        Assert.True(usable || Environment.GetEnvironmentVariable("GITHUB_ACTIONS") is null, $"On CI, '{unc}' must be reachable and a symlink to it allowed.");
+        return usable ? unc : null;
     }
 
     [Fact]
@@ -69,7 +117,7 @@ public class NetworkDriveTests
         Assert.Equal(SyncFolderFinding.NetworkDrive, check.Finding);
         Assert.False(check.CanContinue);
         Assert.False(check.OffersFirstDevice);
-        Assert.Contains("can only point to a local drive", check.Sentence, StringComparison.Ordinal);
+        Assert.Contains("Developer Mode", check.Sentence, StringComparison.Ordinal);
         Assert.Null(flow.SyncFolder);
     }
 

@@ -545,7 +545,7 @@ Planned 2026-11-23. Goal: a Windows device can use a network share as its sync f
 
 Everything else is in [phase-3.7-network-share.md](phase-3.7-network-share.md): decisions, design, tasks T1 to T8 with the model for each and a hardware check before each, and progress. The design is section 5.16 of the design document.
 
-Progress: T1 done (design 5.16 and the "no admin" lines); T2 next.
+Progress: T1 done (design 5.16 and the "no admin" lines); T2 done (detection); T3 done (symlink to a share, `SymlinkCapability`, `symlink-not-allowed`; checked on the PC with Developer Mode off and on); T4 and T5 next.
 
 ## 6. Phase 4: Decky plugin
 

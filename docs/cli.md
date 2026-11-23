@@ -53,7 +53,7 @@ Sets this device up: ties it to a sync root and gives it a name.
 | `--take-over` | Claim a name another install already uses: this device set up again after a reinstall. Two running machines must never share a name. |
 | `--backup-root <path>` | Where backups go. Default: `backups` in the local folder. Must be outside the sync root. |
 
-Running `init` again with the same values changes nothing. A different sync root is refused while any mapping on this device is linked into the old one: revert those first. On Windows, a sync root on a network drive (a mapped drive letter or a `\\server\share` path) is refused, because Windows junctions can only point to local drives; [ways to share the folder](sharing.md#a-network-share) has the alternatives.
+Running `init` again with the same values changes nothing. A different sync root is refused while any mapping on this device is linked into the old one: revert those first. On Windows, a sync root on a network share (a `\\server\share` path, or a mapped drive letter, which is stored as the `\\server\share` path it points to) is linked with symlinks, not junctions. That needs Developer Mode (Settings, System, For developers) or a terminal opened as administrator, so `init` first checks that the share answers and that a test symlink can be made, and refuses with both fixes when it cannot; `apply` checks again (`symlink-not-allowed`). [Ways to share the folder](sharing.md#a-network-share) has the alternatives.
 
 ```bash
 # The first device:

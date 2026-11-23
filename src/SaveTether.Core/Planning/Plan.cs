@@ -197,12 +197,17 @@ public enum PrecheckKind
     [JsonStringEnumMemberName("backup-location-unusable")]
     BackupLocationUnusable,
 
+    /// <summary>T is on a network share that Windows policy will not follow a link to.</summary>
     [JsonStringEnumMemberName("target-not-local")]
     TargetNotLocal,
 
     /// <summary>S is on a network drive on Windows, where a junction cannot be created.</summary>
     [JsonStringEnumMemberName("source-not-local")]
     SourceNotLocal,
+
+    /// <summary>T is on a network share and this process cannot make a symlink: Developer Mode is off and it is not elevated.</summary>
+    [JsonStringEnumMemberName("symlink-not-allowed")]
+    SymlinkNotAllowed,
 
     [JsonStringEnumMemberName("not-enough-space")]
     NotEnoughSpace,
