@@ -170,9 +170,10 @@ public static class Planner
             return snapshot.TargetKind == EntryKind.Directory ? Classification.AlreadyApplied : Classification.BrokenLink;
         }
 
-        // Row 3: someone seeded this mapping, yet nothing is here. Never a normal later state.
+        // Row 3: someone seeded this mapping with files, yet nothing is here. Never a normal later state.
+        // A marker that lists no files seeded an empty folder: that has fully arrived, so it falls through.
         var targetHasData = snapshot.TargetTree.HasData;
-        if (!targetHasData && snapshot.ActiveMarkers.Count > 0 && !assumeSynced)
+        if (!targetHasData && snapshot.ActiveMarkers.Any(m => m.Files.Count > 0) && !assumeSynced)
         {
             return Classification.NotArrived;
         }
@@ -616,10 +617,12 @@ public static class Planner
     /// </summary>
     private static Note NotArrivedMessage(Snapshot s)
     {
+        // Only markers that list files lead here (Classify); an empty seed is not what is missing.
+        var seeders = s.ActiveMarkers.Where(m => m.Files.Count > 0).ToList();
         var text =
-            $"Device '{s.ActiveMarkers[0].DeviceName}' made its saves the shared copy, but the shared folder is empty here. " +
+            $"Device '{seeders[0].DeviceName}' made its saves the shared copy, but the shared folder is empty here. " +
             "The sync has probably not finished. Wait for it, then try again.";
-        var emptiedThroughLink = s.ActiveMarkers.Any(m => m.DeviceName == s.DeviceName)
+        var emptiedThroughLink = seeders.Any(m => m.DeviceName == s.DeviceName)
             && s.SourceKind == EntryKind.Directory && s.SourceTree.HasData;
         return emptiedThroughLink
             ? new Note(
