@@ -115,6 +115,9 @@ public static class BackupsPage
 
     public const string KeptText = "Kept: the first backup of this folder is never removed.";
 
+    /// <summary>The list's column names, pinned above it; the button columns have none.</summary>
+    public static readonly IReadOnlyList<string> Columns = ["Taken", "Why", "Copy of", "Size"];
+
     /// <summary>Delete's confirmation title.</summary>
     public static string DeleteTitle(BackupRow row)
     {

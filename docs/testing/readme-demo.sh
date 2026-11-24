@@ -1,21 +1,21 @@
 #!/bin/bash
 # The README's Apps page demo, on the Deck. Usage: readme-demo.sh <unpacked Linux package folder>
-# Runs in a private mount namespace where folders under ~/sttest/demo hide ~/Sync, ~/.var and
-# ~/.local/share/savetether, so the app shows the real paths while the real ones are never touched.
+# Runs in a private mount namespace where folders under ~/sttest/demo hide ~/Sync, ~/.var,
+# ~/.local/share/savetether and ~/.config/autostart (the app rewrites its session entry to point at itself), so the app shows the real paths while the real ones are never touched.
 # Device "deck": Dolphin (GC, Wii) and PCSX2 memory cards linked, PCSX2 save states ready to link; a Cemu
 # mapping only device "pc" has. Then starts the app in the same namespace.
 set -e
 D=$HOME/sttest/demo
 if [ -z "$DEMO_NS" ]; then
   [ -x "$1/savetether-gui" ] || { echo "usage: $0 <unpacked package folder>"; exit 1; }
-  mkdir -p $D/Sync $D/var $D/local
+  mkdir -p $D/Sync $D/var $D/local $D/autostart
   # Root in an outer user namespace to bind-mount, then back to this user's id in an inner one.
   exec env DEMO_NS=1 unshare -U -r -m sh -c '
     mount --bind "$1/Sync" "$HOME/Sync" && mount --bind "$1/var" "$HOME/.var" &&
-    mount --bind "$1/local" "$HOME/.local/share/savetether" &&
+    mount --bind "$1/local" "$HOME/.local/share/savetether" && mount --bind "$1/autostart" "$HOME/.config/autostart" &&
     exec unshare -U --map-user="$2" --map-group="$3" "$4" "$5"' sh "$D" "$(id -u)" "$(id -g)" "$(realpath "$0")" "$(realpath "$1")"
 fi
-for p in Sync:Sync .var:var .local/share/savetether:local; do # refuse unless each bind is in place
+for p in Sync:Sync .var:var .local/share/savetether:local .config/autostart:autostart; do # refuse unless each bind is in place
   [ "$(stat -c %d:%i "$HOME/${p%%:*}")" = "$(stat -c %d:%i "$D/${p#*:}")" ] || { echo "not scratch: ~/${p%%:*}"; exit 1; }
 done
 ST=$1/savetether

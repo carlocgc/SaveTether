@@ -19,6 +19,9 @@ internal sealed class BackupsScreen : UserControl, IScreen
     /// <summary>The way back, shown by the window above the scrolling page.</summary>
     public ContentControl Bar { get; } = new();
 
+    /// <summary>The list's column names, shown by the window above the scrolling page while there are backups.</summary>
+    public ContentControl Columns { get; } = new();
+
     // The app filter sits beside the way back, above the scrolling list; it is known once the backups are read.
     private readonly ContentControl _filterHost = new() { VerticalAlignment = VerticalAlignment.Center };
 
@@ -74,6 +77,7 @@ internal sealed class BackupsScreen : UserControl, IScreen
             App.Options.Log.Write(expected ? $"backup list: {e.GetType().Name}: {e.Message}" : $"unexpected error: {e}");
             _page.IsEnabled = true;
             _filterHost.Content = null;
+            Columns.Content = null;
             _page.Content = Page([new TextBlock { Text = expected ? e.Message : $"Something went wrong: {e.Message}", TextWrapping = TextWrapping.Wrap }]);
             return;
         }
@@ -114,6 +118,7 @@ internal sealed class BackupsScreen : UserControl, IScreen
         var shown = BackupsPage.Filter(groups, _appFilter);
         _cleanUpMappings = _appFilter is null ? null : shown.Select(g => g.MappingId).ToList();
         _cleanUpScope = BackupCleanupTexts.Scope(_appFilter is null ? null : apps.First(a => a.AppId == _appFilter).Name);
+        Columns.Content = shown.Count > 0 ? Navigation.ColumnHeader(RowColumns, BackupsPage.Columns) : null;
         if (shown.Count == 0)
         {
             content.Add(new TextBlock { Text = "No backups yet. SaveTether takes one before it first changes a folder.", Opacity = 0.75 });
@@ -136,9 +141,12 @@ internal sealed class BackupsScreen : UserControl, IScreen
         _page.Content = Page(content);
     }
 
+    // When, why, of what and size; the rows add the three button columns.
+    private const string RowColumns = "150,150,120,*";
+
     private Grid Row(BackupGroup group, BackupRow row, Func<string, string> appName)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("150,150,120,*,Auto,Auto,Auto"), Margin = new Thickness(0, 3) };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(RowColumns + ",Auto,Auto,Auto"), Margin = new Thickness(0, 3) };
         Add(grid, 0, new TextBlock { Text = row.Kept ? $"{row.When} *" : row.When, VerticalAlignment = VerticalAlignment.Center });
         Add(grid, 1, new TextBlock { Text = row.Reason, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.85 });
         Add(grid, 2, new TextBlock { Text = row.Of, VerticalAlignment = VerticalAlignment.Center, FontWeight = row.OfSharedCopy ? FontWeight.SemiBold : FontWeight.Normal });
