@@ -23,7 +23,7 @@ public sealed class RemoveChoicesState
 /// <summary>The words and checks of Remove this device. The steps themselves run in the core.</summary>
 public static class RemoveDeviceFlow
 {
-    public const string Title = "Remove this device";
+    public const string Title = "Remove This Device";
     public const string DeleteEverythingLabel = "Delete everything SaveTether keeps in the sync folder";
     public const string Stays = "Your save folders stay on this device as ordinary folders, with their files.";
     public const string ProgramStays = "The program stays installed. Settings → Uninstall removes it.";

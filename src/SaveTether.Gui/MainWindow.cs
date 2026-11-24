@@ -307,7 +307,7 @@ internal sealed class MainWindow : Window
         _pageActions = new StackPanel
         {
             Spacing = 8,
-            Children = { new TextBlock { Text = "Manage links", FontSize = 22, FontWeight = FontWeight.SemiBold }, pageActions },
+            Children = { new TextBlock { Text = "Manage Links", FontSize = 22, FontWeight = FontWeight.SemiBold }, pageActions },
         };
         _bar.Content = _screen is IScreen open ? open.Bar : _pageActions;
         _appsColumns = page.Groups.Count > 0 ? _appsHeader : null;

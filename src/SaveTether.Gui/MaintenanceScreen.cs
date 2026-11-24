@@ -36,7 +36,7 @@ internal sealed class MaintenanceScreen : UserControl, IScreen
             Children =
             {
                 new TextBlock { Text = "Maintenance", FontSize = 22, FontWeight = FontWeight.SemiBold },
-                Navigation.BackRow("Back to apps", close),
+                Navigation.BackRow("Back", close),
             },
         };
         Content = _page;
