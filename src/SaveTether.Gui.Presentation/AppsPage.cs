@@ -174,7 +174,18 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     }
 
     /// <summary>The rows' column names, pinned above the list: the state dot's column and the buttons' have none.</summary>
-    public static readonly IReadOnlyList<string> Columns = [string.Empty, "Folder", "State", "Details"];
+    public static readonly IReadOnlyList<string> Columns = [string.Empty, "Folder", "State", "Size", "Details"];
+
+    /// <summary>
+    /// The folder a row's size is read from: this device's folder (through its link, so a linked one shows the shared copy), or the
+    /// shared copy when this device has no folder for it.
+    /// </summary>
+    public static string SizeFolder(MappingState mapping)
+    {
+        ArgumentNullException.ThrowIfNull(mapping);
+        // A relative folder (a hand-edited file) would be read against the app's working folder, so the shared copy instead.
+        return mapping.Health.Source is { } source && Path.IsPathFullyQualified(source) ? source : mapping.Health.Target;
+    }
 
     public static string Label(RowAction action) => action switch
     {

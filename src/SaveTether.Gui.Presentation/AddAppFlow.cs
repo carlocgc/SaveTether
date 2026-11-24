@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using SaveTether.Core.Definitions;
 using SaveTether.Core.Detection;
 using SaveTether.Core.FileSystem;
@@ -76,7 +75,7 @@ public sealed record RoleChoice(string RoleId, RoleClass Class, bool Ticked, str
     /// </summary>
     public string? Folder { get; init; }
 
-    /// <summary>An unticked role's folder whose size is not read yet: the window reads it in the background (<see cref="AddAppFlow.MeasureFolder"/>).</summary>
+    /// <summary>An unticked role's folder whose size is not read yet: the window reads it in the background (<see cref="AddAppFlow.Sizes"/>).</summary>
     public string? ToMeasure { get; init; }
 }
 
@@ -153,8 +152,11 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     // replaces it (a plan made again when a box is ticked); another kind is a step forward.
     private readonly List<(AddAppView View, AppAddRequest Request)> _pages = [];
 
-    // Folders not in the plan, measured once per app in the background: ticking a box makes the page again.
-    private readonly ConcurrentDictionary<string, string> _measured = new(StringComparer.Ordinal);
+    /// <summary>
+    /// The sizes of folders not in the plan, which the window reads in the background; kept until the next app is started, so
+    /// ticking a box, which makes the page again, does not read them again.
+    /// </summary>
+    public FolderSizes Sizes { get; private set; } = new();
 
     /// <summary>Page 1: the catalog's apps, shared definitions over built-in ones, in name order.</summary>
     public IReadOnlyList<CatalogApp> Catalog()
@@ -306,7 +308,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         _request = new AppAddRequest(appId);
         _lastPlan = null;
         _pages.Clear();
-        _measured.Clear();
+        Sizes = new();
         var view = Plan();
         if (view.Page is not (AddAppPage.Plan or AddAppPage.ChooseInstall or AddAppPage.NeedsLocation or AddAppPage.Refused))
         {
@@ -596,24 +598,11 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     }
 
     // A linked folder shows its size too, the shared copy's: "Added already." says it is linked (asked for by the owner).
-    private static string SizeOf(bool exists, long bytes, int files) =>
+    public static string SizeOf(bool exists, long bytes, int files) =>
         !exists ? "not there yet" : $"{files} {(files == 1 ? "file" : "files")}, {ActionTexts.Size(bytes)}";
 
-    /// <summary>What an unticked role's line says while its size is read.</summary>
-    public static string MeasuringText(string source) => $"{source}: measuring…";
-
-    /// <summary>An unticked role's line, size included, if it was read already this time the app was opened; else null.</summary>
-    public string? Measured(string source) => _measured.TryGetValue(source, out var line) ? line : null;
-
-    /// <summary>
-    /// Reads an unticked role's folder size, for its line ("path: 3 files, 1 KB"). Slow on a large folder: the window calls it
-    /// off the UI thread. Kept until the app is opened again.
-    /// </summary>
-    public string MeasureFolder(string source) => _measured.GetOrAdd(source, path =>
-    {
-        var (exists, _, bytes, files) = Workspace.Measure(path);
-        return $"{path}: {SizeOf(exists, bytes, files)}";
-    });
+    /// <summary>An unticked role's line: its folder and, once read, its size ("path: 3 files, 1 KB").</summary>
+    public static string FolderLine(string source, string size) => $"{source}: {size}";
 
     public static string ClassName(RoleClass roleClass) => roleClass switch
     {
@@ -647,7 +636,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             return choice;
         }
 
-        return Measured(source) is { } known ? choice with { Folder = known } : choice with { ToMeasure = source };
+        return Sizes.Known(source) is { } known ? choice with { Folder = FolderLine(source, known) } : choice with { ToMeasure = source };
     }
 
     /// <summary>

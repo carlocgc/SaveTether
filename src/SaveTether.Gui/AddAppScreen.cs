@@ -678,15 +678,17 @@ internal sealed class AddAppScreen : UserControl, IScreen
             // The class only where the folder's own name does not say it already ("saves (saves)").
             var className = AddAppFlow.ClassName(role.Class);
             lines.Children.Add(new TextBlock { Text = role.RoleId == className ? role.RoleId : $"{role.RoleId} ({className})", FontWeight = FontWeight.SemiBold });
-            // An unticked role's size is read in the background; one read before (this time the app was opened) shows at once.
-            var known = role.Folder ?? (role.ToMeasure is { } source ? _flow.Measured(source) : null);
-            if (known is not null || role.ToMeasure is not null)
+            // An unticked role's size is read in the background (one read before, since the app was opened, is in Folder already).
+            if (role.Folder is not null || role.ToMeasure is not null)
             {
-                var line = new TextBlock { Text = known ?? AddAppFlow.MeasuringText(role.ToMeasure!), TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 };
+                var line = new TextBlock { Text = role.Folder, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 };
                 lines.Children.Add(line);
-                if (known is null)
+                if (role.ToMeasure is { } source)
                 {
-                    _ = FillSizeAsync(line, role.ToMeasure!);
+                    _ = _flow.Sizes.ShowAsync(
+                        source,
+                        size => line.Text = AddAppFlow.FolderLine(source, size),
+                        e => App.Options.Log.Write($"add app: measuring {source}: {e.GetType().Name}: {e.Message}"));
                 }
             }
 
@@ -728,26 +730,6 @@ internal sealed class AddAppScreen : UserControl, IScreen
             {
                 yield return new TextBlock { Text = quirk, TextWrapping = TextWrapping.Wrap };
             }
-        }
-    }
-
-    /// <summary>
-    /// Reads an unticked role's folder size off the UI thread and puts it in its line. "measuring…" stays at least
-    /// <see cref="Pacing.BusyMinimum"/>, so a quick read does not flash it for a frame (asked for by the owner).
-    /// </summary>
-    private async Task FillSizeAsync(TextBlock line, string source)
-    {
-        try
-        {
-            var measure = Task.Run(() => _flow.MeasureFolder(source));
-            await Task.WhenAll(measure, Task.Delay(Pacing.BusyMinimum));
-            line.Text = await measure;
-        }
-        catch (Exception e)
-        {
-            // Only a line of the page: nobody awaits this task, so say it here rather than lose it.
-            App.Options.Log.Write($"add app: measuring {source}: {e.GetType().Name}: {e.Message}");
-            line.Text = $"{source}: size not known";
         }
     }
 

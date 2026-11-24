@@ -20,7 +20,7 @@ namespace SaveTether.Gui;
 internal sealed class MainWindow : Window
 {
     private readonly TextBlock _device = new() { FontSize = 20, FontWeight = FontWeight.SemiBold };
-    private readonly TextBlock _syncRoot = new() { Opacity = 0.75 };
+    private readonly TextBlock _syncRoot = new() { Opacity = 0.75, TextWrapping = TextWrapping.Wrap };
     private readonly Ellipse _dot = new() { Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _headline = new() { FontSize = 17, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _checkedAt = new() { Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
@@ -35,10 +35,15 @@ internal sealed class MainWindow : Window
     private readonly ContentControl _bar = new();
     private readonly ScrollViewer _body;
     private readonly ContentControl _columns = new();
-    // The Apps rows' columns, shared by the rows and their header: the dot's (10 wide, 10 margin), the name's and the state's,
-    // then the sentence's. The rows add the two button columns.
-    private const string RowColumns = "20,150,170,*";
-    private readonly Control _appsHeader = Navigation.ColumnHeader(RowColumns, AppsPage.Columns);
+    // The Apps rows' columns, shared by the rows and their header: the dot's (10 wide, 10 margin), the name's, the state's and the
+    // size's, then the sentence's. The rows add the two button columns. Each but the sentence's fits its content, set at each check.
+    private string _rowColumns = string.Empty;
+    private double _sizeWidth;
+    // The Size column of the header and of every row now shown, widened together when a size read ends wider than the column.
+    private readonly List<ColumnDefinition> _sizeColumns = [];
+    private double _nameWidth;
+    private readonly FolderSizes _sizes = new();
+    private string? _shownRoot;
     private Control? _appsColumns;
     private Control? _pageActions;
     private readonly Overlay _overlay;
@@ -113,7 +118,7 @@ internal sealed class MainWindow : Window
         MinHeight = 560;
         Width = 1000;
         Height = 680;
-        FontSize = 15;
+        FontSize = Navigation.BodySize;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
         _check.Click += (_, _) => checkNow();
@@ -196,7 +201,20 @@ internal sealed class MainWindow : Window
         // The device's name in the title, so a rename shows in the window's title bar and the task list at once.
         Title = status.Report is { } named ? $"{Texts.AppName}: {named.DeviceName}" : Texts.AppName;
         _device.Text = status.Report is { } report ? $"This device: {report.DeviceName}" : Texts.AppName;
-        _syncRoot.Text = status.Report is { } r ? $"Sync folder: {r.SyncRoot}" : string.Empty;
+        // A read that ends after the next check (another sync folder, or none) does not write over what that check shows.
+        // An unreachable sync folder is not read: on a network share each read could wait out the network's timeout.
+        _shownRoot = status.Report?.SyncRoot;
+        _syncRoot.Text = _shownRoot is { } path ? $"Sync folder: {path}" : string.Empty;
+        if (_shownRoot is { } root && status.Condition != OverallCondition.SyncRootUnavailable)
+        {
+            _ = _sizes.ShowAsync(root, size =>
+            {
+                if (_shownRoot == root)
+                {
+                    _syncRoot.Text = $"Sync folder: {root} ({size})";
+                }
+            }, LogSizeFailure(root));
+        }
         _dot.Fill = new SolidColorBrush(status.IsAmber ? Icons.Amber : Icons.Green);
         _headline.Text = status.Headline;
         _checkedAt.Text = "Checked " + DateTime.Now.ToString("HH:mm", CultureInfo.InvariantCulture);
@@ -310,7 +328,26 @@ internal sealed class MainWindow : Window
             Children = { new TextBlock { Text = "Manage Links", FontSize = 22, FontWeight = FontWeight.SemiBold }, pageActions },
         };
         _bar.Content = _screen is IScreen open ? open.Bar : _pageActions;
-        _appsColumns = page.Groups.Count > 0 ? _appsHeader : null;
+        // The columns fit their content: the names and state words on the page, and the sizes last read ("measuring…" for one not
+        // read yet). A size that arrives wider widens the column (WidenSize). Name and size are capped, so the sentence and the
+        // buttons keep their room; past the cap the text is trimmed.
+        var rows = page.Groups.SelectMany(g => g.Rows).ToList();
+        var nameWidth = _nameWidth = Navigation.FitWidth(AppsPage.Columns[1], rows.Select(r => r.Mapping.Role), 220, weight: FontWeight.SemiBold);
+        var stateWidth = Navigation.FitWidth(AppsPage.Columns[2], rows.Select(r => r.Mapping.Word.Word), 220);
+        var sizes = rows.Concat(page.NotOnThisDevice)
+            .Where(r => r.Mapping.Health.State != Core.Health.HealthState.Broken)
+            .Select(r => _sizes.Known(AppsPage.SizeFolder(r.Mapping)) ?? FolderSizes.MeasuringText);
+        _sizeWidth = Navigation.FitWidth(AppsPage.Columns[3], sizes, SizeCap, 13);
+        _rowColumns = Navigation.Widths(20, nameWidth, stateWidth, _sizeWidth, "*");
+        _sizeColumns.Clear();
+        _appsColumns = null;
+        if (page.Groups.Count > 0)
+        {
+            var header = Navigation.ColumnHeader(_rowColumns, AppsPage.Columns);
+            _sizeColumns.Add(((Grid)header.Child!).ColumnDefinitions[3]);
+            _appsColumns = header;
+        }
+
         _columns.Content = _screen is IScreen shown ? shown.Columns : _appsColumns;
 
         foreach (var group in page.Groups)
@@ -402,7 +439,7 @@ internal sealed class MainWindow : Window
         // extra button, such as Delete, does not move the sentence of the rows without one.
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions(withApp ? "20,2*,0,3*" : RowColumns)
+            ColumnDefinitions = new ColumnDefinitions(withApp ? Navigation.Widths(20, "2*", 0, _sizeWidth, "3*") : _rowColumns)
             {
                 // The not-here list sizes its own columns: its Delete and More column is wider, and sharing it moved Apply in the
                 // rows above whenever the list was opened.
@@ -411,12 +448,34 @@ internal sealed class MainWindow : Window
             },
             Margin = new Thickness(0, 4),
         };
+        _sizeColumns.Add(grid.ColumnDefinitions[3]);
         Add(grid, 0, new Ellipse { Width = 10, Height = 10, Fill = new SolidColorBrush(Icons.ColourOf(mapping.Word.Shade)), Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 1, new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) });
+        var nameText = new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 16, 0) };
+        // A name wider than the capped column ends in "…": hovering shows all of it.
+        if (!withApp && Navigation.FitWidth(string.Empty, [name], double.MaxValue, weight: FontWeight.SemiBold) > _nameWidth)
+        {
+            ToolTip.SetTip(nameText, name);
+        }
+
+        Add(grid, 1, nameText);
         if (!withApp)
         {
             Add(grid, 2, new TextBlock { Text = mapping.Word.Word, VerticalAlignment = VerticalAlignment.Center });
         }
+
+        // Not read when the shared folder is out of reach (Broken): on a network share the read could wait out its timeout.
+        var size = new TextBlock { Opacity = 0.8, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 0, 12, 0) };
+        if (mapping.Health.State != Core.Health.HealthState.Broken)
+        {
+            var folder = AppsPage.SizeFolder(mapping);
+            _ = _sizes.ShowAsync(folder, text =>
+            {
+                size.Text = text;
+                WidenSize(text);
+            }, LogSizeFailure(folder));
+        }
+
+        Add(grid, 3, size);
 
         // The folder's line only when there is one: an empty line still takes its height and pushed the sentence up.
         var text = new StackPanel
@@ -436,7 +495,7 @@ internal sealed class MainWindow : Window
             ToolTip.SetTip(text, AppsPage.DevicesTip(devices));
         }
 
-        Add(grid, 3, text);
+        Add(grid, 4, text);
 
         var role = $"{mapping.AppName} {mapping.Role}";
 
@@ -462,7 +521,7 @@ internal sealed class MainWindow : Window
             button.Click += (_, _) => Do(main, row);
             // In the not-here list the main action (Add) is the right-most button and Delete sits to its left, so the buttons end
             // at the same edge as the rows above.
-            Add(grid, withApp ? 5 : 4, button);
+            Add(grid, withApp ? 6 : 5, button);
         }
 
         // An action that deletes for good is its own red button, apart from More (the owner asked for red).
@@ -472,7 +531,7 @@ internal sealed class MainWindow : Window
             Danger.Style(delete);
             AutomationProperties.SetName(delete, $"{AppsPage.Label(destructive)} from the shared folder: {role}");
             delete.Click += (_, _) => Do(destructive, row);
-            AddBeside(4, delete);
+            AddBeside(5, delete);
         }
 
         if (row.Others.Count > 0)
@@ -487,16 +546,37 @@ internal sealed class MainWindow : Window
 
             var more = new Button { Content = "More", Flyout = menu, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             AutomationProperties.SetName(more, $"More actions: {role}");
-            AddBeside(5, more);
+            AddBeside(6, more);
         }
 
         if (beside is { Children.Count: > 0 })
         {
-            Add(grid, 4, beside);
+            Add(grid, 5, beside);
         }
 
         return grid;
     }
+
+    private const double SizeCap = 180;
+
+    /// <summary>A size read after the page was drawn: if it is wider than the Size column, the column grows to fit it, up to its cap.</summary>
+    private void WidenSize(string text)
+    {
+        var width = Navigation.FitWidth(AppsPage.Columns[3], [text], SizeCap, 13);
+        if (width <= _sizeWidth)
+        {
+            return;
+        }
+
+        _sizeWidth = width;
+        foreach (var column in _sizeColumns)
+        {
+            column.Width = new GridLength(width);
+        }
+    }
+
+    private static Action<Exception> LogSizeFailure(string folder) =>
+        e => App.Options.Log.Write($"apps: measuring {folder}: {e.GetType().Name}: {e.Message}");
 
     /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
