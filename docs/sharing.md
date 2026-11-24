@@ -35,6 +35,28 @@ A folder managed by a cloud storage client (OneDrive, Dropbox, Nextcloud, Google
 
 The sync root is a folder on a NAS or file server (SMB or NFS), and every machine works on it directly. Nothing is copied, so nothing can be out of step, but nothing works while the share is unreachable.
 
+```mermaid
+flowchart LR
+  subgraph PC["Windows PC"]
+    PA["Cemu's save folder"]
+    PB["A PC game's saves"]
+  end
+  subgraph NAS["NAS or file server: \\nas\saves\savetether\ (the only copy)"]
+    SA[("cemu/save")]
+    SB[("game/saves")]
+  end
+  subgraph Deck["Steam Deck"]
+    DA["Cemu's save folder<br/>(Flatpak)"]
+    DB["The game's saves<br/>(Proton prefix)"]
+  end
+  PA -- "symbolic link<br/>(Developer Mode)" --> SA
+  PB -- "symbolic link" --> SB
+  DA -- "symbolic link<br/>(through the mount)" --> SA
+  DB -- "symbolic link" --> SB
+```
+
+Compare the [sync tool picture in the README](../README.md#what-it-is): there each machine keeps its own copy and plays offline; here every link crosses the network to one copy.
+
 **Not recommended.** If the share is disconnected, applications that write data there can fail or misbehave. A folder on each device, kept in step by a sync tool, is safer. SaveTether says so when a share is chosen (setup step 1, `init`), and goes on.
 
 Whatever the system:

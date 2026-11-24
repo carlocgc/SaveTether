@@ -45,7 +45,7 @@ flowchart LR
       DSG
     end
   end
-  PCS <-. "Syncthing, or any<br/>file sync tool" .-> DS
+  PCS <-. "Syncthing, a cloud folder,<br/>or any file sync tool" .-> DS
 ```
 
 ## What it does
