@@ -669,8 +669,8 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     }
 
     /// <summary>
-    /// The heading of the install pages (choosing one, giving its folder); the plan's is "<app> Select Folders" and the hand
-    /// form's "<app> Select Custom Folder" (asked for by the owner, one pattern across the flow).
+    /// The heading of the install pages (choosing one, giving its folder); the plan's is "<app> Add Folders" and the hand
+    /// form's "<app> Add Custom Folder" (asked for by the owner, one pattern across the flow).
     /// </summary>
     public static string SelectInstall(string appName) => $"{appName} Select Install";
 
@@ -749,7 +749,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             {
                 MissingFolderWarning = warning,
                 Page = AddAppPage.Plan,
-                Title = $"{name} Select Folders",
+                Title = $"{name} Add Folders",
                 Found = found is null ? $"Install: {plan.Install}." : $"Install: {plan.Install}, found at {found}.",
                 Roles = roles,
                 Quirks = plan.Quirks,

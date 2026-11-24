@@ -115,7 +115,7 @@ public class AddAppFlowTests
         var view = StartAt(flow, "testapp", "native");
 
         Assert.Equal(AddAppPage.Plan, view.Page);
-        Assert.Equal("Test App Select Folders", view.Title);
+        Assert.Equal("Test App Add Folders", view.Title);
         Assert.Equal($"Install: native, found at {data}.", view.Found);
         Assert.Equal(["A quirk the owner should read."], view.Quirks);
         Assert.Equal(["saves", "states", "shots"], view.Roles.Select(r => r.RoleId));
