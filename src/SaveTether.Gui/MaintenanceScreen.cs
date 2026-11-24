@@ -74,27 +74,36 @@ internal sealed class MaintenanceScreen : UserControl, IScreen
         }
 
         page.Children.Add(Navigation.GroupHeader("Overview"));
+        var overview = new StackPanel { Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         foreach (var line in view.OverviewLines)
         {
-            page.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
+            overview.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
         }
 
-        var openBackups = new Button { Content = "Open Backups", Margin = new Thickness(0, 4, 0, 0) };
+        var openBackups = new Button { Content = "Open Backups", VerticalAlignment = VerticalAlignment.Center };
         openBackups.Click += (_, _) => _openBackups();
-        page.Children.Add(openBackups);
+        page.Children.Add(Row(overview, openBackups));
 
         page.Children.Add(Navigation.GroupHeader("This device"));
         var taken = view.Others.Select(d => d.Name).ToList();
         if (view.This is { } self)
         {
-            page.Children.Add(new TextBlock { Text = $"Name: {self.Name}" });
-            page.Children.Add(new SelectableTextBlock { Text = $"Install ID: {self.InstallId}", Opacity = 0.7, FontSize = 13 });
-            var rename = new Button { Content = "Rename", IsEnabled = !blocked };
+            var text = new StackPanel
+            {
+                Spacing = 4,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children =
+                {
+                    new TextBlock { Text = $"Name: {self.Name}" },
+                    new SelectableTextBlock { Text = $"Install ID: {self.InstallId}", Opacity = 0.7, FontSize = 13 },
+                },
+            };
+            var rename = new Button { Content = "Rename", IsEnabled = !blocked, VerticalAlignment = VerticalAlignment.Center };
             rename.Click += (_, _) => _ = Do(flow => flow.RenameDeviceAsync(self.Name, taken));
-            var remove = new Button { Content = "Remove this device", IsEnabled = !blocked };
+            var remove = new Button { Content = "Remove this device", IsEnabled = !blocked, VerticalAlignment = VerticalAlignment.Center };
             Danger.Style(remove);
             remove.Click += (_, _) => _openRemove();
-            page.Children.Add(Buttons(rename, remove));
+            page.Children.Add(Row(text, rename, remove));
         }
         else
         {

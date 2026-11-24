@@ -426,7 +426,8 @@ internal sealed class MainWindow : Window
         var role = $"{mapping.AppName} {mapping.Role}";
 
         // In the not-here list Add takes More's column, so Delete and More share the column to its left.
-        var beside = withApp ? new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center } : null;
+        // Right-aligned in the shared column, so More stays next to Add on rows without Delete.
+        var beside = withApp ? new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right } : null;
         void AddBeside(int column, Control control)
         {
             if (beside is null)
