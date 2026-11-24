@@ -38,6 +38,9 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
     /// <summary>The current page's way back, shown by the window above the scrolling page.</summary>
     public ContentControl Bar { get; } = new();
+
+    /// <summary>Page 1's column names, shown by the window above the scrolling list; empty on the other pages.</summary>
+    public ContentControl Columns { get; } = new();
     private readonly Dictionary<string, TextBlock> _labels = new(StringComparer.Ordinal);
     private bool _closed;
     private Action? _unsubscribe;
@@ -91,6 +94,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
         _catalogLoads.Invalidate();
         _unsubscribe?.Invoke();
         _unsubscribe = null;
+        Columns.Content = null;
     }
 
     private readonly LatestLoad _catalogLoads = new();
@@ -122,6 +126,8 @@ internal sealed class AddAppScreen : UserControl, IScreen
         StackPanel? page = null;
         // Found and added rows are kept by app, so a refresh adds or updates them and never replaces a focused one.
         var rows = new Dictionary<string, RowParts>(StringComparer.Ordinal);
+        var foundColumns = CatalogHeader(AddAppFlow.FoundColumns);
+        var searchColumns = CatalogHeader(AddAppFlow.SearchColumns);
         var addedHeader = new TextBlock { Text = "Already added", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 12, 0, 4) };
 
         RowParts RowFor(string key, string name, Action open)
@@ -194,6 +200,16 @@ internal sealed class AddAppScreen : UserControl, IScreen
             }
 
             Reconcile(list.Children, desired);
+            ShowColumns(desired.Count > 0 ? foundColumns : null);
+        }
+
+        // A search or scan that ends after page 1 was left must not put its names over another page.
+        void ShowColumns(Control? header)
+        {
+            if (ReferenceEquals(_page.Content, page))
+            {
+                Columns.Content = header;
+            }
         }
 
         async Task SearchAsync()
@@ -219,6 +235,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 if (version == searchVersion && !_closed)
                 {
                     list.Children.Clear();
+                    ShowColumns(null);
                     scanNote.Text = expected
                         ? $"The search could not read the definitions: {e.Message}"
                         : $"Something went wrong with the search: {e.Message}. The details are in gui.log.";
@@ -234,6 +251,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
             // Rows are built only for the (at most 50) matches shown.
             list.Children.Clear();
+            ShowColumns(result.Total > 0 ? searchColumns : null);
             scanNote.Text = result.Total == 0
                 ? "No apps match."
                 : result.HasMore
@@ -396,6 +414,16 @@ internal sealed class AddAppScreen : UserControl, IScreen
     /// <summary>One row of the list: its button, and the texts that change as a scan goes on.</summary>
     private sealed record RowParts(Button Button, TextBlock Detail, Control Trailing);
 
+    // shortcut: 9 is the Fluent theme's button padding (8) and border (1), so the names line up with the rows' content; measure a row if the theme changes.
+    private static Border CatalogHeader(IReadOnlyList<string> labels)
+    {
+        var header = Navigation.ColumnHeader(RowColumns, labels);
+        header.Padding += new Thickness(9, 0);
+        return header;
+    }
+
+    private const string RowColumns = "3*,1.5*,2*";
+
     private static Button Row(string name, string detail, object trailing, Action open)
     {
         var right = trailing as Control ?? new TextBlock { Text = trailing.ToString(), Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
@@ -413,7 +441,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Content = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("3*,1.5*,2*"),
+                ColumnDefinitions = new ColumnDefinitions(RowColumns),
                 Children =
                 {
                     Column(new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis }, 0),

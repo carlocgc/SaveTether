@@ -268,6 +268,12 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             : CatalogStatus.NotFound;
     }
 
+    /// <summary>Page 1's column names while it lists what was found and added: name, last played, and the marks or "Added".</summary>
+    public static readonly IReadOnlyList<string> FoundColumns = ["App", "Last played", "Notes"];
+
+    /// <summary>Page 1's column names while it shows search results: name, marks, and <see cref="Label(CatalogStatus)"/>.</summary>
+    public static readonly IReadOnlyList<string> SearchColumns = ["App", "Notes", "On this device"];
+
     public static string Label(CatalogStatus status) => status switch
     {
         CatalogStatus.Found => "Found",

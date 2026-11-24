@@ -34,6 +34,12 @@ internal sealed class MainWindow : Window
     /// </summary>
     private readonly ContentControl _bar = new();
     private readonly ScrollViewer _body;
+    private readonly ContentControl _columns = new();
+    // The Apps rows' columns, shared by the rows and their header: the dot's (10 wide, 10 margin), the name's and the state's,
+    // then the sentence's. The rows add the two button columns.
+    private const string RowColumns = "20,150,170,*";
+    private readonly Control _appsHeader = Navigation.ColumnHeader(RowColumns, AppsPage.Columns);
+    private Control? _appsColumns;
     private Control? _pageActions;
     private readonly Overlay _overlay;
     private readonly string _localFolder;
@@ -128,9 +134,11 @@ internal sealed class MainWindow : Window
         // Right padding keeps the last button clear of the scroll bar, which is drawn over the content.
         _body = new ScrollViewer { Content = _rows, Padding = new Thickness(0, 0, 12, 0) };
         // The box is the scrollable area's frame: always drawn, outside what scrolls.
+        // The list's column names sit above what scrolls, so they stay in view; the right margin matches the scroll padding.
+        _columns.Margin = new Thickness(0, 0, 12, 0);
         var bodyBox = new Border
         {
-            Child = _body,
+            Child = new DockPanel { Children = { Dock(_columns, Avalonia.Controls.Dock.Top), _body } },
             Margin = new Thickness(0, 12, 0, 12),
             Padding = new Thickness(6),
             BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
@@ -204,6 +212,7 @@ internal sealed class MainWindow : Window
             _setup ??= new SetupView(_localFolder, _overlay, _checkNow);
             _body.Content = _setup;
             _bar.Content = null;
+            _columns.Content = null;
             return;
         }
 
@@ -236,8 +245,10 @@ internal sealed class MainWindow : Window
             _banners.Children.Add(Banner(Texts.Banner(status)!, Texts.BannerDetail(status), finishHere, again));
             _rows.Children.Clear();
             _pageActions = null;
+            _appsColumns = null;
             _body.Content = _screen ?? _rows;
             _bar.Content = (_screen as IScreen)?.Bar;
+            _columns.Content = (_screen as IScreen)?.Columns;
             return;
         }
         else if (Texts.Banner(status) is { } banner)
@@ -299,6 +310,8 @@ internal sealed class MainWindow : Window
             Children = { new TextBlock { Text = "Manage links", FontSize = 22, FontWeight = FontWeight.SemiBold }, pageActions },
         };
         _bar.Content = _screen is IScreen open ? open.Bar : _pageActions;
+        _appsColumns = page.Groups.Count > 0 ? _appsHeader : null;
+        _columns.Content = _screen is IScreen shown ? shown.Columns : _appsColumns;
 
         foreach (var group in page.Groups)
         {
@@ -389,7 +402,7 @@ internal sealed class MainWindow : Window
         // extra button, such as Delete, does not move the sentence of the rows without one.
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,2*,0,3*" : "Auto,150,170,*")
+            ColumnDefinitions = new ColumnDefinitions(withApp ? "20,2*,0,3*" : RowColumns)
             {
                 // The not-here list sizes its own columns: its Delete and More column is wider, and sharing it moved Apply in the
                 // rows above whenever the list was opened.
@@ -510,6 +523,7 @@ internal sealed class MainWindow : Window
         _screen = screen;
         _body.Content = screen;
         _bar.Content = (screen as IScreen)?.Bar;
+        _columns.Content = (screen as IScreen)?.Columns;
     }
 
     private void OpenMaintenance() => OpenScreen(new MaintenanceScreen(
@@ -524,6 +538,7 @@ internal sealed class MainWindow : Window
         _screen = null;
         _body.Content = _rows;
         _bar.Content = _pageActions;
+        _columns.Content = _appsColumns;
         _checkNow();
     }
 
