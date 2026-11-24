@@ -13,6 +13,8 @@
 [![Definitions](https://img.shields.io/github/last-commit/carlocgc/SaveTether/development?path=definitions%2Fimported%2Fludusavi.jsonl.gz&label=game%20definitions&display_timestamp=committer)](https://github.com/carlocgc/SaveTether/actions/workflows/update-definitions.yml)
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Steam%20Deck-informational)
 
+**[Install](#install)** · **[Getting started](#getting-started)** · **[Documentation](#documentation)** · **[Ways to share](docs/sharing.md)** · **[Command line](docs/cli.md)** · **[Contributing](CONTRIBUTING.md)**
+
 <img src="docs/images/apps-page.png" alt="The SaveTether desktop app on a Steam Deck: Dolphin and PCSX2 save folders linked to the shared folder, one ready to link, and a folder from another device that this one ignores" width="760">
 
 </div>
@@ -43,7 +45,7 @@ flowchart LR
       DSG
     end
   end
-  PCS <-. "Syncthing, or any<br/>file sync tool" .-> DS
+  PCS <-. "Syncthing, a cloud folder,<br/>or any file sync tool" .-> DS
 ```
 
 ## What it does

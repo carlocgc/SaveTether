@@ -19,6 +19,31 @@ Whatever the method, two things hold:
 
 Each machine keeps its own copy of the sync root on a local drive, and a sync tool such as [Syncthing](https://syncthing.net/) keeps the copies in step. This is what SaveTether was built and tested with: a Windows PC and a Steam Deck sharing through Syncthing, with a Linux box that receives only.
 
+```mermaid
+flowchart LR
+  subgraph PC["Windows PC"]
+    PA["Cemu's save folder"] --- |"link →"| PSA[("cemu\save")]
+    PB["PPSSPP's SAVEDATA"] --- |"link →"| PSB[("ppsspp\savedata")]
+    PG["A PC game's saves"] --- |"link →"| PSG[("game\saves")]
+    subgraph PCS["Sync\savetether\ (the real saves)"]
+      PSA
+      PSB
+      PSG
+    end
+  end
+  subgraph Deck["Steam Deck"]
+    DSA[("cemu/save")] --- |"← link"| DAA["Cemu's save folder<br/>(Flatpak)"]
+    DSB[("ppsspp/savedata")] --- |"← link"| DAB["PPSSPP's SAVEDATA<br/>(Flatpak)"]
+    DSG[("game/saves")] --- |"← link"| DAG["The game's saves<br/>(Proton prefix)"]
+    subgraph DS["~/Sync/savetether/ (the real saves)"]
+      DSA
+      DSB
+      DSG
+    end
+  end
+  PCS <-. "Syncthing, a cloud folder,<br/>or any file sync tool" .-> DS
+```
+
 - Every machine can play offline; changes travel when the machines next see each other.
 - The sync tool needs to deliver every file eventually. SaveTether checks before linking that the shared copy has arrived, and stops if it looks partial.
 - Other tools that keep a folder in step between machines, such as Resilio Sync, work the same way, but have not been tried.
@@ -34,6 +59,28 @@ A folder managed by a cloud storage client (OneDrive, Dropbox, Nextcloud, Google
 ## A network share
 
 The sync root is a folder on a NAS or file server (SMB or NFS), and every machine works on it directly. Nothing is copied, so nothing can be out of step, but nothing works while the share is unreachable.
+
+```mermaid
+flowchart LR
+  subgraph PC["Windows PC"]
+    PA["Cemu's save folder"]
+    PB["A PC game's saves"]
+  end
+  subgraph NAS["NAS or file server: \\nas\saves\savetether\ (the only copy)"]
+    SA[("cemu/save")]
+    SB[("game/saves")]
+  end
+  subgraph Deck["Steam Deck"]
+    DA["Cemu's save folder<br/>(Flatpak)"]
+    DB["The game's saves<br/>(Proton prefix)"]
+  end
+  PA -- "symbolic link<br/>(Developer Mode)" --> SA
+  PB -- "symbolic link" --> SB
+  DA -- "symbolic link<br/>(through the mount)" --> SA
+  DB -- "symbolic link" --> SB
+```
+
+Compare the [sync tool picture](#a-sync-tool-on-each-machine): there each machine keeps its own copy and plays offline; here every link crosses the network to one copy.
 
 **Not recommended.** If the share is disconnected, applications that write data there can fail or misbehave. A folder on each device, kept in step by a sync tool, is safer. SaveTether says so when a share is chosen (setup step 1, `init`), and goes on.
 
