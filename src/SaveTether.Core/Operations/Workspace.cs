@@ -141,7 +141,8 @@ public sealed partial class Workspace
 
         // First, before anything reads the share: one that is not there can stall on a network timeout.
         var syncRoot = request.SyncRoot;
-        if (PathRules.IsOnNetworkDrive(syncRoot))
+        var onShare = PathRules.IsOnNetworkDrive(syncRoot);
+        if (onShare)
         {
             // Stored as UNC: a mapped letter belongs to one logon session, and an elevated shell does not see it (D4).
             syncRoot = PathRules.ToUncIfMapped(syncRoot);
@@ -158,6 +159,10 @@ public sealed partial class Workspace
 
         // Before anything is written: a refusal here must leave the device as it was.
         var notes = GuardSyncRootChange(local, shared.SyncRoot);
+        if (onShare)
+        {
+            notes.Add(new Note(NetworkShareWarning)); // D8: told, not blocked.
+        }
 
         var createdRoot = false;
         if (!shared.IsInitialized)
