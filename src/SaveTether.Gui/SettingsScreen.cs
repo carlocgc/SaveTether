@@ -26,7 +26,7 @@ internal sealed class SettingsScreen : UserControl, IScreen
             Children =
             {
                 new TextBlock { Text = "Settings", FontSize = 22, FontWeight = FontWeight.SemiBold },
-                Navigation.BackRow("Back to apps", close),
+                Navigation.BackRow("Back", close),
             },
         };
 

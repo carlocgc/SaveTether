@@ -48,6 +48,7 @@ public class ManualAddFlowTests
         Assert.Equal(["Game", "Game Launcher", "other"], ManualAddFlow.SplitProcessNames("Game, Game Launcher;\nother,,Game"));
         Assert.Empty(ManualAddFlow.SplitProcessNames(null));
         Assert.Equal("Shared as a/B (mapping a.b).", ManualAddFlow.SharedAs("a.b", "a/B"));
+        Assert.Equal("Give the folder a name to see where it is shared.", ManualAddFlow.SharedAs(null, null, appFixed: true));
     }
 
     [Fact]
@@ -138,6 +139,32 @@ public class ManualAddFlowTests
         // Added again under the same names: this device already has it, so the form says to use its row.
         var again = flow.Check(input);
         Assert.Contains(again.Problems, p => p.Field == ManualField.FolderName && p.Problem.Contains("already has a folder", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_folder_chosen_from_Add_app_is_shared_under_the_apps_own_ID()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox, "deck", createRoot: true);
+        var hdd = sandbox.Dir("deck", "games", "xbox hdd");
+        var start = flow.StartForApp("xemu", "xemu");
+        Assert.Equal("xemu", start.AppId);
+        Assert.False(start.IsJoin);
+
+        // The app's ID is fixed: the name typed for the app is not used, and its slug is not checked.
+        Assert.Equal(("es-de.custom", "es-de/custom"), ManualAddFlow.Derive("anything else", "custom", "es-de"));
+        var input = new ManualAddInput(hdd, null, "Hard disk", null, 1);
+        var check = flow.Check(input);
+        Assert.True(check.CanAdd, string.Join(" ", check.Problems.Select(p => p.Problem)));
+        Assert.Equal("xemu.hard-disk", check.MappingId);
+
+        var result = flow.Add(input with { AppName = "xemu" }, joinAccepted: false);
+        Assert.True(result.Succeeded, result.Refused);
+        Assert.Contains("\"xemu/Hard disk\"", MappingFile(deck, "xemu.hard-disk"), StringComparison.Ordinal);
+
+        // A new folder by hand starts free again: the app name is checked and slugged.
+        flow.StartNew();
+        Assert.Contains(flow.Check(input).Problems, p => p.Field == ManualField.AppName);
     }
 
     [Fact]

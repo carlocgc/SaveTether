@@ -237,7 +237,7 @@ public class FoundListTests
         Assert.Equal(AddAppPage.Plan, imported.Page);
         Assert.True(imported.Unverified);
         Assert.False(builtIn.Unverified);
-        Assert.Contains("has not been tried by hand", AddAppFlow.UnverifiedNote, StringComparison.Ordinal);
+        Assert.Contains("not tried by hand", AddAppFlow.UnverifiedNote, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -257,6 +257,5 @@ public class FoundListTests
 
         Assert.Equal(AddAppPage.Plan, view.Page);
         Assert.Contains("Steam, GOG copy", view.CloudNote, StringComparison.Ordinal);
-        Assert.Contains("another store or launcher", view.CloudNote, StringComparison.Ordinal);
     }
 }

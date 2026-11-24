@@ -30,6 +30,9 @@ internal sealed class AddAppScreen : UserControl, IScreen
 {
     private readonly AddAppFlow _flow;
     private readonly ManualAddFlow _manual;
+
+    // Opened for one app from a row on the Apps page: Back from its first page returns there, not to the catalog.
+    private readonly bool _fromApps;
     private readonly Overlay _overlay;
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly Action _close;
@@ -62,11 +65,12 @@ internal sealed class AddAppScreen : UserControl, IScreen
         Content = _content;
         if (startAt.AppId is { } appId)
         {
+            _fromApps = true;
             _ = PlanAsync(() => _flow.Start(appId));
         }
         else if (startAt.MappingId is { } mappingId)
         {
-            _ = ShowManualAsync(() => _manual.StartJoin(mappingId), fromCatalog: false);
+            _ = ShowManualAsync(() => _manual.StartJoin(mappingId), backTo: null);
         }
         else
         {
@@ -83,9 +87,6 @@ internal sealed class AddAppScreen : UserControl, IScreen
     }
 
     // ---- Page 1 ----
-
-    private const string ScanIntro =
-        "Choose an app. SaveTether looks for apps on this device, newest saves first, and shows what it would share before anything is written.";
 
     /// <summary>Detaches page 1 from the scan session and the strip, so a page that is no longer shown is not kept alive or refreshed.</summary>
     private void ReleaseCatalog()
@@ -192,8 +193,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 {
                     var id = app.Id;
                     var parts = RowFor("added:" + id, app.Name, () => _ = PlanAsync(() => _flow.Start(id)));
-                    // An added app opens only to add a folder it does not have yet; with none left there is nothing to choose.
-                    parts.Button.IsEnabled = app.MoreToAdd;
+                    // Every added app opens: with all its folders added, Custom folder's Browse… can still add one of the owner's own.
                     ((TextBlock)parts.Trailing).Text = app.MoreToAdd ? "Added, more folders to add" : "Added";
                     desired.Add(parts.Button);
                 }
@@ -339,7 +339,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
         // Decision 6: the way to add an app that is not in the list, without the CLI.
         var byHand = new Button { Content = "Add folder" };
         AutomationProperties.SetName(byHand, "Add a folder by hand, for an app not in the list");
-        byHand.Click += (_, _) => _ = ShowManualAsync(() => _manual.StartNew(), fromCatalog: true);
+        byHand.Click += (_, _) => _ = ShowManualAsync(() => _manual.StartNew(), () => _ = ShowCatalogAsync());
         ToolTip.SetTip(scan, "Also lists saves left by apps that are no longer installed");
         // Everything but the list is pinned above the scrolling area, so it stays in reach however long the list is:
         // the title and what the page is for, then one row (the way back, Add folder, the scan), then the search and how many were found.
@@ -348,7 +348,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             Orientation = Orientation.Horizontal,
             Spacing = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { Navigation.BackRow("Back to apps", Leave), byHand, scan },
+            Children = { Navigation.BackRow("Back", Leave), byHand, scan },
         };
         scanNote.Margin = new Thickness(0, 0, 0, 2);
         Bar.Content = new StackPanel
@@ -356,8 +356,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             Spacing = 8,
             Children =
             {
-                new TextBlock { Text = "Add app", FontSize = 22, FontWeight = FontWeight.SemiBold },
-                new TextBlock { Text = ScanIntro, TextWrapping = TextWrapping.Wrap },
+                new TextBlock { Text = "Add App", FontSize = 22, FontWeight = FontWeight.SemiBold },
                 actions,
                 search,
                 scanNote,
@@ -500,9 +499,13 @@ internal sealed class AddAppScreen : UserControl, IScreen
     {
         var back = Navigation.BackRow("Back", () =>
         {
-            if (_flow.Back(view.Page) is { } last)
+            if (_flow.Back() is { } last)
             {
                 Show(last);
+            }
+            else if (_fromApps)
+            {
+                Leave();
             }
             else
             {
@@ -564,7 +567,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
                 if (fields.Count > 0)
                 {
-                    var look = new Button { Content = "Use folder", IsDefault = true };
+                    var look = new Button { Content = "Continue", IsDefault = true };
                     look.Click += (_, _) =>
                     {
                         // Read here, on the UI thread: a control cannot be read from the planning thread (found on the Deck).
@@ -594,7 +597,61 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 break;
         }
 
+        content.Add(ChooseFolder(view));
+        if (view.Page == AddAppPage.NeedsLocation)
+        {
+            // Why nothing was found, in amber, opening the scrolling area: the bar stays the same height on every page.
+            content.InsertRange(0, view.Sentences.Select(reason => (Control)new TextBlock
+            {
+                Text = reason, TextWrapping = TextWrapping.Wrap, MaxWidth = ReadableWidth, HorizontalAlignment = HorizontalAlignment.Left,
+                Foreground = new SolidColorBrush(Icons.Amber),
+            }));
+            _page.Content = Page(back, view.Title, [], [.. content]);
+            return;
+        }
+
         _page.Content = Page(back, view.Title, view.Sentences, [.. content]);
+    }
+
+    /// <summary>
+    /// "Custom folder", on every page of Add app, under a rule that keeps it apart from the definition's folders (asked for by
+    /// the owner): Browse… picks a folder the definition does not list, or one kept elsewhere, then opens the hand form with the
+    /// app fixed and that folder filled in, shared under the app's ID with a name the owner gives. Back returns to this page.
+    /// </summary>
+    private StackPanel ChooseFolder(AddAppView view)
+    {
+        var browse = new Button { Content = "Browse…" };
+        AutomationProperties.SetName(browse, $"Browse for a custom folder of {view.AppName}");
+        ToolTip.SetTip(browse, $"A folder not listed here, or one {view.AppName} keeps somewhere else");
+        browse.Click += async (_, _) =>
+        {
+            // With no folder picker (or the owner cancels it), the form still opens, or nothing happens.
+            var canPick = TopLevel.GetTopLevel(this)?.StorageProvider is { CanPickFolder: true };
+            var picked = canPick ? await PickFolderAsync($"Custom folder of {view.AppName}") : null;
+            if (canPick && picked is null)
+            {
+                return;
+            }
+
+            await ShowManualAsync(
+                () =>
+                {
+                    var form = _manual.StartForApp(view.AppId, view.AppName);
+                    return form with { Input = form.Input with { SaveFolder = picked } };
+                },
+                () => Show(view));
+        };
+        return new StackPanel
+        {
+            Spacing = 8,
+            Margin = new Thickness(0, 12, 0, 0),
+            Children =
+            {
+                Rule(),
+                new TextBlock { Text = "Custom folder", FontWeight = FontWeight.SemiBold },
+                Buttons(browse),
+            },
+        };
     }
 
     private IEnumerable<Control> PlanContent(AddAppView view)
@@ -618,10 +675,19 @@ internal sealed class AddAppScreen : UserControl, IScreen
         foreach (var role in view.Roles)
         {
             var lines = new StackPanel { Spacing = 2 };
-            lines.Children.Add(new TextBlock { Text = $"{role.RoleId} ({AddAppFlow.ClassName(role.Class)})", FontWeight = FontWeight.SemiBold });
-            if (role.Planned is { } planned)
+            // The class only where the folder's own name does not say it already ("saves (saves)").
+            var className = AddAppFlow.ClassName(role.Class);
+            lines.Children.Add(new TextBlock { Text = role.RoleId == className ? role.RoleId : $"{role.RoleId} ({className})", FontWeight = FontWeight.SemiBold });
+            // An unticked role's size is read in the background; one read before (this time the app was opened) shows at once.
+            var known = role.Folder ?? (role.ToMeasure is { } source ? _flow.Measured(source) : null);
+            if (known is not null || role.ToMeasure is not null)
             {
-                lines.Children.Add(new TextBlock { Text = $"{planned.Source}: {AddAppFlow.SizeOf(planned)}", TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 });
+                var line = new TextBlock { Text = known ?? AddAppFlow.MeasuringText(role.ToMeasure!), TextWrapping = TextWrapping.Wrap, Opacity = 0.8, FontSize = 13 };
+                lines.Children.Add(line);
+                if (known is null)
+                {
+                    _ = FillSizeAsync(line, role.ToMeasure!);
+                }
             }
 
             if (role.Unticked is { } off)
@@ -636,7 +702,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
             if (role.AlreadyAdded)
             {
-                lines.Children.Add(new TextBlock { Text = "Added already. Remove it from the Apps page to take it away.", Opacity = 0.75, FontSize = 13 });
+                lines.Children.Add(new TextBlock { Text = "Added already.", Opacity = 0.75, FontSize = 13 });
             }
 
             var box = new CheckBox { IsChecked = role.Ticked, Content = lines, IsEnabled = !role.AlreadyAdded };
@@ -650,27 +716,39 @@ internal sealed class AddAppScreen : UserControl, IScreen
             yield return box;
         }
 
-        if (!view.CanAdd)
-        {
-            yield return new TextBlock { Text = "Tick at least one folder that is not added yet.", Foreground = new SolidColorBrush(Icons.Amber) };
-        }
+        yield return ChooseFolder(view);
 
         if (view.Quirks.Count > 0)
         {
-            yield return new TextBlock { Text = "Worth knowing", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
+            var rule = Rule();
+            rule.Margin = new Thickness(0, 12, 0, 4);
+            yield return rule;
+            yield return new TextBlock { Text = "Worth knowing", FontWeight = FontWeight.SemiBold };
             foreach (var quirk in view.Quirks)
             {
                 yield return new TextBlock { Text = quirk, TextWrapping = TextWrapping.Wrap };
             }
         }
+    }
 
-        yield return new TextBlock
+    /// <summary>
+    /// Reads an unticked role's folder size off the UI thread and puts it in its line. "measuring…" stays at least
+    /// <see cref="Pacing.BusyMinimum"/>, so a quick read does not flash it for a frame (asked for by the owner).
+    /// </summary>
+    private async Task FillSizeAsync(TextBlock line, string source)
+    {
+        try
         {
-            Text = "Adding records these folders; it changes no saves. Apply links them afterwards.",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.75,
-            Margin = new Thickness(0, 8, 0, 0),
-        };
+            var measure = Task.Run(() => _flow.MeasureFolder(source));
+            await Task.WhenAll(measure, Task.Delay(Pacing.BusyMinimum));
+            line.Text = await measure;
+        }
+        catch (Exception e)
+        {
+            // Only a line of the page: nobody awaits this task, so say it here rather than lose it.
+            App.Options.Log.Write($"add app: measuring {source}: {e.GetType().Name}: {e.Message}");
+            line.Text = $"{source}: size not known";
+        }
     }
 
     /// <summary>Add, then "Apply it now?" (section 8). The plan page was the confirmation.</summary>
@@ -719,14 +797,15 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
     // ---- Add a folder by hand ----
 
-    private async Task ShowManualAsync(Func<ManualAddStart> start, bool fromCatalog)
+    /// <param name="backTo">Where Back goes: the catalog or an Add app page; null for the Apps page.</param>
+    private async Task ShowManualAsync(Func<ManualAddStart> start, Action? backTo)
     {
         _page.IsEnabled = false;
         var form = await Guard(start);
         _page.IsEnabled = true;
         if (form is not null)
         {
-            ShowManual(form, form.Input, null, fromCatalog);
+            ShowManual(form, form.Input, null, backTo);
         }
     }
 
@@ -735,7 +814,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
     /// from which the mapping ID and the shared folder follow; process names and entry depth. Problems found by Add
     /// are shown beside their fields.
     /// </summary>
-    private void ShowManual(ManualAddStart form, ManualAddInput input, ManualAddCheck? check, bool fromCatalog)
+    private void ShowManual(ManualAddStart form, ManualAddInput input, ManualAddCheck? check, Action? backTo)
     {
         var content = new List<Control>();
         Control Problems(ManualField field)
@@ -758,7 +837,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             }
         }
 
-        Label("Folder to share", "The folder on this device: saves, mods, textures or anything else the app keeps in one folder.");
+        Label("Folder to share");
         var (folder, folderRow) = PathField(input.SaveFolder ?? string.Empty, "Folder to share");
         content.Add(folderRow);
         content.Add(Problems(ManualField.SaveFolder));
@@ -772,13 +851,16 @@ internal sealed class AddAppScreen : UserControl, IScreen
         }
         else
         {
-            Label("App name", "For example Dolphin. Every folder of one app shares this name.");
-            appName = new TextBox { Text = input.AppName ?? string.Empty, Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
-            AutomationProperties.SetName(appName, "App name");
-            content.Add(appName);
-            content.Add(Problems(ManualField.AppName));
+            if (form.AppId is null)
+            {
+                Label("App name", "For example Dolphin.");
+                appName = new TextBox { Text = input.AppName ?? string.Empty, Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
+                AutomationProperties.SetName(appName, "App name");
+                content.Add(appName);
+                content.Add(Problems(ManualField.AppName));
+            }
 
-            Label("Name for the shared folder", "The folder's own name is usually right, for example GC.");
+            Label("Name for the shared folder");
             savesName = new TextBox { Text = input.FolderName ?? string.Empty, Width = 320, HorizontalAlignment = HorizontalAlignment.Left };
             AutomationProperties.SetName(savesName, "Name for the shared folder");
             content.Add(savesName);
@@ -787,14 +869,25 @@ internal sealed class AddAppScreen : UserControl, IScreen
             var sharedAs = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.85 };
             void Update()
             {
-                var (id, target) = ManualAddFlow.Derive(appName.Text, savesName.Text);
-                sharedAs.Text = ManualAddFlow.SharedAs(id, target);
+                var (id, target) = ManualAddFlow.Derive(appName?.Text, savesName.Text, form.AppId);
+                sharedAs.Text = ManualAddFlow.SharedAs(id, target, form.AppId is not null);
             }
 
-            appName.TextChanged += (_, _) => Update();
+            if (appName is not null)
+            {
+                appName.TextChanged += (_, _) => Update();
+            }
+
             savesName.TextChanged += (_, _) => Update();
             // The shared folder's name follows the folder until the owner types their own.
             var lastSuggested = string.IsNullOrEmpty(input.FolderName) ? string.Empty : null;
+            // A folder already given (Custom folder's Browse…) names the shared folder at once.
+            if (lastSuggested is not null && ManualAddFlow.SuggestFolderName(input.SaveFolder) is { } suggested)
+            {
+                lastSuggested = suggested;
+                savesName.Text = suggested;
+            }
+
             folder.TextChanged += (_, _) =>
             {
                 var next = ManualAddFlow.FollowFolder(savesName.Text, lastSuggested, folder.Text);
@@ -808,7 +901,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             content.Add(sharedAs);
         }
 
-        Label("Process names (optional)", "The app's process name, as Task Manager or System Monitor shows it, for example Dolphin. Apply, Revert and Restore wait while one of these runs. Separate several with commas.");
+        Label("Process names (optional)", "Apply, Revert and Restore wait while one of these runs. Separate with commas.");
         var processes = new TextBox { Text = input.ProcessNames ?? string.Empty, Width = 520, HorizontalAlignment = HorizontalAlignment.Left };
         AutomationProperties.SetName(processes, "Process names");
         var pick = new Button { Content = "Choose running app" };
@@ -864,25 +957,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             content.Add(new TextBlock { Text = note, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
         }
 
-        content.Add(new TextBlock
-        {
-            Text = "Adding only records this folder; nothing in it changes. Apply links it afterwards.",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.75,
-            Margin = new Thickness(0, 8, 0, 0),
-        });
-
-        var back = Navigation.BackRow(fromCatalog ? "Back" : "Back to apps", () =>
-        {
-            if (fromCatalog)
-            {
-                _ = ShowCatalogAsync();
-            }
-            else
-            {
-                Leave();
-            }
-        });
+        var back = Navigation.BackRow("Back", backTo ?? Leave);
         var add = new Button { Content = "Add", IsDefault = true };
         add.Click += (_, _) =>
         {
@@ -890,11 +965,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
             var typed = new ManualAddInput(
                 folder.Text, appName?.Text ?? input.AppName, savesName?.Text ?? input.FolderName, processes.Text,
                 depth is null ? input.EntryDepth : (int?)depth.Value);
-            _ = ManualAddAsync(form, typed, fromCatalog);
+            _ = ManualAddAsync(form, typed, backTo);
         };
-        content.Add(Buttons(add));
 
-        _page.Content = Page(back, form.Title, form.Sentences, [.. content]);
+        // Add beside the way back, above the scrolling form, as on the plan page (asked for by the owner).
+        _page.Content = Page(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { back, add } }, form.Title, form.Sentences, [.. content]);
         // Focus once the page is laid out: focused at once, the field did not take it when the form was opened from
         // a row (found on the Deck), and Return then pressed Add with the old folder still in the field.
         Dispatcher.UIThread.Post(() => folder.Focus(), DispatcherPriority.Loaded);
@@ -958,7 +1033,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
     }
 
     /// <summary>Add from the hand form, then "Apply it now?" as for an app (section 8).</summary>
-    private Task ManualAddAsync(ManualAddStart form, ManualAddInput input, bool fromCatalog) => _operate(async actions =>
+    private Task ManualAddAsync(ManualAddStart form, ManualAddInput input, Action? backTo) => _operate(async actions =>
     {
         _page.IsEnabled = false;
         var result = await Guard(() => _manual.Add(input, joinAccepted: false));
@@ -969,7 +1044,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             var share = new Button { Content = "Share it from here" };
             if (await _overlay.ShowAsync("Already shared by another device", Overlay.Body(ManualAddFlow.JoinQuestion(joins)), [cancel, share], cancel) != share)
             {
-                ShowManual(form, input, joins, fromCatalog);
+                ShowManual(form, input, joins, backTo);
                 return;
             }
 
@@ -985,7 +1060,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
 
         if (result.Check is { } check)
         {
-            ShowManual(form, input, check, fromCatalog);
+            ShowManual(form, input, check, backTo);
             return;
         }
 
@@ -1032,11 +1107,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 return null;
             }
 
-            var back = Navigation.BackRow("Back to apps", Leave);
+            var back = Navigation.BackRow("Back", Leave);
             _page.IsEnabled = true;
             _page.Content = expected
-                ? Page(back, "Add app cannot go on", [e.Message])
-                : Page(back, "Something went wrong", [$"Something went wrong: {e.Message}", "SaveTether is still running. The details are in gui.log."]);
+                ? Page(back, "Add App Cannot Go On", [e.Message])
+                : Page(back, "Something Went Wrong", [$"Something went wrong: {e.Message}", "SaveTether is still running. The details are in gui.log."]);
             return null;
         }
     }
@@ -1045,22 +1120,28 @@ internal sealed class AddAppScreen : UserControl, IScreen
     {
         var field = new TextBox { Text = value, Width = 520 };
         AutomationProperties.SetName(field, name);
-        var choose = new Button { Content = "Choose folder" };
+        var choose = new Button { Content = "Browse…" };
         choose.Click += async (_, _) =>
         {
-            if (TopLevel.GetTopLevel(this)?.StorageProvider is not { CanPickFolder: true } storage)
-            {
-                return;
-            }
-
-            var picked = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = name, AllowMultiple = false });
-            if (picked.Count > 0 && picked[0].TryGetLocalPath() is { } local)
+            if (await PickFolderAsync(name) is { } local)
             {
                 field.Text = local;
             }
         };
 
         return (field, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { field, choose } });
+    }
+
+    /// <summary>The system's folder picker; null when there is none, or nothing local was chosen.</summary>
+    private async Task<string?> PickFolderAsync(string title)
+    {
+        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { CanPickFolder: true } storage)
+        {
+            return null;
+        }
+
+        var picked = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = title, AllowMultiple = false });
+        return picked.Count > 0 ? picked[0].TryGetLocalPath() : null;
     }
 
     /// <summary>
@@ -1072,19 +1153,19 @@ internal sealed class AddAppScreen : UserControl, IScreen
         ReleaseCatalog();
         var bar = new StackPanel { Spacing = 8 };
         bar.Children.Add(new TextBlock { Text = view.Title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
-        if (view.Found is { } found)
-        {
-            bar.Children.Add(new TextBlock { Text = found, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
-        }
-
         bar.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { back, add } });
         Bar.Content = bar;
-        _content.MaxWidth = 820;
-        _content.HorizontalAlignment = HorizontalAlignment.Left;
+        FullWidth();
         var page = new StackPanel { Spacing = 10 };
+        // Where the app was found opens the scrolling area, so the bar (title, then buttons) is the same height on every page.
+        if (view.Found is { } found)
+        {
+            page.Children.Add(new TextBlock { Text = found, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+        }
+
         foreach (var sentence in view.Sentences)
         {
-            page.Children.Add(new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap });
+            page.Children.Add(new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap, MaxWidth = ReadableWidth, HorizontalAlignment = HorizontalAlignment.Left });
         }
 
         foreach (var control in content)
@@ -1095,18 +1176,38 @@ internal sealed class AddAppScreen : UserControl, IScreen
         return page;
     }
 
-    /// <summary>A page: its title, sentences and content; its way back goes to the bar above it.</summary>
-    private StackPanel Page(Control back, string title, IReadOnlyList<string> sentences, params Control[] content)
+    private const double ReadableWidth = 820;
+
+    /// <summary>A thin grey line across the page, between its sections (asked for by the owner).</summary>
+    private static Border Rule() => new() { Height = 1, Background = new SolidColorBrush(Colors.Gray, 0.5), Margin = new Thickness(0, 0, 0, 4) };
+
+    /// <summary>
+    /// The pages use the whole box, so the rule above Custom folder runs across it (asked for by the owner); sentences keep
+    /// a readable width of their own. The fields have fixed widths.
+    /// </summary>
+    private void FullWidth()
+    {
+        _content.MaxWidth = double.PositiveInfinity;
+        _content.HorizontalAlignment = HorizontalAlignment.Stretch;
+    }
+
+    /// <summary>
+    /// A page: its title and its row of buttons (the way back, and any others) stay in the bar above the scrolling area, as on the
+    /// plan page and every other screen (found by the owner: the title scrolled on these pages and not on the plan); its sentences
+    /// and content scroll.
+    /// </summary>
+    private StackPanel Page(Control buttons, string title, IReadOnlyList<string> sentences, params Control[] content)
     {
         ReleaseCatalog();
-        Bar.Content = back;
-        _content.MaxWidth = 820;
-        _content.HorizontalAlignment = HorizontalAlignment.Left;
+        var bar = new StackPanel { Spacing = 8 };
+        bar.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
+        bar.Children.Add(buttons);
+        Bar.Content = bar;
+        FullWidth();
         var page = new StackPanel { Spacing = 10 };
-        page.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
         foreach (var sentence in sentences)
         {
-            page.Children.Add(new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap });
+            page.Children.Add(new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap, MaxWidth = ReadableWidth, HorizontalAlignment = HorizontalAlignment.Left });
         }
 
         foreach (var control in content)
