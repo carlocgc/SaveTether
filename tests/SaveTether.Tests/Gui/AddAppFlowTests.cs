@@ -115,7 +115,7 @@ public class AddAppFlowTests
         var view = StartAt(flow, "testapp", "native");
 
         Assert.Equal(AddAppPage.Plan, view.Page);
-        Assert.Equal("Add Test App", view.Title);
+        Assert.Equal("Test App Select Folders", view.Title);
         Assert.Equal($"Install: native, found at {data}.", view.Found);
         Assert.Equal(["A quirk the owner should read."], view.Quirks);
         Assert.Equal(["saves", "states", "shots"], view.Roles.Select(r => r.RoleId));
@@ -289,7 +289,7 @@ public class AddAppFlowTests
         // The portable one asks for its folder, with what to select under it, then plans.
         var folder = flow.ChooseInstall("portable");
         Assert.Equal(AddAppPage.NeedsLocation, folder.Page);
-        Assert.Equal("Test App", folder.Title);
+        Assert.Equal("Test App Select Install", folder.Title);
         Assert.Equal([(LocationField.InstallFolder, (string?)null)], folder.Fields);
         Assert.Equal("Select the folder containing \"saves\".", folder.InstallFolderHint);
         Assert.Equal(AddAppPage.ChooseInstall, flow.Back()!.Page);
@@ -475,7 +475,7 @@ public class AddAppFlowTests
         var (deck, flow) = NewDevice(sandbox);
 
         var view = flow.Start("testapp");
-        Assert.Equal("Test App", view.Title);
+        Assert.Equal("Test App Select Install", view.Title);
         Assert.Equal(AddAppFlow.NoInstall, view.Sentences[0]);
         Assert.Contains(view.Sentences, s => s.StartsWith("native: No folder at", StringComparison.Ordinal));
 

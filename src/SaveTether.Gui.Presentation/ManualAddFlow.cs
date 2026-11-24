@@ -130,7 +130,7 @@ public sealed class ManualAddFlow(LocalStore local)
         _joinId = null;
         _appId = appId;
         return new ManualAddStart(
-            $"Add another folder of {appName}",
+            $"{appName} Select Custom Folder",
             [],
             new ManualAddInput(null, appName, null, null, 1),
             null,

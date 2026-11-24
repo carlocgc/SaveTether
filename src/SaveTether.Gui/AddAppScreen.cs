@@ -600,11 +600,13 @@ internal sealed class AddAppScreen : UserControl, IScreen
         content.Add(ChooseFolder(view));
         if (view.Page == AddAppPage.NeedsLocation)
         {
-            // Why nothing was found, in amber under the app's name, above the way back.
-            var reasons = view.Sentences
-                .Select(reason => (Control)new TextBlock { Text = reason, TextWrapping = TextWrapping.Wrap, MaxWidth = ReadableWidth, HorizontalAlignment = HorizontalAlignment.Left, Foreground = new SolidColorBrush(Icons.Amber) })
-                .ToList();
-            _page.Content = Page(back, view.Title, reasons, [], [.. content]);
+            // Why nothing was found, in amber, opening the scrolling area: the bar stays the same height on every page.
+            content.InsertRange(0, view.Sentences.Select(reason => (Control)new TextBlock
+            {
+                Text = reason, TextWrapping = TextWrapping.Wrap, MaxWidth = ReadableWidth, HorizontalAlignment = HorizontalAlignment.Left,
+                Foreground = new SolidColorBrush(Icons.Amber),
+            }));
+            _page.Content = Page(back, view.Title, [], [.. content]);
             return;
         }
 
@@ -965,9 +967,9 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 depth is null ? input.EntryDepth : (int?)depth.Value);
             _ = ManualAddAsync(form, typed, backTo);
         };
-        content.Add(Buttons(add));
 
-        _page.Content = Page(back, form.Title, form.Sentences, [.. content]);
+        // Add beside the way back, above the scrolling form, as on the plan page (asked for by the owner).
+        _page.Content = Page(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { back, add } }, form.Title, form.Sentences, [.. content]);
         // Focus once the page is laid out: focused at once, the field did not take it when the form was opened from
         // a row (found on the Deck), and Return then pressed Add with the old folder still in the field.
         Dispatcher.UIThread.Post(() => folder.Focus(), DispatcherPriority.Loaded);
@@ -1151,15 +1153,16 @@ internal sealed class AddAppScreen : UserControl, IScreen
         ReleaseCatalog();
         var bar = new StackPanel { Spacing = 8 };
         bar.Children.Add(new TextBlock { Text = view.Title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
-        if (view.Found is { } found)
-        {
-            bar.Children.Add(new TextBlock { Text = found, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
-        }
-
         bar.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { back, add } });
         Bar.Content = bar;
         FullWidth();
         var page = new StackPanel { Spacing = 10 };
+        // Where the app was found opens the scrolling area, so the bar (title, then buttons) is the same height on every page.
+        if (view.Found is { } found)
+        {
+            page.Children.Add(new TextBlock { Text = found, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+        }
+
         foreach (var sentence in view.Sentences)
         {
             page.Children.Add(new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap, MaxWidth = ReadableWidth, HorizontalAlignment = HorizontalAlignment.Left });
@@ -1188,25 +1191,17 @@ internal sealed class AddAppScreen : UserControl, IScreen
         _content.HorizontalAlignment = HorizontalAlignment.Stretch;
     }
 
-    /// <summary>A page: its title, sentences and content; the title and its way back go to the bar above it.</summary>
-    private StackPanel Page(Control back, string title, IReadOnlyList<string> sentences, params Control[] content) =>
-        Page(back, title, [], sentences, content);
-
     /// <summary>
-    /// A page whose title, the lines under it and the way back stay in the bar above the scrolling area, as on the plan page and
-    /// every other screen (found by the owner: the title scrolled on these pages and not on the plan).
+    /// A page: its title and its row of buttons (the way back, and any others) stay in the bar above the scrolling area, as on the
+    /// plan page and every other screen (found by the owner: the title scrolled on these pages and not on the plan); its sentences
+    /// and content scroll.
     /// </summary>
-    private StackPanel Page(Control back, string title, IReadOnlyList<Control> underTitle, IReadOnlyList<string> sentences, params Control[] content)
+    private StackPanel Page(Control buttons, string title, IReadOnlyList<string> sentences, params Control[] content)
     {
         ReleaseCatalog();
         var bar = new StackPanel { Spacing = 8 };
         bar.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
-        foreach (var line in underTitle)
-        {
-            bar.Children.Add(line);
-        }
-
-        bar.Children.Add(back);
+        bar.Children.Add(buttons);
         Bar.Content = bar;
         FullWidth();
         var page = new StackPanel { Spacing = 10 };

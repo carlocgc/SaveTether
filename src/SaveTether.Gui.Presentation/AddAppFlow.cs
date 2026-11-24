@@ -334,7 +334,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             return Shown(view with
             {
                 Page = AddAppPage.ChooseInstall,
-                Title = $"Choose an install of {view.AppName}.",
+                Title = SelectInstall(view.AppName),
                 Sentences = [],
                 Found = null,
                 Candidates = options.Select(i => view.Candidates.First(c => c.Id == i.Id)).ToList(),
@@ -394,7 +394,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             // A portable install: ask for its folder, with the one given or stored before filled in.
             _request = request;
             var stored = workspace.Shared.TryReadDevice(workspace.DeviceName)?.Apps?.GetValueOrDefault(request.AppId);
-            return Shown(new AddAppView(AddAppPage.NeedsLocation, request.AppId, definition.Name, definition.Name, [], null, [], [], [], [], null, null)
+            return Shown(new AddAppView(AddAppPage.NeedsLocation, request.AppId, definition.Name, SelectInstall(definition.Name), [], null, [], [], [], [], null, null)
             {
                 Fields = [(LocationField.InstallFolder, request.InstallDir ?? stored?.InstallDir)],
                 InstallFolderHint = InstallFolderHintFor(definition, [install]),
@@ -668,6 +668,12 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         return now is not null && !string.Equals(PathRules.Normalize(now), PathRules.Normalize(had.Source), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The heading of the install pages (choosing one, giving its folder); the plan's is "<app> Select Folders" and the hand
+    /// form's "<app> Select Custom Folder" (asked for by the owner, one pattern across the flow).
+    /// </summary>
+    public static string SelectInstall(string appName) => $"{appName} Select Install";
+
     /// <summary>The location page's first line when no install was found.</summary>
     public const string NoInstall = "No installations found on this device.";
 
@@ -743,7 +749,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             {
                 MissingFolderWarning = warning,
                 Page = AddAppPage.Plan,
-                Title = $"Add {name}",
+                Title = $"{name} Select Folders",
                 Found = found is null ? $"Install: {plan.Install}." : $"Install: {plan.Install}, found at {found}.",
                 Roles = roles,
                 Quirks = plan.Quirks,
@@ -762,7 +768,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 return empty with
                 {
                     Page = AddAppPage.ChooseInstall,
-                    Title = $"More than one install of {name} was found.",
+                    Title = SelectInstall(name),
                     Sentences = [],
                     Candidates = outcome.Candidates.Where(c => c.IsDetected).ToList(),
                 };
@@ -787,7 +793,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 return empty with
                 {
                     Page = AddAppPage.NeedsLocation,
-                    Title = name,
+                    Title = SelectInstall(name),
                     Sentences = sentences,
                     Fields = FieldsFor(wanting, definition, request),
                     InstallFolderHint = InstallFolderHintFor(definition, wanting),
@@ -804,7 +810,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 return empty with
                 {
                     Page = AddAppPage.NeedsLocation,
-                    Title = name,
+                    Title = SelectInstall(name),
                     Sentences = [outcome.Message?.Text ?? "A folder could not be worked out."],
                     Fields = helps ? FieldsFor(installs, definition, request) : [],
                     InstallFolderHint = helps ? InstallFolderHintFor(definition, installs) : null,
