@@ -129,7 +129,7 @@ public static class MaintenancePage
         "This deletes the device's records from the sync folder. No links or saves are touched. " +
         "If that device is still in use, it asks what to do the next time it checks.";
 
-    public const string DeleteOrphanMappingText = "The mapping is deleted. Its save folder in the sync folder stays.";
+    public const string DeleteOrphanMappingText = "The mapping is deleted. Its folder in the sync folder stays.";
     public const string DeleteOrphanWithSavesText = "The mapping and its folder in the sync folder are deleted, after a backup.";
 }
 

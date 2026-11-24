@@ -166,23 +166,12 @@ internal sealed class MaintenanceScreen : UserControl, IScreen
         await LoadAsync();
     }
 
-    private static StackPanel Buttons(params Button[] buttons)
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
-        foreach (var button in buttons)
-        {
-            row.Children.Add(button);
-        }
-
-        return row;
-    }
-
     private static Grid Row(Control text, params Button[] buttons)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 3) };
         grid.Children.Add(text);
-        var actions = Buttons(buttons);
-        actions.Margin = default;
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        actions.Children.AddRange(buttons);
         Grid.SetColumn(actions, 1);
         grid.Children.Add(actions);
         return grid;
