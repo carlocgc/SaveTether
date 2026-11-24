@@ -599,7 +599,7 @@ Whole top-level entries are the unit for `--add-missing` because most emulators 
 |---|---|---|---|
 | 1 | link to T | exists | already applied: verify, record, done (this is also how lost local state is rebuilt) |
 | 2 | link elsewhere | any | stop: foreign link, owner removes it by hand (5.7) |
-| 3 | any | empty or missing, but an active seed marker exists | stop: the shared copy has not arrived yet. `--assume-synced` skips this row, for the rare case where the shared saves really were all deleted |
+| 3 | any | empty or missing, but an active seed marker that lists files exists | stop: the shared copy has not arrived yet. A marker that lists no files seeded an empty folder, which has arrived, so it does not stop here. `--assume-synced` skips this row, for the rare case where the shared saves really were all deleted |
 | 4 | empty or missing | any | link, no choice needed (T is created if missing). If T is missing files an active seed marker lists, the output notes the shared copy may still be arriving |
 | 5 | has data | empty, no active seed marker | first device: `--copy` or `--no-copy` |
 | 6 | has data | has data | **guard**: "the shared location already holds saves". Shows the comparison (5.4). `--copy` is refused; `--no-copy`, `--add-missing` or `--replace-shared`. If T is missing files an active seed marker lists, `--add-missing` and `--replace-shared` also need `--assume-synced` |

@@ -152,7 +152,8 @@ Deliver, in `Core/Planning/`:
 Tests (unit):
 - One test per classification row, plus one per pair of rows that can both match, proving the order.
 - Every choice against every classification: allowed ones produce the expected step list, refused ones produce a refusal naming the allowed choices.
-- Marker cases: active with T empty (stop); active with T missing some files (links, blocks add-missing and replace-shared without `--assume-synced`); superseded (ignored); two active (double seed).
+- Marker cases: active with T empty (stop); active with T missing some files (links, blocks add-missing and replace-shared without `--assume-synced`); superseded (ignored); two active (double seed); active but listing no files (an empty seed, which has arrived: not a stop).
+- *Fixed 2026-11-24, found on the owner's PC: the Deck had shared RetroArch's empty system folder (EmuDeck keeps BIOS in `Emulation/bios`), and its marker with no files stopped every other device as "not arrived" for good, however long it waited. Row 3 now stops only for a marker that lists files. Test: `A_marker_that_seeded_an_empty_folder_has_arrived`.*
 - Each precondition failing on its own, with its reason. Includes: S inside the sync root, T outside `savetether/`, S's parent missing, one path containing the other, app running, not enough free space, unfinished journal.
 - Comparison: only-local, only-shared, differing, identical, and empty sides.
 - Add-missing plan never contains a step that writes to an entry T already has.
