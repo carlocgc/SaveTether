@@ -277,13 +277,14 @@ public class AddAppFlowTests
         Assert.Equal(["native", "portable"], view.Candidates.Select(c => c.Id));
         Assert.Equal(Path.Combine(deck.Home, "native", "data"), view.InstallPaths["native"]);
         Assert.Equal("<install folder>/saves", view.InstallPaths["portable"]);
-        Assert.Null(flow.Back(view.Page));
+        Assert.Null(flow.Back());
 
         // A known install goes to its plan with no folder to give.
+        flow.Start("testapp");
         var plan = flow.ChooseInstall("native");
         Assert.Equal(AddAppPage.Plan, plan.Page);
         Assert.Empty(plan.Fields);
-        Assert.Equal(AddAppPage.ChooseInstall, flow.Back(plan.Page)!.Page);
+        Assert.Equal(AddAppPage.ChooseInstall, flow.Back()!.Page);
 
         // The portable one asks for its folder, with what to select under it, then plans.
         var folder = flow.ChooseInstall("portable");
@@ -291,7 +292,8 @@ public class AddAppFlowTests
         Assert.Equal("Test App", folder.Title);
         Assert.Equal([(LocationField.InstallFolder, (string?)null)], folder.Fields);
         Assert.Equal("Select the folder containing \"saves\".", folder.InstallFolderHint);
-        Assert.Equal(AddAppPage.ChooseInstall, flow.Back(folder.Page)!.Page);
+        Assert.Equal(AddAppPage.ChooseInstall, flow.Back()!.Page);
+        flow.ChooseInstall("portable");
 
         plan = flow.SetLocation(LocationField.InstallFolder, portable);
         Assert.Equal(AddAppPage.Plan, plan.Page);
@@ -362,7 +364,7 @@ public class AddAppFlowTests
 
         var refused = flow.ChooseInstall("native");
         Assert.Equal(AddAppPage.Refused, refused.Page);
-        Assert.Equal(AddAppPage.ChooseInstall, flow.Back(refused.Page)!.Page);
+        Assert.Equal(AddAppPage.ChooseInstall, flow.Back()!.Page);
 
         Assert.Equal(AddAppPage.NeedsLocation, flow.ChooseInstall("portable").Page);
         var plan = flow.SetLocation(LocationField.InstallFolder, portable);
@@ -385,6 +387,49 @@ public class AddAppFlowTests
         Assert.Equal(AddAppPage.Plan, view.Page);
         Assert.Empty(view.InstallPaths);
         sandbox.AssertCanaryIntact();
+    }
+
+    [Fact]
+    public void Back_returns_to_the_page_shown_before_with_the_folder_as_given()
+    {
+        // Found by the owner with PPSSPP, whose only install on Windows needs a folder: Back from the folder page went to a
+        // plan never shown (made from the folder stored last time), and Back from the plan went to page 1, skipping the folder.
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox);
+        AppAddCliTests.ShareDefinition(deck, "testemu", """
+            {
+              "schema": 1, "id": "testemu", "name": "Test Emu", "kind": "emulator",
+              "installs": [{ "id": "portable", "os": "linux", "detect": { "dir": "{install_dir}/mlc01" }, "base": "{install_dir}/mlc01" }],
+              "roles": [{ "id": "save", "class": "save", "default": true, "path": "usr/save", "target": "save" }],
+            }
+            """);
+        var install = Path.Combine(deck.Home, "portable");
+        Directory.CreateDirectory(Path.Combine(install, "mlc01", "usr", "save"));
+        var other = Path.Combine(deck.Home, "other");
+        Directory.CreateDirectory(Path.Combine(other, "mlc01", "usr", "save"));
+        deck.Ok("app", "add", "testemu", "--install-dir", install);
+
+        // The folder stored last time is found, yet the folder page comes first; Back from it is page 1.
+        var folder = flow.Start("testemu");
+        Assert.Equal(AddAppPage.NeedsLocation, folder.Page);
+        Assert.Equal([(LocationField.InstallFolder, (string?)install)], folder.Fields);
+        Assert.Null(flow.Back());
+
+        // Folder page, Continue with another folder, then Back: the folder page again, with that folder in the field.
+        flow.Start("testemu");
+        var plan = flow.SetLocation(LocationField.InstallFolder, other);
+        Assert.Equal(AddAppPage.Plan, plan.Page);
+        flow.SetRole("save", ticked: false);
+        var back = flow.Back()!;
+        Assert.Equal(AddAppPage.NeedsLocation, back.Page);
+        Assert.Equal([(LocationField.InstallFolder, (string?)other)], back.Fields);
+
+        // From there, Continue plans with that folder again, and ticking works on the plan shown.
+        plan = flow.SetLocation(LocationField.InstallFolder, back.Fields[0].Value);
+        Assert.Equal(Path.Combine(other, "mlc01", "usr", "save"), plan.Plan!.Roles.Single().Source);
+        Assert.False(flow.SetRole("save", ticked: false).CanAdd);
+        Assert.Equal(AddAppPage.NeedsLocation, flow.Back()!.Page);
+        Assert.Null(flow.Back());
     }
 
     [Fact]

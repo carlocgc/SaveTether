@@ -30,6 +30,9 @@ internal sealed class AddAppScreen : UserControl, IScreen
 {
     private readonly AddAppFlow _flow;
     private readonly ManualAddFlow _manual;
+
+    // Opened for one app from a row on the Apps page: Back from its first page returns there, not to the catalog.
+    private readonly bool _fromApps;
     private readonly Overlay _overlay;
     private readonly Func<Func<ActionFlow, Task>, Task> _operate;
     private readonly Action _close;
@@ -62,6 +65,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
         Content = _content;
         if (startAt.AppId is { } appId)
         {
+            _fromApps = true;
             _ = PlanAsync(() => _flow.Start(appId));
         }
         else if (startAt.MappingId is { } mappingId)
@@ -495,9 +499,13 @@ internal sealed class AddAppScreen : UserControl, IScreen
     {
         var back = Navigation.BackRow("Back", () =>
         {
-            if (_flow.Back(view.Page) is { } last)
+            if (_flow.Back() is { } last)
             {
                 Show(last);
+            }
+            else if (_fromApps)
+            {
+                Leave();
             }
             else
             {
@@ -537,12 +545,6 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 break;
 
             case AddAppPage.NeedsLocation:
-                // Why nothing was found, in amber above the field; the title says the rest.
-                foreach (var reason in view.Sentences)
-                {
-                    content.Add(new TextBlock { Text = reason, TextWrapping = TextWrapping.Wrap, MaxWidth = ReadableWidth, HorizontalAlignment = HorizontalAlignment.Left, Foreground = new SolidColorBrush(Icons.Amber) });
-                }
-
                 var fields = new List<(LocationField Field, TextBox Box)>();
                 foreach (var (field, value) in view.Fields)
                 {
@@ -596,7 +598,17 @@ internal sealed class AddAppScreen : UserControl, IScreen
         }
 
         content.Add(ChooseFolder(view));
-        _page.Content = Page(back, view.Title, view.Page == AddAppPage.NeedsLocation ? [] : view.Sentences, [.. content]);
+        if (view.Page == AddAppPage.NeedsLocation)
+        {
+            // Why nothing was found, in amber under the app's name, above the way back.
+            var reasons = view.Sentences
+                .Select(reason => (Control)new TextBlock { Text = reason, TextWrapping = TextWrapping.Wrap, MaxWidth = ReadableWidth, HorizontalAlignment = HorizontalAlignment.Left, Foreground = new SolidColorBrush(Icons.Amber) })
+                .ToList();
+            _page.Content = Page(back, view.Title, reasons, [], [.. content]);
+            return;
+        }
+
+        _page.Content = Page(back, view.Title, view.Sentences, [.. content]);
     }
 
     /// <summary>
@@ -1176,14 +1188,28 @@ internal sealed class AddAppScreen : UserControl, IScreen
         _content.HorizontalAlignment = HorizontalAlignment.Stretch;
     }
 
-    /// <summary>A page: its title, sentences and content; its way back goes to the bar above it.</summary>
-    private StackPanel Page(Control back, string title, IReadOnlyList<string> sentences, params Control[] content)
+    /// <summary>A page: its title, sentences and content; the title and its way back go to the bar above it.</summary>
+    private StackPanel Page(Control back, string title, IReadOnlyList<string> sentences, params Control[] content) =>
+        Page(back, title, [], sentences, content);
+
+    /// <summary>
+    /// A page whose title, the lines under it and the way back stay in the bar above the scrolling area, as on the plan page and
+    /// every other screen (found by the owner: the title scrolled on these pages and not on the plan).
+    /// </summary>
+    private StackPanel Page(Control back, string title, IReadOnlyList<Control> underTitle, IReadOnlyList<string> sentences, params Control[] content)
     {
         ReleaseCatalog();
-        Bar.Content = back;
+        var bar = new StackPanel { Spacing = 8 };
+        bar.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
+        foreach (var line in underTitle)
+        {
+            bar.Children.Add(line);
+        }
+
+        bar.Children.Add(back);
+        Bar.Content = bar;
         FullWidth();
         var page = new StackPanel { Spacing = 10 };
-        page.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
         foreach (var sentence in sentences)
         {
             page.Children.Add(new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap, MaxWidth = ReadableWidth, HorizontalAlignment = HorizontalAlignment.Left });

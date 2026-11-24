@@ -148,7 +148,10 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
 
     private AppAddRequest? _request;
     private AddAppView? _lastPlan;
-    private AddAppView? _chooseView;
+
+    // The pages shown since Start, each with the request it was made from, for Back. A page of the same kind as the one shown
+    // replaces it (a plan made again when a box is ticked); another kind is a step forward.
+    private readonly List<(AddAppView View, AppAddRequest Request)> _pages = [];
 
     // Folders not in the plan, measured once per app in the background: ticking a box makes the page again.
     private readonly ConcurrentDictionary<string, string> _measured = new(StringComparer.Ordinal);
@@ -302,12 +305,12 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     {
         _request = new AppAddRequest(appId);
         _lastPlan = null;
-        _chooseView = null;
+        _pages.Clear();
         _measured.Clear();
         var view = Plan();
         if (view.Page is not (AddAppPage.Plan or AddAppPage.ChooseInstall or AddAppPage.NeedsLocation or AddAppPage.Refused))
         {
-            return view;
+            return Shown(view);
         }
 
         // The installs this system lists for the app: the found ones and, for a definition written by hand, the one that
@@ -317,7 +320,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         var entry = workspace.Definitions.Find(appId);
         if (entry?.Definition is not { } definition || entry.Source == DefinitionSource.Imported)
         {
-            return view;
+            return Shown(view);
         }
 
         // Only installs the core looked at: a refusal for the auto-picked install (a folder another mapping uses) still lists
@@ -328,8 +331,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             .ToList();
         if (options.Count > 1)
         {
-            _lastPlan = null;
-            _chooseView = view with
+            return Shown(view with
             {
                 Page = AddAppPage.ChooseInstall,
                 Title = $"Choose an install of {view.AppName}.",
@@ -346,8 +348,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                     // An install that needs a folder always shows what the owner would enter, even when the folder given before
                     // still holds it: the folder page shows that one.
                     i => UsesInstallFolder(definition, i) ? ManualPathText(definition, i) : view.Candidates.First(c => c.Id == i.Id).Found ?? string.Empty),
-            };
-            return _chooseView;
+            });
         }
 
         if (options.Count == 1 && view.Page != AddAppPage.NeedsLocation && UsesInstallFolder(definition, options[0]))
@@ -355,7 +356,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             return ChooseInstall(options[0].Id);
         }
 
-        return view;
+        return Shown(view);
     }
 
     /// <summary>Where a manual install would hold the saves, as the owner would enter it: "&lt;install folder&gt;/mlc01/usr/save".</summary>
@@ -393,32 +394,39 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             // A portable install: ask for its folder, with the one given or stored before filled in.
             _request = request;
             var stored = workspace.Shared.TryReadDevice(workspace.DeviceName)?.Apps?.GetValueOrDefault(request.AppId);
-            return new AddAppView(AddAppPage.NeedsLocation, request.AppId, definition.Name, definition.Name, [], null, [], [], [], [], null, null)
+            return Shown(new AddAppView(AddAppPage.NeedsLocation, request.AppId, definition.Name, definition.Name, [], null, [], [], [], [], null, null)
             {
                 Fields = [(LocationField.InstallFolder, request.InstallDir ?? stored?.InstallDir)],
                 InstallFolderHint = InstallFolderHintFor(definition, [install]),
-            };
+            });
         }
 
-        return Plan(request);
+        return Shown(Plan(request));
     }
 
     /// <summary>A location field changed: the plan is made again with it. Empty clears it.</summary>
     public AddAppView SetLocation(LocationField field, string? path)
     {
+        // Back to this page shows the folder as given, not as the page first had it.
+        if (_pages.Count > 0 && _pages[^1].View.Page == AddAppPage.NeedsLocation)
+        {
+            var (page, made) = _pages[^1];
+            _pages[^1] = (page with { Fields = page.Fields.Select(f => f.Field == field ? (f.Field, path) : f).ToList() }, made);
+        }
+
         var value = string.IsNullOrWhiteSpace(path) ? null : ExpandHome(path.Trim());
         if (value is not null && !Path.IsPathFullyQualified(value))
         {
             var view = Plan(Request);
-            return view with { Sentences = [.. view.Sentences, $"'{path}' is not a full path. Give the whole path, or choose the folder."] };
+            return Shown(view with { Sentences = [.. view.Sentences, $"'{path}' is not a full path. Give the whole path, or choose the folder."] });
         }
 
-        return Plan(field switch
+        return Shown(Plan(field switch
         {
             LocationField.InstallFolder => Request with { InstallDir = value },
             LocationField.SdCard => Request with { SdCard = value },
             _ => Request with { WinePrefix = value },
-        });
+        }));
     }
 
     /// <summary>A role ticked or unticked. With none ticked the page stays, and Add is off.</summary>
@@ -434,29 +442,58 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         var keep = shown.Roles.Where(r => r.RoleId == roleId ? ticked : r.Ticked).Select(r => r.RoleId).ToList();
         if (keep.Count == 0)
         {
-            return _lastPlan = shown with { Roles = shown.Roles.Select(r => r with { Ticked = false }).ToList() };
+            return Shown(shown with { Roles = shown.Roles.Select(r => r with { Ticked = false }).ToList() });
         }
 
+        var request = _request;
         var view = Plan(Request with { Install = shown.Plan!.Install, Roles = keep });
         if (view.Page != AddAppPage.Plan)
         {
-            // The role ticked cannot be added as things are: say why, and leave the plan as it was.
-            return shown with { Sentences = [.. view.Sentences.Take(1), .. view.Details is { } d ? new[] { d } : []] };
+            // The role ticked cannot be added as things are: say why, and leave the plan, and the request it was made from, as they were.
+            _request = request;
+            return Shown(shown with { Sentences = [.. view.Sentences.Take(1), .. view.Details is { } d ? new[] { d } : []] });
         }
 
-        return view;
+        return Shown(view);
     }
 
-    /// <summary>Back from an outcome that is not a plan: the last plan if there was one, else null for page 1.</summary>
-    public AddAppView? Back(AddAppPage from = AddAppPage.NeedsLocation)
+    /// <summary>
+    /// Back: the page shown before this one since <see cref="Start"/>, as it was left (a folder given stays filled in), or null
+    /// for page 1. Found by the owner: Back from a folder page went to a plan never shown, and from a plan skipped the folder page.
+    /// </summary>
+    public AddAppView? Back()
     {
-        // The install page has nothing before it but page 1. Any other page goes back to it when this add began there.
-        if (from == AddAppPage.ChooseInstall)
+        if (_pages.Count > 0)
         {
+            _pages.RemoveAt(_pages.Count - 1);
+        }
+
+        if (_pages.Count == 0)
+        {
+            _lastPlan = null;
             return null;
         }
 
-        return _chooseView ?? (from == AddAppPage.Plan ? null : _lastPlan);
+        var (view, request) = _pages[^1];
+        _request = request;
+        _lastPlan = view.Page == AddAppPage.Plan ? view : null;
+        return view;
+    }
+
+    /// <summary>A page about to be shown: kept for Back, and the plan ticking works on when it is one.</summary>
+    private AddAppView Shown(AddAppView view)
+    {
+        if (_pages.Count > 0 && _pages[^1].View.Page == view.Page)
+        {
+            _pages[^1] = (view, Request);
+        }
+        else
+        {
+            _pages.Add((view, Request));
+        }
+
+        _lastPlan = view.Page == AddAppPage.Plan ? view : null;
+        return view;
     }
 
     /// <summary>
@@ -488,13 +525,13 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 if (outcome.Plan is { } checkedPlan && Same(checkedPlan, shown.Plan!) && !SameAdded(View(outcome).Roles, shown.Roles))
                 {
                     var changedView = View(outcome);
-                    return new AddAppResult([], null, changedView with { Sentences = [DifferentNow, .. changedView.Sentences] });
+                    return new AddAppResult([], null, Shown(changedView with { Sentences = [DifferentNow, .. changedView.Sentences] }));
                 }
 
                 if (outcome.Plan is not { } plan || !Same(plan, shown.Plan!))
                 {
                     var again = View(outcome);
-                    return new AddAppResult([], null, again with { Sentences = [DifferentNow, .. again.Sentences] });
+                    return new AddAppResult([], null, Shown(again with { Sentences = [DifferentNow, .. again.Sentences] }));
                 }
 
                 session.Workspace.AddApp(plan);
@@ -594,13 +631,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     private AddAppView Plan(AppAddRequest? request = null)
     {
         _request = request ?? Request;
-        var view = View(Open().PlanAppAdd(_request, environment));
-        if (view.Page == AddAppPage.Plan)
-        {
-            _lastPlan = view;
-        }
-
-        return view;
+        return View(Open().PlanAppAdd(_request, environment));
     }
 
     /// <summary>
