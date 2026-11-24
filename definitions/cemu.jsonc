@@ -2,7 +2,9 @@
 // owner's devices in the M7 trial, 2026-11-12; win-documents and linux-flatpak come from the Ludusavi manifest
 // and are not yet tested on hardware. linux-portable: CemuApp::DeterminePaths (src/gui/wxgui/CemuApp.cpp, read 2026-11-23) keeps
 // everything in a "portable" folder beside the program, or beside the AppImage file (APPIMAGE); built in by default (ALLOW_PORTABLE ON).
-// Not yet tested on hardware. Design 5.2 explains the format.
+// Not yet tested on hardware. emudeck: EmuDeck's script (emuDeckCemu.sh, read on the owner's Deck 2026-11-24) sets mlc_path to
+// Emulation/roms/wiiu/mlc01 and links Emulation/saves/Cemu/saves to its usr/save. On SteamOS 3.9.5 its bundled xmlstarlet does not
+// start (libxml2.so.2 is gone), so mlc_path stays empty and Cemu keeps linux-native's folder. Design 5.2 explains the format.
 {
   "schema": 1,
   "id": "cemu",
@@ -38,6 +40,12 @@
       "os": "linux",
       "detect": { "dir": "{install_dir}/portable/mlc01" },
       "base": "{install_dir}/portable/mlc01"
+    },
+    {
+      "id": "emudeck",
+      "os": "linux",
+      "detect": { "dir": "{emudeck}/roms/wiiu/mlc01" },
+      "base": "{emudeck}/roms/wiiu/mlc01"
     }
   ],
   "roles": [
@@ -54,7 +62,8 @@
   "quirks": [
     "Link usr/save, not mlc01: game updates and DLC install into mlc01/usr/title and can run to many gigabytes.",
     "Portable on Linux: a folder named portable beside the AppImage file holds everything, with mlc01 inside it. Give the folder holding the AppImage.",
-    "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it.",
+    "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it, except with EmuDeck (emudeck), which sets it to Emulation/roms/wiiu/mlc01.",
+    "With EmuDeck, check mlc_path in ~/.config/Cemu/settings.xml before choosing: empty means linux-native, .../Emulation/roms/wiiu/mlc01 means emudeck. On SteamOS 3.9 EmuDeck cannot set it (its bundled xmlstarlet needs libxml2.so.2), so it stays empty; resetting Cemu in EmuDeck may set it once that works.",
     "The older default on Windows is the mlc01 folder in Documents (win-documents). A portable copy may sit beside it; when both are found, Add app asks which to share."
   ]
 }
