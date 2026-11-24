@@ -348,7 +348,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             Orientation = Orientation.Horizontal,
             Spacing = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { Navigation.BackRow("Back to apps", Leave), byHand, scan },
+            Children = { Navigation.BackRow("Back", Leave), byHand, scan },
         };
         scanNote.Margin = new Thickness(0, 0, 0, 2);
         Bar.Content = new StackPanel
@@ -356,7 +356,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             Spacing = 8,
             Children =
             {
-                new TextBlock { Text = "Add app", FontSize = 22, FontWeight = FontWeight.SemiBold },
+                new TextBlock { Text = "Add App", FontSize = 22, FontWeight = FontWeight.SemiBold },
                 actions,
                 search,
                 scanNote,
@@ -957,7 +957,7 @@ internal sealed class AddAppScreen : UserControl, IScreen
             content.Add(new TextBlock { Text = note, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
         }
 
-        var back = Navigation.BackRow(backTo is null ? "Back to apps" : "Back", backTo ?? Leave);
+        var back = Navigation.BackRow("Back", backTo ?? Leave);
         var add = new Button { Content = "Add", IsDefault = true };
         add.Click += (_, _) =>
         {
@@ -1107,11 +1107,11 @@ internal sealed class AddAppScreen : UserControl, IScreen
                 return null;
             }
 
-            var back = Navigation.BackRow("Back to apps", Leave);
+            var back = Navigation.BackRow("Back", Leave);
             _page.IsEnabled = true;
             _page.Content = expected
-                ? Page(back, "Add app cannot go on", [e.Message])
-                : Page(back, "Something went wrong", [$"Something went wrong: {e.Message}", "SaveTether is still running. The details are in gui.log."]);
+                ? Page(back, "Add App Cannot Go On", [e.Message])
+                : Page(back, "Something Went Wrong", [$"Something went wrong: {e.Message}", "SaveTether is still running. The details are in gui.log."]);
             return null;
         }
     }

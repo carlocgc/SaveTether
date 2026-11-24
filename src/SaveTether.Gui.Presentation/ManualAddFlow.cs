@@ -73,7 +73,7 @@ public sealed class ManualAddFlow(LocalStore local)
         _joinId = null;
         _appId = null;
         return new ManualAddStart(
-            "Add a folder by hand",
+            "Add Folder",
             ["For an app not in the list: any folder it keeps, saves, mods or anything else."],
             new ManualAddInput(null, null, null, null, 1),
             null,

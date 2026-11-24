@@ -33,7 +33,7 @@ internal sealed class SetupView : UserControl
             HorizontalAlignment = HorizontalAlignment.Left,
             Children =
             {
-                new TextBlock { Text = "Set up this device", FontSize = 22, FontWeight = FontWeight.SemiBold },
+                new TextBlock { Text = "Set Up This Device", FontSize = 22, FontWeight = FontWeight.SemiBold },
                 _stepLabel,
                 _page,
             },

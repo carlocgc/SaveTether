@@ -52,7 +52,7 @@ internal sealed class BackupsScreen : UserControl, IScreen
                 {
                     Orientation = Orientation.Horizontal,
                     Spacing = 12,
-                    Children = { Navigation.BackRow("Back to apps", close), _filterHost, CleanUpButton() },
+                    Children = { Navigation.BackRow("Back", close), _filterHost, CleanUpButton() },
                 },
             },
         };

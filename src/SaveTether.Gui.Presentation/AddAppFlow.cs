@@ -822,18 +822,18 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 return empty with { Title = $"The definition for {name} has mistakes, so it cannot be used.", Sentences = [details ?? string.Empty], Details = null };
 
             case AppAddProblem.Conflict:
-                return empty with { Title = "Already set up differently", Sentences = [Conflict(outcome.Conflict, details)] };
+                return empty with { Title = "Already Set Up Differently", Sentences = [Conflict(outcome.Conflict, details)] };
 
             case AppAddProblem.NotLocal:
                 return empty with
                 {
-                    Title = "A folder is on a network drive",
+                    Title = "A Folder Is on a Network Drive",
                     Sentences = [$"On Windows SaveTether can only link a folder on a local drive, so {name} cannot be added from where it is found."],
                 };
 
             default:
                 // unknown-app, unknown-install, unknown-role: the window offers only what the definition lists (section 10).
-                return empty with { Title = "Something went wrong", Sentences = [details ?? "The app could not be planned."], Details = null };
+                return empty with { Title = "Something Went Wrong", Sentences = [details ?? "The app could not be planned."], Details = null };
         }
     }
 
