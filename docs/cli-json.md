@@ -70,9 +70,9 @@ Flags: `--sync-root <path>` (required), `--device <name>`, `--create-root`, `--t
 | `new_device` | boolean | True when the device name was not set up before. |
 | `took_over` | boolean | True when the name was taken over from another install (`--take-over`). |
 | `devices` | array of string | Every device set up in the sync folder, this one included. |
-| `notes` | array of string | Things the owner should know, such as a backup location whose drive is not connected, or a link left behind by a sync folder change. |
+| `notes` | array of string | Things the owner should know, such as a backup location whose drive is not connected, a link left behind by a sync folder change, or, for a sync folder on a Windows network share, that a share is not recommended. |
 
-Store problems specific to `init`: `not-initialized` (the sync folder has no SaveTether folder, and `--create-root` was not given), `name-in-use` (the device name belongs to another install), `mappings-applied` (a new sync folder while mappings are still linked into the old one; revert them first).
+A sync folder on a Windows network share that cannot be linked to is refused with `problem` `not-found` (the share does not answer) or `invalid` (Windows policy, or no Developer Mode and no elevation); `error` names the fix. Store problems specific to `init`: `not-initialized` (the sync folder has no SaveTether folder, and `--create-root` was not given), `name-in-use` (the device name belongs to another install), `mappings-applied` (a new sync folder while mappings are still linked into the old one; revert them first).
 
 ### `map add` and `map remove`
 

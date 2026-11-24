@@ -1,5 +1,6 @@
 using SaveTether.Cli;
 using SaveTether.Core.FileSystem;
+using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
 using SaveTether.Core.Storage;
 using SaveTether.Gui.Presentation;
@@ -65,7 +66,10 @@ public class NetworkDriveTests
             return; // Not Windows, no admin share, or neither Developer Mode nor elevation.
         }
 
-        pc.Ok("init", "--sync-root", share, "--device", "pc", "--create-root");
+        var init = pc.Ok("init", "--sync-root", share, "--device", "pc", "--create-root", "--json");
+        Assert.Contains(
+            init.Json().GetProperty("init").GetProperty("notes").EnumerateArray(),
+            note => note.GetString() == Workspace.NetworkShareWarning);
         Assert.Equal(share, new LocalStore(pc.LocalFolder).TryReadBootstrap()!.SyncRoot, ignoreCase: true);
         pc.Ok("map", "add", CliDevice.MappingId, "--target", "ppsspp/SAVEDATA", "--source", pc.Source);
         pc.Save("GAME1/save.bin", "one");
@@ -73,6 +77,7 @@ public class NetworkDriveTests
         pc.Ok("apply", CliDevice.MappingId, "--copy");
 
         Assert.Equal(EntryKind.Symlink, SafeFs.Probe(pc.Source));
+        Assert.Equal(LinkType.Symlink, new LocalStore(pc.LocalFolder).ReadState().Mappings[CliDevice.MappingId].LinkType);
         Assert.StartsWith(@"\\localhost\", SafeFs.ReadLinkTarget(pc.Source), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("one", File.ReadAllText(Path.Combine(pc.Target, "GAME1", "save.bin")));
         Assert.Empty(Directory.EnumerateFileSystemEntries(pc.LocalFolder, ".link-probe-*"));
