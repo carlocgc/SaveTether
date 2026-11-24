@@ -1,0 +1,81 @@
+// HorizonXI (a Final Fantasy XI private server, played through its own launcher and Ashita). Shipped with SaveTether.
+// The launcher installs the game into Game/ under its install folder. Since launcher 2.0 it asks for AppData/Local/HorizonXI;
+// older installs used Program Files (x86)/HorizonXI. Character data is on the server; the client keeps macros, key binds and
+// options in SquareEnix/FINAL FANTASY XI/USER (one folder per character ID, plus a few shared .dat files), and Ashita addons
+// keep their settings in config/addons/<addon>/<character>_<id>.
+// linux-steam-shortcut follows the community guide at gitlab.com/MattyGWS/HorizonXI-Linux-Installation (read 2026-11-24): the
+// launcher is unpacked to ~/horizon-xi/lib/net45 and added to Steam as a non-Steam game run with Proton, so the game lives in
+// that shortcut's compatdata prefix. Steam numbers the prefix itself, so the prefix is found by the shortcut's name.
+// Tried on the owner's Steam Deck on 2026-11-24 (launcher 2.0.3, game 2.0.5, moved to AppData/Local). On Windows only
+// win-custom is tried (dry run, 2026-11-24, a game on another drive). Design 5.2 explains the format.
+{
+  "schema": 1,
+  "id": "horizonxi",
+  "name": "HorizonXI",
+  "kind": "game",
+  "tier": "verified",
+  "installs": [
+    {
+      "id": "win-appdata",
+      "os": "windows",
+      "detect": { "dir": "{localappdata}/HorizonXI/Game/bootloader" },
+      "base": "{localappdata}/HorizonXI/Game"
+    },
+    {
+      "id": "win-program-files",
+      "os": "windows",
+      "detect": { "dir": "C:/Program Files (x86)/HorizonXI/Game/bootloader" },
+      "base": "C:/Program Files (x86)/HorizonXI/Game"
+    },
+    {
+      // Any other folder chosen in the launcher: the install folder is the one holding Game.
+      "id": "win-custom",
+      "os": "windows",
+      "detect": { "dir": "{install_dir}/Game/bootloader" },
+      "base": "{install_dir}/Game"
+    },
+    {
+      // A folder inside a shortcut's prefix cannot be a detect rule yet, so the launcher the guide unpacks stands in for it.
+      "id": "linux-steam-shortcut",
+      "os": "linux",
+      "detect": { "file": "{home}/horizon-xi/lib/net45/HorizonXI-Launcher.exe" },
+      "base": { "winpath": "{localappdata}/HorizonXI/Game", "prefix": { "steam_shortcut": "HorizonXI" } }
+    }
+  ],
+  "roles": [
+    {
+      "id": "macros",
+      "class": "save",
+      "default": true,
+      "path": "SquareEnix/FINAL FANTASY XI/USER",
+      "target": "macros",
+      "notes": "Macros, key binds and client options: one folder per character ID, and shared .dat files beside them."
+    },
+    {
+      "id": "addons",
+      "class": "system",
+      "default": false,
+      "path": "config/addons",
+      "target": "addons",
+      "entry_depth": 2,
+      "notes": "Ashita addon settings, one folder per addon and character. The launcher may add its own files here on an update."
+    },
+    {
+      "id": "screenshots",
+      "class": "media",
+      "default": false,
+      "path": "screenshots",
+      "target": "screenshots",
+      "notes": "Screenshots taken in game. Can grow to several gigabytes."
+    }
+  ],
+  "quirks": [
+    "Close the game and the launcher before apply or revert: the client writes USER while it runs.",
+    "On Windows, a game installed elsewhere than AppData/Local or Program Files (x86) is the win-custom install: give the folder chosen in the launcher, the one holding Game, as the install folder (--install-dir).",
+    "On Linux, set the game up with the community guide at https://gitlab.com/MattyGWS/HorizonXI-Linux-Installation: the launcher unpacked to ~/horizon-xi/lib/net45, added to Steam as a non-Steam game and run with Proton. Add app finds the game by that launcher.",
+    "On Linux the Steam shortcut must be named exactly HorizonXI. With another name, or a prefix outside Steam (Lutris, a Wine prefix of its own), give the prefix with --wine-prefix (the folder holding drive_c).",
+    "If the launcher installed into Program Files (x86) inside the prefix, it asks to move to AppData/Local. Move it with the launcher closed, then change installPath and downloadPath in AppData/Roaming/HorizonXI-Launcher/storage.json; add the app after the move.",
+    "Removing and re-adding the Steam shortcut gives it a new, empty prefix; the shared copy is kept and app add follows the new prefix by the shortcut's name."
+  ],
+  "tested_on": ["Steam Deck, Proton via a Steam shortcut (dry run)", "Windows, win-custom on another drive (dry run)"]
+}

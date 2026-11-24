@@ -6,32 +6,43 @@ namespace SaveTether.Gui;
 
 /// <summary>
 /// Desktop notifications without a new dependency (desktop-app-spec.md, section 3.1): a toast through
-/// Windows PowerShell on Windows, <c>notify-send</c> on Linux. A notification that cannot be shown is
-/// logged and otherwise ignored; the tray icon still shows the state.
+/// Windows PowerShell on Windows, <c>notify-send</c> on Linux. Not shown while Settings' switch is off.
+/// A notification that cannot be shown is logged and otherwise ignored; the tray icon still shows the state.
 /// </summary>
 internal static class Notifier
 {
-    /// <summary>The app ID Windows knows PowerShell by; toasts from an unregistered app ID are dropped.</summary>
+    /// <summary>
+    /// SaveTether's app ID for toasts from a copy that is not installed, registered per user under
+    /// <c>HKCU\Software\Classes\AppUserModelId</c> with its name; the installer removes it on uninstall.
+    /// </summary>
+    private const string AppId = "SaveTether";
+
+    /// <summary>The app ID Windows knows PowerShell by, used when SaveTether's own cannot be registered.</summary>
     private const string PowerShellAppId = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe";
+
+    private static string? _registeredAppId;
 
     // The text reaches the script through an environment variable, never inside the script, so nothing in it is run.
     private const string ToastScript = """
         $ErrorActionPreference = 'Stop'
         [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
-        $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-        $texts = $xml.GetElementsByTagName('text')
-        $texts.Item(0).AppendChild($xml.CreateTextNode($env:SAVETETHER_TOAST_TITLE)) > $null
-        $texts.Item(1).AppendChild($xml.CreateTextNode($env:SAVETETHER_TOAST_BODY)) > $null
+        $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText01)
+        $xml.GetElementsByTagName('text').Item(0).AppendChild($xml.CreateTextNode($env:SAVETETHER_TOAST_BODY)) > $null
         [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($env:SAVETETHER_TOAST_APP).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
         """;
 
     public static void Show(string body, GuiLog log)
     {
+        if (!new NotificationSetting(App.Options.LocalFolder).IsOn)
+        {
+            return;
+        }
+
         _ = Task.Run(() =>
         {
             try
             {
-                var start = OperatingSystem.IsWindows() ? Toast(body) : NotifySend(body);
+                var start = OperatingSystem.IsWindows() ? Toast(body, _registeredAppId ??= Register(log)) : NotifySend(body);
                 if (start is null)
                 {
                     return;
@@ -50,7 +61,46 @@ internal static class Notifier
         });
     }
 
-    private static ProcessStartInfo Toast(string body)
+    /// <summary>
+    /// The app ID to send toasts as, worked out once per run. The installed copy sends as the installer's Start menu
+    /// entry, whose app ID is its target's path (seen on Windows 11 for any folder): Windows then shows its name and
+    /// icon. The installed folder is the one the installer recorded (it may be given with /DIR=), else the default.
+    /// Any other copy registers <see cref="AppId"/> with SaveTether's name; Windows 11 ignored a registered IconUri.
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static string Register(GuiLog log)
+    {
+        const string uninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\{6E3C9B52-8F1D-4A7E-9C41-2B5D7E0A9F13}_is1";
+        string? recorded;
+        using (var uninstall = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(uninstallKey))
+        {
+            recorded = uninstall?.GetValue("InstallLocation") as string;
+        }
+
+        var folder = recorded is { Length: > 0 }
+            ? recorded
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "SaveTether");
+        var installed = Path.GetFullPath(Path.Combine(folder, "savetether-gui.exe"));
+        var entry = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "SaveTether.lnk");
+        if (string.Equals(Environment.ProcessPath, installed, StringComparison.OrdinalIgnoreCase) && File.Exists(entry))
+        {
+            return installed;
+        }
+
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Classes\AppUserModelId\" + AppId);
+            key.SetValue("DisplayName", Texts.AppName);
+            return AppId;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            log.Write($"notifications sent as Windows PowerShell: SaveTether could not be registered: {e.Message}");
+            return PowerShellAppId;
+        }
+    }
+
+    private static ProcessStartInfo Toast(string body, string appId)
     {
         var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
         foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand" })
@@ -59,9 +109,8 @@ internal static class Notifier
         }
 
         start.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(ToastScript)));
-        start.Environment["SAVETETHER_TOAST_TITLE"] = Texts.AppName;
         start.Environment["SAVETETHER_TOAST_BODY"] = body;
-        start.Environment["SAVETETHER_TOAST_APP"] = PowerShellAppId;
+        start.Environment["SAVETETHER_TOAST_APP"] = appId;
         return start;
     }
 

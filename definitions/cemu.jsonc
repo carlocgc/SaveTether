@@ -1,6 +1,8 @@
 // Cemu (Wii U emulator). Shipped with SaveTether: win-portable and linux-native were used on both of the
 // owner's devices in the M7 trial, 2026-11-12; win-documents and linux-flatpak come from the Ludusavi manifest
-// and are not yet tested on hardware. Design 5.2 explains the format.
+// and are not yet tested on hardware. linux-portable: CemuApp::DeterminePaths (src/gui/wxgui/CemuApp.cpp, read 2026-11-23) keeps
+// everything in a "portable" folder beside the program, or beside the AppImage file (APPIMAGE); built in by default (ALLOW_PORTABLE ON).
+// Not yet tested on hardware. Design 5.2 explains the format.
 {
   "schema": 1,
   "id": "cemu",
@@ -30,6 +32,12 @@
       "os": "linux",
       "detect": { "dir": "{xdg_data}/Cemu/mlc01" },
       "base": "{xdg_data}/Cemu/mlc01"
+    },
+    {
+      "id": "linux-portable",
+      "os": "linux",
+      "detect": { "dir": "{install_dir}/portable/mlc01" },
+      "base": "{install_dir}/portable/mlc01"
     }
   ],
   "roles": [
@@ -45,6 +53,7 @@
   ],
   "quirks": [
     "Link usr/save, not mlc01: game updates and DLC install into mlc01/usr/title and can run to many gigabytes.",
+    "Portable on Linux: a folder named portable beside the AppImage file holds everything, with mlc01 inside it. Give the folder holding the AppImage.",
     "mlc_path in settings.xml must be empty, so Cemu uses the mlc01 folder beside it.",
     "The older default on Windows is the mlc01 folder in Documents (win-documents). A portable copy may sit beside it; when both are found, Add app asks which to share."
   ]

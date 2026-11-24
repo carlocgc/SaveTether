@@ -1,6 +1,7 @@
 // Azahar (Nintendo 3DS emulator, the successor of Citra). Shipped with SaveTether. The Windows, native Linux and Flatpak folders are
 // Azahar's defaults (from its source, common_paths.h and file_util.cpp); the EmuDeck folders come from EmuDeck's own Azahar script, read on
-// the owner's Steam Deck (2026-11-22). Design 5.2 explains the format.
+// the owner's Steam Deck (2026-11-22). linux-portable: SetUserPath's Linux branch uses a "user" folder in the current working directory
+// when one exists (file_util.cpp, read 2026-11-23). Design 5.2 explains the format.
 {
   "schema": 1,
   "id": "azahar",
@@ -34,6 +35,12 @@
       "base": "{xdg_data}/azahar-emu"
     },
     {
+      "id": "linux-portable",
+      "os": "linux",
+      "detect": { "dir": "{install_dir}/user/sdmc" },
+      "base": "{install_dir}/user"
+    },
+    {
       "id": "emudeck",
       "os": "linux",
       "detect": { "dir": "{emudeck}/storage/azahar/sdmc" },
@@ -61,13 +68,14 @@
       "id": "states",
       "class": "state",
       "default": false,
-      "path": { "win-portable": "states", "win-appdata": "states", "linux-flatpak": "states", "linux-native": "states" },
+      "path": { "win-portable": "states", "win-appdata": "states", "linux-flatpak": "states", "linux-native": "states", "linux-portable": "states" },
       "target": "states",
       "notes": "Save states: a newer Azahar may not load an older one. Not for EmuDeck, which keeps them in ~/.local/share/azahar-emu/states."
     }
   ],
   "quirks": [
     "EmuDeck moves sdmc and nand to Emulation/storage/azahar; Emulation/saves/azahar/saves is only a link to that sdmc folder.",
+    "Portable on Linux: Azahar uses a user folder in the folder it is started from (the working directory), not beside the program, so it must always be started from there. Give that folder.",
     "Settings > System > Storage can move sdmc and nand (use_custom_storage in qt-config.ini); Add app follows the default location only.",
     "An existing Citra or Lime3DS folder is copied into Azahar's on its first start; Citra's own folders are not Azahar's.",
     "Process name for the running check: azahar.exe on Windows, azahar or the AppImage on Linux."

@@ -420,8 +420,8 @@ public class AddAppFlowTests
         CliDevice.Write(portable, "app.cfg", "config");
         Assert.Equal(AddAppPage.Plan, flow.SetLocation(LocationField.InstallFolder, portable).Page);
 
-        // The cemu built-in has no value to ask for on Linux: nothing found, and no field.
-        Assert.Empty(flow.Start("cemu").Fields);
+        // The ppsspp built-in has no value to ask for on Linux: nothing found, and no field.
+        Assert.Empty(flow.Start("ppsspp").Fields);
         Assert.Null(flow.Back());
     }
 

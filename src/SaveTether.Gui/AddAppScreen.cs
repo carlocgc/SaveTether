@@ -971,7 +971,8 @@ internal sealed class AddAppScreen : UserControl, IScreen
         App.Options.Log.Write($"map add {result.Added}: added by hand");
         Leave();
         await actions.Refresh();
-        var name = form.IsJoin ? result.Added! : input.AppName!.Trim();
+        // A join's name is the app's (StartJoin): the mapping ID read as "duckstation.memcards memcards" (found on Mint).
+        var name = input.AppName!.Trim();
         var notNow = new Button { Content = "Not now" };
         var apply = new Button { Content = "Apply" };
         var pressed = await _overlay.ShowAsync(AddAppFlow.AddedQuestion(name), Overlay.Body(AddAppFlow.AddedText([result.Added!])), [notNow, apply], notNow);

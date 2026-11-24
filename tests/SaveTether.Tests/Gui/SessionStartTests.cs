@@ -46,6 +46,11 @@ public class SessionStartTests
 
         // Already right: nothing to do.
         Assert.Null(new SessionStart(store, program).RefreshAtStart());
+
+        // A copy with its own local folder (a test copy) leaves the entry where it is, and says so in the log.
+        var testCopy = sandbox.At("test", "savetether-gui");
+        Assert.StartsWith("autostart entry left at", new SessionStart(store, testCopy).RefreshAtStart(ownLocalFolder: true), StringComparison.Ordinal);
+        Assert.Equal(program, store.ReadProgram());
     }
 
     [Fact]

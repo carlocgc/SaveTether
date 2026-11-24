@@ -1,6 +1,7 @@
 // PrimeHack (a Dolphin fork for the Metroid Prime trilogy). Shipped with SaveTether. It keeps Dolphin's folder layout (Dolphin's
 // CommonPaths.h); the Flatpak folder comes from EmuDeck's PrimeHack script, read on the owner's Steam Deck (2026-11-22). Not yet tried
-// with `app add`. Design 5.2 explains the format.
+// with `app add`. linux-portable: PrimeHack's SetUserDirectory (UICommon.cpp), on Linux, uses "User" beside the program when
+// portable.txt is there, with a capital U unlike Dolphin (read 2026-11-23). Design 5.2 explains the format.
 {
   "schema": 1,
   "id": "primehack",
@@ -19,6 +20,12 @@
       "os": "linux",
       "detect": { "dir": "{flatpak:io.github.shiiion.primehack}/data/dolphin-emu" },
       "base": "{flatpak:io.github.shiiion.primehack}/data/dolphin-emu"
+    },
+    {
+      "id": "linux-portable",
+      "os": "linux",
+      "detect": { "file": "{install_dir}/portable.txt" },
+      "base": "{install_dir}/User"
     }
   ],
   "roles": [
@@ -65,6 +72,7 @@
   ],
   "quirks": [
     "PrimeHack's Windows release is portable: its User folder sits beside the program. An install without that folder uses Dolphin's own; add Dolphin instead.",
+    "On Linux, portable.txt beside the program makes it use the User folder there; that needs an unpacked build, since an AppImage's own folder is read-only.",
     "Config and Cache stay on each device: they hold graphics, controller and path settings.",
     "Process name for the running check: Dolphin.exe on Windows, dolphin-emu on Linux, as for Dolphin."
   ]

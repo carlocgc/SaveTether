@@ -103,6 +103,16 @@ public class ActionTests
     }
 
     [Fact]
+    public void A_share_without_symlink_rights_names_the_fix_and_can_be_checked_again()
+    {
+        var refusal = Refusal(RefusalKind.Precondition, [new PrecheckFailure(PrecheckKind.SymlinkNotAllowed, "core message")]);
+        var view = ActionTexts.Describe(refusal, Role, App, sandboxGrantPossible: false);
+
+        Assert.Contains("Developer Mode", Assert.Single(view.Sentences), StringComparison.Ordinal);
+        Assert.Equal([RefusalAction.CheckAgain], view.Actions);
+    }
+
+    [Fact]
     public void A_running_app_is_named_and_can_be_checked_again_or_declared_closed()
     {
         var refusal = Planner.Plan(

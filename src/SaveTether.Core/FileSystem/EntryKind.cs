@@ -68,7 +68,7 @@ public sealed record LinkRecord(string RelativePath, EntryKind Kind, string Targ
 public sealed record CopyResult(int FileCount, long ByteCount, IReadOnlyList<LinkRecord> Links);
 
 /// <summary>A filesystem operation that SaveTether refused or could not complete safely.</summary>
-public sealed class SafeFsException : IOException
+public class SafeFsException : IOException
 {
     public SafeFsException()
     {
@@ -80,6 +80,27 @@ public sealed class SafeFsException : IOException
     }
 
     public SafeFsException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+/// <summary>
+/// A symlink could not be made because Windows answered ERROR_PRIVILEGE_NOT_HELD (1314): the process is not
+/// elevated and Developer Mode is off. The message says how to allow it.
+/// </summary>
+public sealed class SymlinkPrivilegeException : SafeFsException
+{
+    public SymlinkPrivilegeException()
+    {
+    }
+
+    public SymlinkPrivilegeException(string message)
+        : base(message)
+    {
+    }
+
+    public SymlinkPrivilegeException(string message, Exception innerException)
         : base(message, innerException)
     {
     }

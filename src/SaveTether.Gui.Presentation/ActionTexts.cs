@@ -105,7 +105,9 @@ public static class ActionTexts
                 ? $"Not enough free space at {s.Path}: {Size(s.NeededBytes)} needed, {Size(s.FreeBytes)} free."
                 : "Not enough free space.",
             PrecheckKind.TargetNotLocal =>
-                "On Windows the sync folder must be on a local drive, because a folder link cannot point to a network drive.",
+                "The sync folder is on a network share, and Windows on this device is set not to follow links to a share.",
+            PrecheckKind.SymlinkNotAllowed =>
+                "The sync folder is on a network share. To link to it, Windows needs Developer Mode (Settings, System, For developers), or SaveTether run once from a terminal opened as administrator.",
             PrecheckKind.SourceNotLocal =>
                 $"{role}'s folder is on a network drive. On Windows SaveTether can only link a folder on a local drive.",
             PrecheckKind.TargetOutsideDataRoot or PrecheckKind.SourceInsideSyncRoot or PrecheckKind.PathsOverlap
@@ -386,6 +388,10 @@ public static class ActionTexts
         {
             actions.Add(RefusalAction.CheckAgain);
             actions.Add(RefusalAction.AssumeClosed);
+        }
+        else if (kinds.Contains(PrecheckKind.SymlinkNotAllowed))
+        {
+            actions.Add(RefusalAction.CheckAgain);
         }
 
         if (refusal.Failures.Any(f => f.Kind == PrecheckKind.RestoreDestinationUnusable && f.Message.Next.Any(n => n.Kind == NextStepKind.Revert)))

@@ -248,9 +248,17 @@ public static class Planner
             Fail(PrecheckKind.TargetUnusable, $"The shared folder '{s.Target}' exists but is not a plain folder.");
         }
 
-        if (!s.TargetOnLocalVolume)
+        // A link to a share is a symlink (design 5.16); an existing link is only verified, so it needs no privilege.
+        if (!s.TargetOnLocalVolume && s.SourceKind is not (EntryKind.Symlink or EntryKind.Junction))
         {
-            Fail(PrecheckKind.TargetNotLocal, $"The shared folder '{s.Target}' is on a network drive. A Windows junction can only point to a local drive.");
+            if (s.ShareLink == ShareLinkSupport.PolicyOff)
+            {
+                Fail(PrecheckKind.TargetNotLocal, $"The shared folder '{s.Target}' is on a network share. {SymlinkCapability.PolicyOffReason}");
+            }
+            else if (s.ShareLink == ShareLinkSupport.NeedsDevModeOrElevation)
+            {
+                Fail(PrecheckKind.SymlinkNotAllowed, $"The shared folder '{s.Target}' is on a network share. {SymlinkCapability.DeveloperModeFix}");
+            }
         }
 
         if (!s.SourceOnLocalVolume)

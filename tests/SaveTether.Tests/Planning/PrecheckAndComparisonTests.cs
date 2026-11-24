@@ -139,9 +139,27 @@ public class PrecheckTests
     }
 
     [Fact]
-    public void A_network_target_is_refused()
+    public void A_network_target_is_linked_when_a_symlink_can_be_made()
     {
-        Assert.Equal([PrecheckKind.TargetNotLocal], Failures(Snap.WithLocalSaves() with { TargetOnLocalVolume = false }));
+        Assert.NotNull(Planner.Plan(Snap.WithLocalSaves() with { TargetOnLocalVolume = false }, Copy).Plan);
+    }
+
+    [Fact]
+    public void A_network_target_is_refused_when_policy_will_not_follow_the_link()
+    {
+        Assert.Equal(
+            [PrecheckKind.TargetNotLocal],
+            Failures(Snap.WithLocalSaves() with { TargetOnLocalVolume = false, ShareLink = ShareLinkSupport.PolicyOff }));
+    }
+
+    [Fact]
+    public void A_network_target_without_developer_mode_or_elevation_names_both_fixes()
+    {
+        var refusal = Planner.Plan(
+            Snap.WithLocalSaves() with { TargetOnLocalVolume = false, ShareLink = ShareLinkSupport.NeedsDevModeOrElevation }, Copy).Refusal!;
+        Assert.Equal([PrecheckKind.SymlinkNotAllowed], refusal.Failures.Select(f => f.Kind));
+        Assert.Contains("Developer Mode", refusal.Message.Text, StringComparison.Ordinal);
+        Assert.Contains("administrator", refusal.Message.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -156,6 +174,7 @@ public class PrecheckTests
         var snapshot = Snap.WithLocalSaves() with
         {
             JournalOpen = true, SourceParentExists = false, RunningProcesses = ["x"], TargetOnLocalVolume = false,
+            ShareLink = ShareLinkSupport.PolicyOff,
         };
 
         var refusal = Planner.Plan(snapshot, Copy).Refusal!;

@@ -63,7 +63,12 @@ internal static unsafe partial class WindowsReparse
         var isRelative = isSymlink && (BitConverter.ToUInt32(buffer, 16) & 1) != 0;
 
         var target = Encoding.Unicode.GetString(buffer, pathBuffer + substituteOffset, substituteLength);
-        if (target.StartsWith(NtPrefix, StringComparison.Ordinal))
+        if (target.StartsWith(NtPrefix + @"UNC\", StringComparison.OrdinalIgnoreCase))
+        {
+            // \??\UNC\server\share is the NT form of \\server\share, which a link to a share stores.
+            target = @"\\" + target[(NtPrefix.Length + 4)..];
+        }
+        else if (target.StartsWith(NtPrefix, StringComparison.Ordinal))
         {
             target = target[NtPrefix.Length..];
         }

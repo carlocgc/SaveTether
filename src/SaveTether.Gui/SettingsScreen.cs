@@ -10,7 +10,7 @@ namespace SaveTether.Gui;
 
 /// <summary>
 /// The Settings page (desktop-app-spec.md, section 11), in place of the Apps page while open. Built so far:
-/// Start with the session, and About. The backup location and This device come later.
+/// Start with the session, Desktop notifications, and About. The backup location and This device come later.
 /// </summary>
 internal sealed class SettingsScreen : UserControl, IScreen
 {
@@ -30,33 +30,39 @@ internal sealed class SettingsScreen : UserControl, IScreen
             },
         };
 
-        page.Children.Add(Heading("Start with the session"));
-        if (session.Available)
+        // An on/off switch whose change is saved by set; on a problem it is logged, shown, and the switch put back.
+        ToggleSwitch Switch(string name, Func<bool> isOn, Func<bool, string?> set)
         {
-            var toggle = new ToggleSwitch { IsChecked = session.IsOn, OnContent = "On", OffContent = "Off" };
-            AutomationProperties.SetName(toggle, "Start with the session");
-            var applying = false;
+            var toggle = new ToggleSwitch { IsChecked = isOn(), OnContent = "On", OffContent = "Off" };
+            AutomationProperties.SetName(toggle, name);
+            var reverting = false;
             toggle.IsCheckedChanged += async (_, _) =>
             {
-                if (applying)
+                if (reverting)
                 {
                     return;
                 }
 
                 var on = toggle.IsChecked == true;
-                if (session.Set(on) is { } problem)
+                if (set(on) is { } problem)
                 {
                     App.Options.Log.Write(problem);
-                    applying = true;
-                    toggle.IsChecked = session.IsOn;
-                    applying = false;
+                    reverting = true;
+                    toggle.IsChecked = isOn();
+                    reverting = false;
                     await overlay.InformAsync("Nothing was changed", problem);
                     return;
                 }
 
-                App.Options.Log.Write($"start with the session: {(on ? "on" : "off")}");
+                App.Options.Log.Write($"{name.ToLowerInvariant()}: {(on ? "on" : "off")}");
             };
-            page.Children.Add(toggle);
+            return toggle;
+        }
+
+        page.Children.Add(Heading("Start with the session"));
+        if (session.Available)
+        {
+            page.Children.Add(Switch("Start with the session", () => session.IsOn, session.Set));
             page.Children.Add(Note(
                 "SaveTether starts in the tray when you log in, and checks your save folders in the background. " +
                 "While this is on, the entry is updated with SaveTether's location each time it starts."));
@@ -65,6 +71,12 @@ internal sealed class SettingsScreen : UserControl, IScreen
         {
             page.Children.Add(Note("This desktop has no place for programs that start with the session."));
         }
+
+        page.Children.Add(Heading("Desktop notifications"));
+        var notifications = new NotificationSetting(localFolder);
+        page.Children.Add(Switch("Desktop notifications", () => notifications.IsOn, notifications.Set));
+        page.Children.Add(Note(
+            "SaveTether tells you when a save folder needs attention. With this off, only the tray icon's colour shows it."));
 
         // Linux, in the installed copy only (section 11, "Installing"). On Windows, Settings > Apps uninstalls what the installer put there.
         if (InstallOffer.ForSystem(localFolder, AppContext.BaseDirectory, Program.Version) is { CanUninstall: true } installed)

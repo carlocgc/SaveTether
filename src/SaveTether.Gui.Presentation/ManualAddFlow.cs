@@ -79,7 +79,7 @@ public sealed class ManualAddFlow(LocalStore local)
             []);
     }
 
-    /// <summary>The form for a mapping that has no definition: this device's folder for it, new or again.</summary>
+    /// <summary>The form for one mapping: this device's folder for it, new or again, given by hand.</summary>
     public ManualAddStart StartJoin(string mappingId)
     {
         ArgumentNullException.ThrowIfNull(mappingId);
@@ -105,10 +105,12 @@ public sealed class ManualAddFlow(LocalStore local)
         }
 
         var slash = mapping.Target.IndexOf('/', StringComparison.Ordinal);
+        // The app's name as the Apps page shows it, for the dialogs after Add: a definition's own ("DuckStation"), else the ID's app part.
+        var name = AppNames.Resolve(workspace.Definitions, mappingId.Split('.', 2)[0]).Name;
         return new ManualAddStart(
             $"Folder for {mappingId}",
             sentences,
-            new ManualAddInput(own?.Source, mapping.Target[..slash], mapping.Target[(slash + 1)..], string.Join(", ", own?.ProcessNames ?? []), mapping.Depth),
+            new ManualAddInput(own?.Source, name, mapping.Target[(slash + 1)..], string.Join(", ", own?.ProcessNames ?? []), mapping.Depth),
             mappingId,
             mapping.Target,
             setUpOn);
