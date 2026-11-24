@@ -28,6 +28,9 @@ public sealed record ManualAddInput(string? SaveFolder, string? AppName, string?
 public sealed record ManualAddStart(string Title, IReadOnlyList<string> Sentences, ManualAddInput Input, string? JoinId, string? Target, IReadOnlyList<string> SetUpOn)
 {
     public bool IsJoin => JoinId is not null;
+
+    /// <summary>For a folder of an app with a definition (Add app's Custom folder): its ID, which the mapping takes; the app name is then not edited.</summary>
+    public string? AppId { get; init; }
 }
 
 /// <summary>The form checked against the shared folder: the mapping it makes, and anything in the way.</summary>
@@ -62,17 +65,16 @@ public sealed class ManualAddFlow(LocalStore local)
     private const int MaxRoleLength = 39;
 
     private string? _joinId;
+    private string? _appId;
 
     /// <summary>The form for a new folder.</summary>
     public ManualAddStart StartNew()
     {
         _joinId = null;
+        _appId = null;
         return new ManualAddStart(
             "Add a folder by hand",
-            [
-                "For an app SaveTether has no definition for. Give the folder to share on this device, whether it holds saves, "
-                + "mods, textures or anything else, and names for the app and the folder. Other devices then add the same folder by name.",
-            ],
+            ["For an app not in the list: any folder it keeps, saves, mods or anything else."],
             new ManualAddInput(null, null, null, null, 1),
             null,
             null,
@@ -92,6 +94,7 @@ public sealed class ManualAddFlow(LocalStore local)
             .Order(StringComparer.Ordinal)
             .ToList();
         _joinId = mappingId;
+        _appId = null;
 
         var sentences = new List<string>
         {
@@ -117,12 +120,32 @@ public sealed class ManualAddFlow(LocalStore local)
     }
 
     /// <summary>
+    /// The form for a folder of an app with a definition, from Add app's Custom folder: one the definition does not list, or
+    /// one kept elsewhere on this device. It is shared under the app's own ID, with the folder name the owner gives.
+    /// </summary>
+    public ManualAddStart StartForApp(string appId, string appName)
+    {
+        ArgumentNullException.ThrowIfNull(appId);
+        ArgumentNullException.ThrowIfNull(appName);
+        _joinId = null;
+        _appId = appId;
+        return new ManualAddStart(
+            $"Add another folder of {appName}",
+            [],
+            new ManualAddInput(null, appName, null, null, 1),
+            null,
+            null,
+            []) { AppId = appId };
+    }
+
+    /// <summary>
     /// The mapping ID and shared folder a new folder gets, from the names typed: "Dolphin" and "GC"
     /// give dolphin.gc, shared as dolphin/GC. Null where a name gives nothing usable.
     /// </summary>
-    public static (string? MappingId, string? Target) Derive(string? appName, string? folderName)
+    /// <param name="appId">The app's ID when it is fixed (a folder of an app with a definition); the app name is then not used.</param>
+    public static (string? MappingId, string? Target) Derive(string? appName, string? folderName, string? appId = null)
     {
-        var app = Slug(appName, MaxAppIdLength);
+        var app = appId ?? Slug(appName, MaxAppIdLength);
         var folder = folderName?.Trim();
         var role = Slug(folder, MaxRoleLength);
         return app is null || role is null || string.IsNullOrEmpty(folder) ? (null, null) : ($"{app}.{role}", $"{app}/{folder}");
@@ -147,8 +170,10 @@ public sealed class ManualAddFlow(LocalStore local)
     }
 
     /// <summary>"Shared as dolphin/GC (mapping dolphin.gc)."</summary>
-    public static string SharedAs(string? mappingId, string? target) =>
-        mappingId is null ? "Give both names to see where it is shared." : $"Shared as {target} (mapping {mappingId}).";
+    /// <param name="appFixed">The app's ID is fixed (Add app's Custom folder), so only the folder's name is asked for.</param>
+    public static string SharedAs(string? mappingId, string? target, bool appFixed = false) =>
+        mappingId is not null ? $"Shared as {target} (mapping {mappingId})."
+        : appFixed ? "Give the folder a name to see where it is shared." : "Give both names to see where it is shared.";
 
     /// <summary>Process names from the field: separated by commas, semicolons or new lines, each trimmed, empty ones dropped.</summary>
     public static IReadOnlyList<string> SplitProcessNames(string? text) =>
@@ -235,7 +260,7 @@ public sealed class ManualAddFlow(LocalStore local)
         }
         else
         {
-            if (Slug(input.AppName, MaxAppIdLength) is null)
+            if (_appId is null && Slug(input.AppName, MaxAppIdLength) is null)
             {
                 problems.Add((ManualField.AppName, "Give the app a name with at least one letter from a to z, or a digit."));
             }
@@ -249,7 +274,7 @@ public sealed class ManualAddFlow(LocalStore local)
                 problems.Add((ManualField.FolderName, "The name needs at least one letter from a to z, or a digit."));
             }
 
-            (id, target) = Derive(input.AppName, input.FolderName);
+            (id, target) = Derive(input.AppName, input.FolderName, _appId);
             if (id is not null && Identifiers.DescribeTargetProblem(id, target) is { } targetProblem)
             {
                 problems.Add((ManualField.FolderName, TargetWords(targetProblem)));

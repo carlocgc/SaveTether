@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using SaveTether.Core.Definitions;
 using SaveTether.Core.Detection;
 using SaveTether.Core.FileSystem;
@@ -67,7 +68,17 @@ public enum AddAppPage
 /// <param name="Planned">The plan's measurements, when the role is in the plan.</param>
 /// <param name="Notes">The definition's note for the role.</param>
 /// <param name="AlreadyAdded">This device already has a folder set for the role: it shows ticked and cannot be changed here (Remove on the Apps page undoes it).</param>
-public sealed record RoleChoice(string RoleId, RoleClass Class, bool Ticked, string? Unticked, AppRolePlan? Planned, string? Notes, bool AlreadyAdded = false);
+public sealed record RoleChoice(string RoleId, RoleClass Class, bool Ticked, string? Unticked, AppRolePlan? Planned, string? Notes, bool AlreadyAdded = false)
+{
+    /// <summary>
+    /// Where the role's folder is and its size ("G:\...\addons: 3 files, 1 KB"), when known: a ticked role's from the plan, an
+    /// unticked one's once measured. Null while it is still to be measured (<see cref="ToMeasure"/>) or cannot be worked out.
+    /// </summary>
+    public string? Folder { get; init; }
+
+    /// <summary>An unticked role's folder whose size is not read yet: the window reads it in the background (<see cref="AddAppFlow.MeasureFolder"/>).</summary>
+    public string? ToMeasure { get; init; }
+}
 
 /// <summary>Page 2 as the window shows it.</summary>
 /// <param name="Found">For a plan: the install used and what showed it is there.</param>
@@ -138,6 +149,9 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     private AppAddRequest? _request;
     private AddAppView? _lastPlan;
     private AddAppView? _chooseView;
+
+    // Folders not in the plan, measured once per app in the background: ticking a box makes the page again.
+    private readonly ConcurrentDictionary<string, string> _measured = new(StringComparer.Ordinal);
 
     /// <summary>Page 1: the catalog's apps, shared definitions over built-in ones, in name order.</summary>
     public IReadOnlyList<CatalogApp> Catalog()
@@ -289,6 +303,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         _request = new AppAddRequest(appId);
         _lastPlan = null;
         _chooseView = null;
+        _measured.Clear();
         var view = Plan();
         if (view.Page is not (AddAppPage.Plan or AddAppPage.ChooseInstall or AddAppPage.NeedsLocation or AddAppPage.Refused))
         {
@@ -318,7 +333,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             {
                 Page = AddAppPage.ChooseInstall,
                 Title = $"Choose an install of {view.AppName}.",
-                Sentences = ["Pick the one whose saves this device should share."],
+                Sentences = [],
                 Found = null,
                 Candidates = options.Select(i => view.Candidates.First(c => c.Id == i.Id)).ToList(),
                 Fields = [],
@@ -378,7 +393,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
             // A portable install: ask for its folder, with the one given or stored before filled in.
             _request = request;
             var stored = workspace.Shared.TryReadDevice(workspace.DeviceName)?.Apps?.GetValueOrDefault(request.AppId);
-            return new AddAppView(AddAppPage.NeedsLocation, request.AppId, definition.Name, $"Where is {definition.Name} installed?", [], null, [], [], [], [], null, null)
+            return new AddAppView(AddAppPage.NeedsLocation, request.AppId, definition.Name, definition.Name, [], null, [], [], [], [], null, null)
             {
                 Fields = [(LocationField.InstallFolder, request.InstallDir ?? stored?.InstallDir)],
                 InstallFolderHint = InstallFolderHintFor(definition, [install]),
@@ -540,13 +555,28 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     public static string SizeOf(AppRolePlan role)
     {
         ArgumentNullException.ThrowIfNull(role);
-        if (role.IsLink)
-        {
-            return "already a link";
-        }
-
-        return !role.Exists ? "not there yet" : $"{role.Files} {(role.Files == 1 ? "file" : "files")}, {ActionTexts.Size(role.Bytes)}";
+        return SizeOf(role.Exists, role.Bytes, role.Files);
     }
+
+    // A linked folder shows its size too, the shared copy's: "Added already." says it is linked (asked for by the owner).
+    private static string SizeOf(bool exists, long bytes, int files) =>
+        !exists ? "not there yet" : $"{files} {(files == 1 ? "file" : "files")}, {ActionTexts.Size(bytes)}";
+
+    /// <summary>What an unticked role's line says while its size is read.</summary>
+    public static string MeasuringText(string source) => $"{source}: measuring…";
+
+    /// <summary>An unticked role's line, size included, if it was read already this time the app was opened; else null.</summary>
+    public string? Measured(string source) => _measured.TryGetValue(source, out var line) ? line : null;
+
+    /// <summary>
+    /// Reads an unticked role's folder size, for its line ("path: 3 files, 1 KB"). Slow on a large folder: the window calls it
+    /// off the UI thread. Kept until the app is opened again.
+    /// </summary>
+    public string MeasureFolder(string source) => _measured.GetOrAdd(source, path =>
+    {
+        var (exists, _, bytes, files) = Workspace.Measure(path);
+        return $"{path}: {SizeOf(exists, bytes, files)}";
+    });
 
     public static string ClassName(RoleClass roleClass) => roleClass switch
     {
@@ -574,6 +604,22 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
     }
 
     /// <summary>
+    /// A role that is not in the plan: where its folder would be, with its size when already known; else the window reads it later,
+    /// in the background. A link is read too: its size is the shared copy's, which is what the owner wants to see.
+    /// </summary>
+    private RoleChoice WithFolder(RoleChoice choice, InstallDefinition install, RoleDefinition role, AppAddPlan plan)
+    {
+        var values = new DeviceValues(plan.Values.InstallDir, plan.Values.SdCard, plan.Values.WinePrefix);
+        var resolved = new PathResolver(environment).ResolveRole(install, role, values);
+        if (!resolved.IsResolved || resolved.Path is not { } source)
+        {
+            return choice;
+        }
+
+        return Measured(source) is { } known ? choice with { Folder = known } : choice with { ToMeasure = source };
+    }
+
+    /// <summary>
     /// Whether an added role's folder is somewhere else now than this device has it. The place is worked out for the role
     /// whether or not it is in the plan (a default-off role is not), so a moved optional folder can still be added again.
     /// When the place cannot be worked out the role stays locked: there is nothing to record.
@@ -591,9 +637,12 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         return now is not null && !string.Equals(PathRules.Normalize(now), PathRules.Normalize(had.Source), StringComparison.Ordinal);
     }
 
+    /// <summary>The location page's first line when no install was found.</summary>
+    public const string NoInstall = "No installations found on this device.";
+
     /// <summary>Page 2's unverified note, for an imported definition.</summary>
     public const string UnverifiedNote =
-        "Unverified: this definition was converted from the Ludusavi manifest and has not been tried by hand. Check the folders below before you add.";
+        "Unverified: converted from the Ludusavi manifest, not tried by hand. Check the folders before adding.";
 
     /// <summary>Page 2's cloud-saves note for the stores whose copies keep saves in the cloud, or null when none does.</summary>
     public static string? CloudNoteFor(AppDefinition? definition)
@@ -604,7 +653,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
         }
 
         var stores = string.Join(", ", definition.CloudSaves.Select(StoreName));
-        return $"The {stores} copy of this game also keeps its saves in the cloud. The cloud and SaveTether can overwrite each other's changes, so check that store's cloud sync before you share these folders. A copy from another store or launcher has no cloud saves.";
+        return $"The {stores} copy also syncs saves to its own cloud, which can overwrite SaveTether's changes. Check its cloud sync before sharing.";
     }
 
     private static string StoreName(string store) => store switch
@@ -644,7 +693,8 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                     var mappingId = r.MappingIdFor(request.AppId);
                     var already = addedHere.TryGetValue(mappingId, out var had)
                         && !HasMoved(install, r, plan, planned, had);
-                    return new RoleChoice(r.Id, r.Class, planned is not null || already, r.Default || already ? null : WhyOff(r.Class), planned, r.Notes, already);
+                    var choice = new RoleChoice(r.Id, r.Class, planned is not null || already, r.Default || already ? null : WhyOff(r.Class), planned, r.Notes, already);
+                    return planned is not null ? choice with { Folder = $"{planned.Source}: {SizeOf(planned)}" } : WithFolder(choice, install, r, plan);
                 })
                 .ToList();
             var found = outcome.Candidates.FirstOrDefault(c => c.Id == plan.Install)?.Found;
@@ -682,35 +732,35 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 {
                     Page = AddAppPage.ChooseInstall,
                     Title = $"More than one install of {name} was found.",
-                    Sentences = ["Choose the one whose saves this device should share."],
+                    Sentences = [],
                     Candidates = outcome.Candidates.Where(c => c.IsDetected).ToList(),
                 };
 
             case AppAddProblem.NotInstalled:
             {
-                // The core's reason for an install that needs a value names its token ("{install_dir} needs..."): the
-                // window says it in words, since the field for it is right below (found on the Deck). Details keep the core's.
-                var sentences = outcome.Candidates
-                    .Select(c => c.Problem == ResolveProblem.NeedsValue
-                        ? $"{c.Id}: can only be looked for once you give its location below."
-                        : $"{c.Id}: {c.Reason?.Text ?? "not found."}")
-                    .ToList();
+                // An install that needs a value is not named: the field for it is right below. Details keep the core's reasons.
+                // The title is the app's name; the first line, in amber, says nothing was found (asked for by the owner).
+                var sentences = new List<string> { NoInstall };
+                sentences.AddRange(outcome.Candidates
+                    .Where(c => c.Problem != ResolveProblem.NeedsValue)
+                    .Select(c => $"{c.Id}: {c.Reason?.Text ?? "not found."}"));
                 var installs = definition?.Installs.Where(i => i.Os.Contains(environment.Os)).ToList() ?? [];
                 var wanting = next.Contains(NextStepKind.GiveNewLocation)
                     ? installs
                     : installs.Where(i => outcome.Candidates.Any(c => c.Id == i.Id && c.Problem == ResolveProblem.NeedsValue)).ToList();
                 if (next.Contains(NextStepKind.GiveNewLocation))
                 {
-                    sentences.Add($"{name} was not where it was last time, so it may have moved. Give its new location.");
+                    sentences.Add($"{name} was not where it was last time. Give its new location.");
                 }
 
                 return empty with
                 {
                     Page = AddAppPage.NeedsLocation,
-                    Title = $"No install of {name} was found.",
+                    Title = name,
                     Sentences = sentences,
                     Fields = FieldsFor(wanting, definition, request),
                     InstallFolderHint = InstallFolderHintFor(definition, wanting),
+                    Details = null,
                 };
             }
 
@@ -723,15 +773,16 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
                 return empty with
                 {
                     Page = AddAppPage.NeedsLocation,
-                    Title = "A folder could not be worked out",
+                    Title = name,
                     Sentences = [outcome.Message?.Text ?? "A folder could not be worked out."],
                     Fields = helps ? FieldsFor(installs, definition, request) : [],
                     InstallFolderHint = helps ? InstallFolderHintFor(definition, installs) : null,
+                    Details = null,
                 };
             }
 
             case AppAddProblem.InvalidDefinition:
-                return empty with { Title = $"The definition for {name} has mistakes, so it cannot be used.", Sentences = [details ?? string.Empty] };
+                return empty with { Title = $"The definition for {name} has mistakes, so it cannot be used.", Sentences = [details ?? string.Empty], Details = null };
 
             case AppAddProblem.Conflict:
                 return empty with { Title = "Already set up differently", Sentences = [Conflict(outcome.Conflict, details)] };
@@ -745,7 +796,7 @@ public sealed class AddAppFlow(LocalStore local, ResolverEnvironment environment
 
             default:
                 // unknown-app, unknown-install, unknown-role: the window offers only what the definition lists (section 10).
-                return empty with { Title = "Something went wrong", Sentences = [details ?? "The app could not be planned."] };
+                return empty with { Title = "Something went wrong", Sentences = [details ?? "The app could not be planned."], Details = null };
         }
     }
 

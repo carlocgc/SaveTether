@@ -125,6 +125,31 @@ public class AddAppFlowTests
         Assert.Equal("not there yet", AddAppFlow.SizeOf(view.Roles[1].Planned!));
         Assert.True(view.CanAdd);
 
+        // A role that is not ticked shows where its folder is; its size is read later (in the background in the window), once
+        // until the app is opened again.
+        var shots = Path.Combine(data, "shots");
+        Assert.Equal($"{Path.Combine(data, "saves")}: 1 file, 5 bytes", view.Roles[0].Folder);
+        Assert.Null(view.Roles[2].Planned);
+        Assert.Null(view.Roles[2].Folder);
+        Assert.Equal(shots, view.Roles[2].ToMeasure);
+        Assert.Null(flow.Measured(shots));
+        Assert.Equal($"{shots}: not there yet", flow.MeasureFolder(shots));
+        CliDevice.Write(data, "shots/a.png", "123");
+        Assert.Equal($"{shots}: not there yet", flow.SetRole("states", ticked: false).Roles[2].Folder);
+        view = StartAt(flow, "testapp", "native");
+        Assert.Null(flow.Measured(shots));
+        Assert.Equal($"{shots}: 1 file, 3 bytes", flow.MeasureFolder(view.Roles[2].ToMeasure!));
+
+        // A folder that is already a link is read through the link: its size is the shared copy's.
+        Directory.Delete(shots, recursive: true);
+        CliDevice.Write(sandbox.Dir("elsewhere"), "b.png", "1234");
+        Sandbox.Link(shots, sandbox.Dir("elsewhere"));
+        var linked = StartAt(flow, "testapp", "native").Roles[2];
+        Assert.Equal(shots, linked.ToMeasure);
+        Assert.Equal($"{shots}: 1 file, 4 bytes", flow.MeasureFolder(shots));
+        new SaveTether.Core.FileSystem.SafeFs().RemoveLink(shots);
+        view = StartAt(flow, "testapp", "native");
+
         // Ticking a role plans it too; unticking every role turns Add off.
         view = flow.SetRole("shots", ticked: true);
         Assert.Equal([true, true, true], view.Roles.Select(r => r.Ticked));
@@ -218,9 +243,9 @@ public class AddAppFlowTests
         deck.Ok("app", "add", "testapp");
         deck.Ok("apply", "testapp.saves", "--copy");
 
-        // Every folder of the app is added now, so the page has nothing new to add; a linked folder says so.
+        // Every folder of the app is added now, so the page has nothing new to add; a linked folder shows the shared copy's size.
         var view = StartAt(flow, "testapp", "native");
-        Assert.Equal("already a link", AddAppFlow.SizeOf(view.Roles.Single(r => r.RoleId == "saves").Planned!));
+        Assert.Equal("1 file, 5 bytes", AddAppFlow.SizeOf(view.Roles.Single(r => r.RoleId == "saves").Planned!));
         Assert.False(view.CanAdd);
         Assert.Throws<InvalidOperationException>(() => flow.Add(view));
 
@@ -263,7 +288,7 @@ public class AddAppFlowTests
         // The portable one asks for its folder, with what to select under it, then plans.
         var folder = flow.ChooseInstall("portable");
         Assert.Equal(AddAppPage.NeedsLocation, folder.Page);
-        Assert.Equal("Where is Test App installed?", folder.Title);
+        Assert.Equal("Test App", folder.Title);
         Assert.Equal([(LocationField.InstallFolder, (string?)null)], folder.Fields);
         Assert.Equal("Select the folder containing \"saves\".", folder.InstallFolderHint);
         Assert.Equal(AddAppPage.ChooseInstall, flow.Back(folder.Page)!.Page);
@@ -405,11 +430,12 @@ public class AddAppFlowTests
         var (deck, flow) = NewDevice(sandbox);
 
         var view = flow.Start("testapp");
-        Assert.Equal("No install of Test App was found.", view.Title);
+        Assert.Equal("Test App", view.Title);
+        Assert.Equal(AddAppFlow.NoInstall, view.Sentences[0]);
         Assert.Contains(view.Sentences, s => s.StartsWith("native: No folder at", StringComparison.Ordinal));
 
         // An install that needs a value is said in words, not with the core's token (found on the Deck).
-        Assert.Contains("portable: can only be looked for once you give its location below.", view.Sentences);
+        Assert.DoesNotContain(view.Sentences, s => s.StartsWith("portable:", StringComparison.Ordinal));
         Assert.DoesNotContain(view.Sentences, s => s.Contains("{install_dir}", StringComparison.Ordinal));
         Assert.Equal([LocationField.InstallFolder], view.Fields.Select(f => f.Field));
 
@@ -437,7 +463,7 @@ public class AddAppFlowTests
 
         var view = flow.Start("testapp");
         Assert.Equal(AddAppPage.NeedsLocation, view.Page);
-        Assert.Contains("Test App was not where it was last time, so it may have moved. Give its new location.", view.Sentences);
+        Assert.Contains("Test App was not where it was last time. Give its new location.", view.Sentences);
         Assert.Equal([(LocationField.InstallFolder, first)], view.Fields);
 
         var second = Path.Combine(deck.Home, "second");
@@ -470,7 +496,8 @@ public class AddAppFlowTests
         AppAddCliTests.ShareDefinition(deck, "testapp", AppAddCliTests.TestApp.Replace("\"emulator\"", "\"toaster\"", StringComparison.Ordinal));
         view = flow.Start("testapp");
         Assert.Equal("The definition for testapp has mistakes, so it cannot be used.", view.Title);
-        Assert.Contains("testapp.jsonc(5):", view.Details, StringComparison.Ordinal);
+        Assert.Contains("testapp.jsonc(5):", Assert.Single(view.Sentences), StringComparison.Ordinal);
+        Assert.Null(view.Details);
 
         foreach (var kind in Enum.GetValues<ConflictKind>())
         {

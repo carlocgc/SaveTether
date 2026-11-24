@@ -214,7 +214,7 @@ internal sealed class SetupView : UserControl
     {
         var field = new TextBox { Text = value, Width = 520 };
         AutomationName(field, name);
-        var choose = new Button { Content = "Choose folder" };
+        var choose = new Button { Content = "Browse…" };
         choose.Click += async (_, _) =>
         {
             if (TopLevel.GetTopLevel(this)?.StorageProvider is not { CanPickFolder: true } storage)

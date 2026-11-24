@@ -432,7 +432,8 @@ public sealed partial class Workspace
     }
 
     /// <summary>Whether a folder is there, whether it is a link, and the size of what is in it, not following links inside.</summary>
-    private static (bool Exists, bool IsLink, long Bytes, int Files) Measure(string folder)
+    /// <remarks>Public for Add app, which shows a role that is not ticked the same way as a planned one.</remarks>
+    public static (bool Exists, bool IsLink, long Bytes, int Files) Measure(string folder)
     {
         var kind = SafeFs.Probe(folder);
         var isLink = kind is EntryKind.Symlink or EntryKind.Junction;
