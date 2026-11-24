@@ -80,7 +80,8 @@ internal sealed class MaintenanceScreen : UserControl, IScreen
             overview.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
         }
 
-        var openBackups = new Button { Content = "Open Backups", VerticalAlignment = VerticalAlignment.Center };
+        // Level with the last overview line, the backups count it belongs to, not floating in the middle of the block.
+        var openBackups = new Button { Content = "Open Backups", VerticalAlignment = VerticalAlignment.Bottom };
         openBackups.Click += (_, _) => _openBackups();
         page.Children.Add(Row(overview, openBackups));
 
