@@ -118,7 +118,14 @@ internal sealed class BackupsScreen : UserControl, IScreen
         var shown = BackupsPage.Filter(groups, _appFilter);
         _cleanUpMappings = _appFilter is null ? null : shown.Select(g => g.MappingId).ToList();
         _cleanUpScope = BackupCleanupTexts.Scope(_appFilter is null ? null : apps.First(a => a.AppId == _appFilter).Name);
-        Columns.Content = shown.Count > 0 ? Navigation.ColumnHeader(RowColumns, BackupsPage.Columns) : null;
+        // When, why and of what fit their content, capped so Size and the buttons keep their room; Size takes the rest.
+        var rows = shown.SelectMany(g => g.Rows).ToList();
+        _rowColumns = Navigation.Widths(
+            Navigation.FitWidth(BackupsPage.Columns[0], rows.Select(When), 220),
+            Navigation.FitWidth(BackupsPage.Columns[1], rows.Select(r => r.Reason), 220),
+            Navigation.FitWidth(BackupsPage.Columns[2], rows.Select(r => r.Of), 160, weight: FontWeight.SemiBold),
+            "*");
+        Columns.Content = shown.Count > 0 ? Navigation.ColumnHeader(_rowColumns, BackupsPage.Columns) : null;
         if (shown.Count == 0)
         {
             content.Add(new TextBlock { Text = "No backups yet. SaveTether takes one before it first changes a folder.", Opacity = 0.75 });
@@ -141,16 +148,18 @@ internal sealed class BackupsScreen : UserControl, IScreen
         _page.Content = Page(content);
     }
 
-    // When, why, of what and size; the rows add the three button columns.
-    private const string RowColumns = "150,150,120,*";
+    // When, why, of what and size; the rows add the three button columns. Set by Show, to fit what it lists.
+    private string _rowColumns = string.Empty;
+
+    private static string When(BackupRow row) => row.Kept ? $"{row.When} *" : row.When;
 
     private Grid Row(BackupGroup group, BackupRow row, Func<string, string> appName)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(RowColumns + ",Auto,Auto,Auto"), Margin = new Thickness(0, 3) };
-        Add(grid, 0, new TextBlock { Text = row.Kept ? $"{row.When} *" : row.When, VerticalAlignment = VerticalAlignment.Center });
-        Add(grid, 1, new TextBlock { Text = row.Reason, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.85 });
-        Add(grid, 2, new TextBlock { Text = row.Of, VerticalAlignment = VerticalAlignment.Center, FontWeight = row.OfSharedCopy ? FontWeight.SemiBold : FontWeight.Normal });
-        Add(grid, 3, new TextBlock { Text = row.Size, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.85 });
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(_rowColumns + ",Auto,Auto,Auto"), Margin = new Thickness(0, 3) };
+        Add(grid, 0, new TextBlock { Text = When(row), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+        Add(grid, 1, new TextBlock { Text = row.Reason, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.85, TextTrimming = TextTrimming.CharacterEllipsis });
+        Add(grid, 2, new TextBlock { Text = row.Of, VerticalAlignment = VerticalAlignment.Center, FontWeight = row.OfSharedCopy ? FontWeight.SemiBold : FontWeight.Normal, TextTrimming = TextTrimming.CharacterEllipsis });
+        Add(grid, 3, new TextBlock { Text = row.Size, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.85, TextTrimming = TextTrimming.CharacterEllipsis });
 
         var open = new Button { Content = "Open folder", Margin = new Thickness(12, 0, 0, 0) };
         AutomationProperties.SetName(open, $"Open folder: {group.Name} backup {row.When}");

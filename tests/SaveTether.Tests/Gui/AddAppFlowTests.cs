@@ -105,7 +105,7 @@ public class AddAppFlowTests
     }
 
     [Fact]
-    public void A_plan_shows_the_install_and_each_role_and_Add_writes_only_the_roles_ticked()
+    public async Task A_plan_shows_the_install_and_each_role_and_Add_writes_only_the_roles_ticked()
     {
         using var sandbox = new Sandbox();
         var (deck, flow) = NewDevice(sandbox);
@@ -132,13 +132,13 @@ public class AddAppFlowTests
         Assert.Null(view.Roles[2].Planned);
         Assert.Null(view.Roles[2].Folder);
         Assert.Equal(shots, view.Roles[2].ToMeasure);
-        Assert.Null(flow.Measured(shots));
-        Assert.Equal($"{shots}: not there yet", flow.MeasureFolder(shots));
+        Assert.Null(flow.Sizes.Known(shots));
+        Assert.Equal("not there yet", await flow.Sizes.MeasureAsync(shots));
         CliDevice.Write(data, "shots/a.png", "123");
         Assert.Equal($"{shots}: not there yet", flow.SetRole("states", ticked: false).Roles[2].Folder);
         view = StartAt(flow, "testapp", "native");
-        Assert.Null(flow.Measured(shots));
-        Assert.Equal($"{shots}: 1 file, 3 bytes", flow.MeasureFolder(view.Roles[2].ToMeasure!));
+        Assert.Null(flow.Sizes.Known(shots));
+        Assert.Equal("1 file, 3 bytes", await flow.Sizes.MeasureAsync(view.Roles[2].ToMeasure!));
 
         // A folder that is already a link is read through the link: its size is the shared copy's.
         Directory.Delete(shots, recursive: true);
@@ -146,7 +146,7 @@ public class AddAppFlowTests
         Sandbox.Link(shots, sandbox.Dir("elsewhere"));
         var linked = StartAt(flow, "testapp", "native").Roles[2];
         Assert.Equal(shots, linked.ToMeasure);
-        Assert.Equal($"{shots}: 1 file, 4 bytes", flow.MeasureFolder(shots));
+        Assert.Equal("1 file, 4 bytes", await flow.Sizes.MeasureAsync(shots));
         new SaveTether.Core.FileSystem.SafeFs().RemoveLink(shots);
         view = StartAt(flow, "testapp", "native");
 

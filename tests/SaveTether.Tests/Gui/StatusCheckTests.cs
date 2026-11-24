@@ -31,7 +31,7 @@ public class StatusCheckTests
         Assert.Equal(new StateWord("Linked", Shade.Green), StateWords.For(HealthState.Ok, null));
         Assert.Equal(new StateWord("Ready to link", Shade.Grey), StateWords.For(HealthState.NotApplied, HealthReason.NotLinkedYet));
         Assert.Equal(new StateWord("Not on this device", Shade.Grey), StateWords.For(HealthState.NotApplied, HealthReason.NoSaveFolder));
-        Assert.Equal(new StateWord("Folder setting is wrong", Shade.Amber), StateWords.For(HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute));
+        Assert.Equal(new StateWord("Device file error", Shade.Amber), StateWords.For(HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute));
         Assert.Equal(new StateWord("Not linked", Shade.Amber), StateWords.For(HealthState.Replaced, HealthReason.FolderHoldsFiles));
         Assert.Equal(new StateWord("Link missing", Shade.Amber), StateWords.For(HealthState.Replaced, HealthReason.FolderEmpty));
         Assert.Equal(new StateWord("Folder gone", Shade.Amber), StateWords.For(HealthState.Replaced, HealthReason.FolderMissing));

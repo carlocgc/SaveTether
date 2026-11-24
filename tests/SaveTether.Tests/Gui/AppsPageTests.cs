@@ -388,6 +388,38 @@ public class AppsPageTests
         sandbox.AssertCanaryIntact();
     }
 
+    [Fact]
+    public async Task A_rows_size_is_its_folders_read_through_the_link_or_the_shared_copys_when_it_has_none()
+    {
+        using var sandbox = new Sandbox();
+        var source = Path.Combine(sandbox.Work, "saves");
+        var target = Path.Combine(sandbox.Work, "shared");
+        var health = new MappingHealth(Id, HealthState.Ok, source, target, new Note("d"));
+        var mapping = new MappingState(Id, "App", "role", StateWords.For(HealthState.Ok, null), health);
+        Assert.Equal(source, AppsPage.SizeFolder(mapping));
+        Assert.Equal(target, AppsPage.SizeFolder(mapping with { Health = health with { Source = null } }));
+        Assert.Equal(target, AppsPage.SizeFolder(mapping with { Health = health with { Source = "relative" } }));
+
+        var sizes = new FolderSizes();
+        Assert.Null(sizes.Known(source));
+        Assert.Equal("not there yet", await sizes.MeasureAsync(source));
+        CliDevice.Write(sandbox.Work, "saves/a.sav", "123");
+        CliDevice.Write(sandbox.Work, "saves/b/c.sav", "45");
+        Assert.Equal("not there yet", sizes.Known(source));
+        Assert.Equal("2 files, 5 bytes", await sizes.MeasureAsync(source));
+        Assert.Equal("2 files, 5 bytes", sizes.Known(source));
+
+        // What a page shows: "measuring…" until the first read ends, then the size; after that the last size at once.
+        var shown = new List<string>();
+        var fresh = Path.Combine(sandbox.Work, "fresh");
+        await sizes.ShowAsync(fresh, shown.Add, e => Assert.Fail(e.Message));
+        Assert.Equal([FolderSizes.MeasuringText, "not there yet"], shown);
+        shown.Clear();
+        await sizes.ShowAsync(source, shown.Add, e => Assert.Fail(e.Message));
+        Assert.Equal(["2 files, 5 bytes", "2 files, 5 bytes"], shown);
+        sandbox.AssertCanaryIntact();
+    }
+
     private static MappingState Mapping(string id, string app, HealthState state, HealthReason? reason = null) =>
         new(id, app, id.Split('.')[1], StateWords.For(state, reason), new MappingHealth(id, state, "/s", "/t", new Note("d"), reason));
 
