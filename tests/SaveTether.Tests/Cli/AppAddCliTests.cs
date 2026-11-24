@@ -251,7 +251,7 @@ public class AppAddCliTests
 
         Assert.Equal("not-installed", json.GetProperty("app").GetProperty("problem").GetString());
         var candidates = json.GetProperty("app").GetProperty("candidates").EnumerateArray().ToList();
-        Assert.Equal(["linux-flatpak", "linux-native", "linux-portable"], candidates.Select(c => c.GetProperty("id").GetString()));
+        Assert.Equal(["linux-flatpak", "linux-native", "linux-portable", "emudeck"], candidates.Select(c => c.GetProperty("id").GetString()));
         var candidate = candidates.Single(c => c.GetProperty("id").GetString() == "linux-native");
         Assert.Contains("No folder at", candidate.GetProperty("reason").GetString(), StringComparison.Ordinal);
         Assert.Equal("needs-value", candidates.Single(c => c.GetProperty("id").GetString() == "linux-portable").GetProperty("problem").GetString());

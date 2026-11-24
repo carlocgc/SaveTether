@@ -509,7 +509,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         if (withSaves)
         {
             if (await overlay.AskTextAsync(
-                    $"Delete {mappingId} and its saves?", MaintenancePage.DeleteOrphanWithSavesText, "Delete", typed => MaintenancePage.TypedPhraseProblem(typed, MaintenancePage.DeleteEverythingPhrase), danger: true) is null)
+                    $"Delete {mappingId} and its data?", MaintenancePage.DeleteOrphanWithSavesText, "Delete", typed => MaintenancePage.TypedPhraseProblem(typed, MaintenancePage.DeleteEverythingPhrase), danger: true) is null)
             {
                 return;
             }

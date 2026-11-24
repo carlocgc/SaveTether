@@ -42,6 +42,26 @@ public class ClassificationTests
     }
 
     [Fact]
+    public void A_marker_that_seeded_an_empty_folder_has_arrived()
+    {
+        // A device that shared an empty folder (EmuDeck's unused RetroArch system folder) blocked every other device for good.
+        var empty = Snap.Marker("laptop");
+
+        Assert.Equal(Classification.FirstDevice, Planner.Classify(Snap.WithLocalSaves() with { ActiveMarkers = [empty] }));
+        Assert.Equal(Classification.LinkOnly, Planner.Classify(Snap.Base() with { ActiveMarkers = [empty] }));
+        // Beside a marker that lists files it still stops, naming the device whose files are missing.
+        var refusal = Planner.Plan(
+            Snap.WithLocalSaves() with { ActiveMarkers = [empty, Snap.Marker("desktop", "GAME1/save.bin")] }, new ApplyRequest()).Refusal;
+        Assert.NotNull(refusal);
+        Assert.Equal(RefusalKind.NotArrived, refusal.Kind);
+        Assert.Contains("Device 'desktop'", refusal.Message.Text, StringComparison.Ordinal);
+
+        var plan = Planner.Plan(Snap.WithLocalSaves() with { ActiveMarkers = [empty] }, new ApplyRequest(SetupChoice.Copy)).Plan;
+        Assert.NotNull(plan);
+        Assert.Contains(plan.Steps, step => step.Kind == StepKind.SupersedeMarkers);
+    }
+
+    [Fact]
     public void Row_4_no_local_saves_just_links_whatever_the_target_holds()
     {
         var shared = Snap.Tree(("GAME1/save.bin", 100, null));

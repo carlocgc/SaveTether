@@ -173,6 +173,9 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         return string.Join("\n", devices);
     }
 
+    /// <summary>The rows' column names, pinned above the list: the state dot's column and the buttons' have none.</summary>
+    public static readonly IReadOnlyList<string> Columns = [string.Empty, "Folder", "State", "Details"];
+
     public static string Label(RowAction action) => action switch
     {
         RowAction.Apply => "Apply",

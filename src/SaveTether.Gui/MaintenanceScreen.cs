@@ -74,27 +74,37 @@ internal sealed class MaintenanceScreen : UserControl, IScreen
         }
 
         page.Children.Add(Navigation.GroupHeader("Overview"));
+        var overview = new StackPanel { Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         foreach (var line in view.OverviewLines)
         {
-            page.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
+            overview.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
         }
 
-        var openBackups = new Button { Content = "Open Backups", Margin = new Thickness(0, 4, 0, 0) };
+        // Level with the last overview line, the backups count it belongs to, not floating in the middle of the block.
+        var openBackups = new Button { Content = "Open Backups", VerticalAlignment = VerticalAlignment.Bottom };
         openBackups.Click += (_, _) => _openBackups();
-        page.Children.Add(openBackups);
+        page.Children.Add(Row(overview, openBackups));
 
         page.Children.Add(Navigation.GroupHeader("This device"));
         var taken = view.Others.Select(d => d.Name).ToList();
         if (view.This is { } self)
         {
-            page.Children.Add(new TextBlock { Text = $"Name: {self.Name}" });
-            page.Children.Add(new SelectableTextBlock { Text = $"Install ID: {self.InstallId}", Opacity = 0.7, FontSize = 13 });
-            var rename = new Button { Content = "Rename", IsEnabled = !blocked };
+            var text = new StackPanel
+            {
+                Spacing = 4,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children =
+                {
+                    new TextBlock { Text = $"Name: {self.Name}" },
+                    new SelectableTextBlock { Text = $"Install ID: {self.InstallId}", Opacity = 0.7, FontSize = 13 },
+                },
+            };
+            var rename = new Button { Content = "Rename", IsEnabled = !blocked, VerticalAlignment = VerticalAlignment.Center };
             rename.Click += (_, _) => _ = Do(flow => flow.RenameDeviceAsync(self.Name, taken));
-            var remove = new Button { Content = "Remove this device", IsEnabled = !blocked };
+            var remove = new Button { Content = "Remove this device", IsEnabled = !blocked, VerticalAlignment = VerticalAlignment.Center };
             Danger.Style(remove);
             remove.Click += (_, _) => _openRemove();
-            page.Children.Add(Buttons(rename, remove));
+            page.Children.Add(Row(text, rename, remove));
         }
         else
         {
@@ -140,9 +150,9 @@ internal sealed class MaintenanceScreen : UserControl, IScreen
             var delete = new Button { Content = "Delete mapping", IsEnabled = orphan.Disabled is null, VerticalAlignment = VerticalAlignment.Center };
             AutomationProperties.SetName(delete, $"Delete mapping {orphan.MappingId}");
             delete.Click += (_, _) => _ = Do(flow => flow.DeleteOrphanAsync(orphan.MappingId, withSaves: false));
-            var deleteSaves = new Button { Content = "Delete mapping and saves", IsEnabled = orphan.Disabled is null, VerticalAlignment = VerticalAlignment.Center };
+            var deleteSaves = new Button { Content = "Delete mapping and data", IsEnabled = orphan.Disabled is null, VerticalAlignment = VerticalAlignment.Center };
             Danger.Style(deleteSaves);
-            AutomationProperties.SetName(deleteSaves, $"Delete mapping and saves {orphan.MappingId}");
+            AutomationProperties.SetName(deleteSaves, $"Delete mapping and data {orphan.MappingId}");
             deleteSaves.Click += (_, _) => _ = Do(flow => flow.DeleteOrphanAsync(orphan.MappingId, withSaves: true));
             page.Children.Add(Row(new TextBlock { Text = orphan.MappingId, VerticalAlignment = VerticalAlignment.Center }, delete, deleteSaves));
         }
@@ -156,23 +166,12 @@ internal sealed class MaintenanceScreen : UserControl, IScreen
         await LoadAsync();
     }
 
-    private static StackPanel Buttons(params Button[] buttons)
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
-        foreach (var button in buttons)
-        {
-            row.Children.Add(button);
-        }
-
-        return row;
-    }
-
     private static Grid Row(Control text, params Button[] buttons)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 3) };
         grid.Children.Add(text);
-        var actions = Buttons(buttons);
-        actions.Margin = default;
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        actions.Children.AddRange(buttons);
         Grid.SetColumn(actions, 1);
         grid.Children.Add(actions);
         return grid;

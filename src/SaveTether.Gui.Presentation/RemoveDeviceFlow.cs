@@ -80,7 +80,7 @@ public static class RemoveDeviceFlow
     {
         OrphanChoice.Keep => "Keep",
         OrphanChoice.DeleteMapping => "Delete mapping",
-        OrphanChoice.DeleteWithSaves => "Delete mapping and saves",
+        OrphanChoice.DeleteWithSaves => "Delete mapping and data",
         _ => throw new ArgumentOutOfRangeException(nameof(choice), choice, "A choice with no text."),
     };
 

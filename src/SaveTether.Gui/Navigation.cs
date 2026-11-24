@@ -14,6 +14,9 @@ internal interface IScreen
 {
     /// <summary>The page's buttons above the scrolling area: the way back. A page may change its content.</summary>
     ContentControl Bar { get; }
+
+    /// <summary>The list's column names, pinned at the top of the scrolling area; null for a page without columns.</summary>
+    ContentControl? Columns => null;
 }
 
 internal static class Navigation
@@ -32,6 +35,30 @@ internal static class Navigation
         BorderThickness = new Thickness(0, 0, 0, 2),
         Child = new TextBlock { Text = text, FontSize = 17, FontWeight = FontWeight.SemiBold },
     };
+
+    /// <summary>
+    /// A list's column names, for <see cref="IScreen.Columns"/>: a grid with the rows' column widths, so each name sits over
+    /// its column. An empty label leaves its column unnamed.
+    /// </summary>
+    public static Border ColumnHeader(string columns, IReadOnlyList<string> labels)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(columns) };
+        for (var i = 0; i < labels.Count; i++)
+        {
+            var label = new TextBlock { Text = labels[i], FontSize = 13, FontWeight = FontWeight.SemiBold, Opacity = 0.7, TextTrimming = TextTrimming.CharacterEllipsis };
+            Grid.SetColumn(label, i);
+            grid.Children.Add(label);
+        }
+
+        return new Border
+        {
+            Child = grid,
+            Margin = new Thickness(0, 0, 0, 4),
+            Padding = new Thickness(0, 2, 0, 4),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(90, 128, 128, 128)),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+        };
+    }
 
     /// <summary>The way back from a page, as a row for a screen's <see cref="IScreen.Bar"/>.</summary>
     public static Control BackRow(string label, Action back)
