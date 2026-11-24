@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -36,6 +37,28 @@ internal static class Navigation
         Child = new TextBlock { Text = text, FontSize = 17, FontWeight = FontWeight.SemiBold },
     };
 
+    /// <summary>The window's font size (<see cref="MainWindow"/>), which the rows' text inherits.</summary>
+    public const double BodySize = 15;
+
+    /// <summary>
+    /// A list column's width: its widest text or its name in <see cref="ColumnHeader"/>, whichever is wider, plus a 24 px gap, so
+    /// the column fits its content in whatever font the platform has. At most <paramref name="max"/>, beyond which the text is
+    /// trimmed: the last column and the buttons need the rest of the row.
+    /// </summary>
+    public static double FitWidth(string label, IEnumerable<string> texts, double max, double fontSize = BodySize, FontWeight weight = FontWeight.Normal)
+    {
+        var widest = texts.Select(t => TextWidth(t, fontSize, weight)).Append(TextWidth(label, HeaderSize, FontWeight.SemiBold)).Max();
+        return Math.Min(max, Math.Ceiling(widest) + 24);
+    }
+
+    /// <summary>Column widths as a grid's column definitions take them ("120,150,*").</summary>
+    public static string Widths(params object[] widths) => string.Join(",", widths.Select(w => Convert.ToString(w, CultureInfo.InvariantCulture)));
+
+    private const double HeaderSize = 13;
+
+    private static double TextWidth(string text, double fontSize, FontWeight weight) =>
+        new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface(FontFamily.Default, FontStyle.Normal, weight), fontSize, null).Width;
+
     /// <summary>
     /// A list's column names, for <see cref="IScreen.Columns"/>: a grid with the rows' column widths, so each name sits over
     /// its column. An empty label leaves its column unnamed.
@@ -45,7 +68,7 @@ internal static class Navigation
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(columns) };
         for (var i = 0; i < labels.Count; i++)
         {
-            var label = new TextBlock { Text = labels[i], FontSize = 13, FontWeight = FontWeight.SemiBold, Opacity = 0.7, TextTrimming = TextTrimming.CharacterEllipsis };
+            var label = new TextBlock { Text = labels[i], FontSize = HeaderSize, FontWeight = FontWeight.SemiBold, Opacity = 0.7, TextTrimming = TextTrimming.CharacterEllipsis };
             Grid.SetColumn(label, i);
             grid.Children.Add(label);
         }

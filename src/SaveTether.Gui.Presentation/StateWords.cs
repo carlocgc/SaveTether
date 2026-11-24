@@ -26,7 +26,7 @@ public static class StateWords
         (HealthState.NotApplied, HealthReason.NoSaveFolder) => new("Not on this device", Shade.Grey),
 
         // Unlike the core's Not applied, a folder setting that is wrong turns the icon amber (decision 4).
-        (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => new("Folder setting is wrong", Shade.Amber),
+        (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => new("Device file error", Shade.Amber),
         (HealthState.NotApplied, _) => new("Ready to link", Shade.Grey),
 
         (HealthState.Replaced, HealthReason.FolderEmpty) => new("Link missing", Shade.Amber),
