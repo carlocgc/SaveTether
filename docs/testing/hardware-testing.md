@@ -312,10 +312,25 @@ Each machine with a throwaway local folder, sync folder and save folder; every s
 - **Deck:** mount the folder that holds the sync folder with `fuse-overlayfs` as the user (no root needed), started with `systemd-run --user`: a FUSE process started from an SSH shell is stopped when the session ends, which leaves a dead mount ("Transport endpoint is not connected"). `fusermount3 -u` leaves the empty mount point an unplugged drive leaves. `udisksctl loop-setup` needs a password from an SSH session, so it cannot be used. The tray item's `ToolTip` is empty over D-Bus: compare `IconPixmap` (an `md5sum` of the reply is enough) to see it change.
 - **A mount that stopped answering:** `pkill -9` the `fuse-overlayfs` process instead of unmounting. `ls` on the mount point then says "Transport endpoint is not connected". `status` exits 0 and says the sync root cannot be read, with that reason; the app shows banner B3 with it; setup's step 1 on that folder says it cannot be read. `fusermount3 -u` clears the dead mount afterwards.
 
-### Sync folder on a network share (Windows, CLI)
+### Sync folder on a network share (Windows)
 
-Phase 3.7. T6 writes the full flow with a Samba share on Mint; until then:
+Phase 3.7; what users are told is in [sharing.md](../sharing.md#a-network-share).
 
+**The share.** The Mint box serves a Samba share `sttest` (`path = ~/sttest/share`, `read only = No`, `valid users` the Mint user, `create mask = 0644`), already set up. To make it again on a box that has none (ask the owner first: it changes the machine): `sudo apt install samba`, add that section to `/etc/samba/smb.conf`, `sudo smbpasswd -a <user>`, `sudo systemctl restart smbd`, then check it with `testparm -s`. Windows keeps the share's credentials after the first `net use \\<mint>\sttest /user:<user>` or Explorer prompt. Use only folders under the share's `sttest-*` scratch names, and remove them after.
+
+**The flow, on the PC, in PowerShell** (a scratch `SAVETETHER_HOME` and save folder under `%TEMP%`; `$share = '\\<mint>\sttest\sttest-<date>'`):
+
+1. Reachability: `Test-Path $share` is true. `init --sync-root \\<mint>\nosuch\x` refuses with "does not answer" (`not-found`) within about 5 seconds.
+2. Normal shell, Developer Mode off: `init --sync-root $share\sync --create-root` exits 1, naming Developer Mode and the administrator terminal; no local folder, no share folder and no `.link-probe-*` in `%TEMP%`. `--json`: `problem` `invalid`.
+3. Developer Mode on (the owner switches it; or an elevated shell): make `$share\sync` first (`--create-root` makes only `savetether/` inside an existing sync root, and refuses with `not-found` otherwise), then the same `init` succeeds and prints the "Not recommended" note (`init.notes` in `--json`). `map add` a scratch save folder holding a file, `apply --copy`: `Get-Item` on the save folder shows `LinkType SymbolicLink` and the UNC target; the file is in `~/sttest/share/...` on Mint; a file written through the link appears there too. `status` is OK.
+4. A mapped drive: `net use Z: \\<mint>\sttest`, `init` on a fresh scratch home with `Z:\sttest-<date>\sync2`: the stored sync root (in `bootstrap.json`) is the `\\<mint>\sttest\...` path. `net use Z: /delete` after.
+5. The share offline (`sudo systemctl stop smbd` on Mint; it asks for the owner's password): `status` reports the mapping `Broken`, "the sync root is not available", and nothing on the PC changes. Start `smbd` again: `status` is OK with no command run. Without sudo, renaming `$share` on Mint (`mv`, and back) gives the same `Broken` state, but not a server that stops answering.
+6. `revert` from a normal shell (with Developer Mode off, if the owner switches it back): a real folder with the same hashes (removing a link needs no privilege).
+7. The app (the owner's run, or UI Automation on a scratch home): setup step 1 with the share, with `Z:`, with a share that does not answer, and with Developer Mode off then on, using **Check again** between. The texts are in the spec's step 1 table.
+
+Clean up: the scratch homes, the save folder, `$share` on Mint, and `Z:`.
+
+**Without the Mint box**
 - A share needs no second machine: this PC's admin share `\\localhost\C$\<scratch path>` is a real UNC path to a local scratch folder, and a normal shell can read it. The tests use it too, and link through it only where a symlink can be made (CI runners are elevated); elsewhere they check the refusal.
 - Whether this shell can make a symlink: elevation from `([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrator')`, Developer Mode from `AllowDevelopmentWithoutDevLicense` (1) under `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock`.
 - Normal shell, Developer Mode off: `init --sync-root \\localhost\C$\...\sync --create-root` exits 1 naming Developer Mode and the administrator terminal; no local folder is created and no `.link-probe-*` is left in `%TEMP%`.

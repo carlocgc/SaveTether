@@ -15,7 +15,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 | Term | Meaning |
 |---|---|
-| **Sync root** | A folder kept the same on every device: by a sync tool such as Syncthing, a cloud storage folder, or a network share on Linux ([ways to share the folder](sharing.md)). SaveTether uses one folder inside it, `savetether/`, and touches nothing else there. |
+| **Sync root** | A folder kept the same on every device: by a sync tool such as Syncthing, a cloud storage folder, or a network share ([ways to share the folder](sharing.md)). SaveTether uses one folder inside it, `savetether/`, and touches nothing else there. |
 | **Device** | One machine, with a name such as `deck` or `desktop`. Each device records its own save folder paths; no device reads another's paths. |
 | **Mapping** | One save folder that is shared, named `app.role`, for example `ppsspp.savedata`. Its **target** is where the shared copy lives in the sync root (`ppsspp/SAVEDATA` means `<sync root>/savetether/ppsspp/SAVEDATA`). Its **source** is the app's save folder on this device. |
 | **Apply** | Move the save folder's contents into the shared copy (or start from the shared copy) and put a link where the folder was. The app keeps reading and writing the same path. |
