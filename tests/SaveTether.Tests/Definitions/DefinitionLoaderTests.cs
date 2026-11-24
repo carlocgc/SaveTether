@@ -417,15 +417,16 @@ public partial class DefinitionLoaderTests
     }
 
     /// <summary>
-    /// The shipped Cemu definition names the portable, Documents, Flatpak and native installs; the Documents and
+    /// The shipped Cemu definition names the portable, Documents, Flatpak, native and EmuDeck installs; the Documents and
     /// Flatpak ones come from the Ludusavi manifest.
     /// </summary>
     [Fact]
-    public void The_shipped_cemu_definition_has_its_five_installs()
+    public void The_shipped_cemu_definition_has_its_six_installs()
     {
         var definition = DefinitionLoader.LoadFile(Path.Combine(FindRepositoryRoot(), "definitions", "cemu.jsonc")).Definition!;
 
-        Assert.Equal(["win-portable", "win-documents", "linux-flatpak", "linux-native", "linux-portable"], definition.Installs.Select(i => i.Id));
+        Assert.Equal(["win-portable", "win-documents", "linux-flatpak", "linux-native", "linux-portable", "emudeck"], definition.Installs.Select(i => i.Id));
+        Assert.Equal("{emudeck}/roms/wiiu/mlc01", definition.Installs.Single(i => i.Id == "emudeck").Base.Path);
         Assert.Equal("{install_dir}/portable/mlc01", definition.Installs.Single(i => i.Id == "linux-portable").Base.Path);
         Assert.Equal("{documents}/mlc01", definition.Installs.Single(i => i.Id == "win-documents").Base.Path);
         Assert.Equal("{flatpak:info.cemu.Cemu}/data/Cemu/mlc01", definition.Installs.Single(i => i.Id == "linux-flatpak").Base.Path);
