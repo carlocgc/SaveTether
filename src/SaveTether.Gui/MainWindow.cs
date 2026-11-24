@@ -391,8 +391,10 @@ internal sealed class MainWindow : Window
         {
             ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,2*,0,3*" : "Auto,150,170,*")
             {
-                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowAction" },
-                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowMore" },
+                // The not-here list sizes its own columns: its Delete and More column is wider, and sharing it moved Apply in the
+                // rows above whenever the list was opened.
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = withApp ? "notHereAction" : "rowAction" },
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = withApp ? "notHereMore" : "rowMore" },
             },
             Margin = new Thickness(0, 4),
         };

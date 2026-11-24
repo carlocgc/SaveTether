@@ -150,9 +150,9 @@ internal sealed class MaintenanceScreen : UserControl, IScreen
             var delete = new Button { Content = "Delete mapping", IsEnabled = orphan.Disabled is null, VerticalAlignment = VerticalAlignment.Center };
             AutomationProperties.SetName(delete, $"Delete mapping {orphan.MappingId}");
             delete.Click += (_, _) => _ = Do(flow => flow.DeleteOrphanAsync(orphan.MappingId, withSaves: false));
-            var deleteSaves = new Button { Content = "Delete mapping and saves", IsEnabled = orphan.Disabled is null, VerticalAlignment = VerticalAlignment.Center };
+            var deleteSaves = new Button { Content = "Delete mapping and data", IsEnabled = orphan.Disabled is null, VerticalAlignment = VerticalAlignment.Center };
             Danger.Style(deleteSaves);
-            AutomationProperties.SetName(deleteSaves, $"Delete mapping and saves {orphan.MappingId}");
+            AutomationProperties.SetName(deleteSaves, $"Delete mapping and data {orphan.MappingId}");
             deleteSaves.Click += (_, _) => _ = Do(flow => flow.DeleteOrphanAsync(orphan.MappingId, withSaves: true));
             page.Children.Add(Row(new TextBlock { Text = orphan.MappingId, VerticalAlignment = VerticalAlignment.Center }, delete, deleteSaves));
         }

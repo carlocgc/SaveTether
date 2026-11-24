@@ -130,7 +130,7 @@ public static class MaintenancePage
         "If that device is still in use, it asks what to do the next time it checks.";
 
     public const string DeleteOrphanMappingText = "The mapping is deleted. Its save folder in the sync folder stays.";
-    public const string DeleteOrphanWithSavesText = "The mapping and its save folder in the sync folder are deleted, after a backup.";
+    public const string DeleteOrphanWithSavesText = "The mapping and its folder in the sync folder are deleted, after a backup.";
 }
 
 /// <summary>Backup Clean up (D9): the three modes and their sentences.</summary>
