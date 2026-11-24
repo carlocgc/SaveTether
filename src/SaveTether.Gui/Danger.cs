@@ -16,6 +16,12 @@ internal static class Danger
         button.Background = new SolidColorBrush(Red);
         button.Foreground = Brushes.White;
         button.FontWeight = FontWeight.SemiBold;
+        // Fluent's hover and pressed states take these resources, not Background: without them the button turned grey under
+        // the pointer. Disabled keeps the theme's grey, so a disabled button still looks disabled.
+        button.Resources["ButtonBackgroundPointerOver"] = new SolidColorBrush(Color.FromRgb(0xD6, 0x4A, 0x3B));
+        button.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(Color.FromRgb(0xA5, 0x30, 0x24));
+        button.Resources["ButtonForegroundPointerOver"] = Brushes.White;
+        button.Resources["ButtonForegroundPressed"] = Brushes.White;
     }
 
     /// <summary>

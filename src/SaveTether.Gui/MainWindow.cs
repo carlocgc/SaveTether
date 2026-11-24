@@ -391,8 +391,10 @@ internal sealed class MainWindow : Window
         {
             ColumnDefinitions = new ColumnDefinitions(withApp ? "Auto,2*,0,3*" : "Auto,150,170,*")
             {
-                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowAction" },
-                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "rowMore" },
+                // The not-here list sizes its own columns: its Delete and More column is wider, and sharing it moved Apply in the
+                // rows above whenever the list was opened.
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = withApp ? "notHereAction" : "rowAction" },
+                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = withApp ? "notHereMore" : "rowMore" },
             },
             Margin = new Thickness(0, 4),
         };
@@ -426,7 +428,8 @@ internal sealed class MainWindow : Window
         var role = $"{mapping.AppName} {mapping.Role}";
 
         // In the not-here list Add takes More's column, so Delete and More share the column to its left.
-        var beside = withApp ? new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center } : null;
+        // Right-aligned in the shared column, so More stays next to Add on rows without Delete.
+        var beside = withApp ? new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right } : null;
         void AddBeside(int column, Control control)
         {
             if (beside is null)
