@@ -14,15 +14,15 @@ Owner decisions (2026-11-25):
 - **One switch per device**: the plugin honours `notifications.txt` and shows a toggle that writes it, through the CLI.
 - **Lock guard as on the desktop**: `status --json` gains `operation_running`; the plugin doesn't toast while it is true.
 - **A "Mute notifications" toggle in the QAM**, which is that same switch shown inverted (muted = `notifications.txt` says `off`). Shown in the mockup.
-- **Respect Steam's Do Not Disturb.** Steam keeps it as `bDoNotDisturbMode` in the friends settings (typed in `@decky/ui` `globals/steam-client/FriendSettings.d.ts`). Nothing in `@decky/api`'s `Toaster` mentions DND, so whether Decky's toaster already respects it is **unknown**. T6b finds out.
+- **Respect Steam's "Show Notification Toasts" setting** (Settings → Notifications: Anytime / When I'm not in-game / Never). Decided after T6b (2026-11-25): Steam already applies it to Decky's toasts, so the plugin adds no gate for it. The friends-list "Do Not Disturb" (`bDoNotDisturbMode`, "Disables all chat notifications") is not followed: Steam uses it for chat only.
 
-Muted and DND behave like the desktop's switch: the check still runs and the problem is recorded as notified. It is not queued for later. The panel still shows it.
+Muted, and toasts Steam hides, behave like the desktop's switch: the check still runs and the problem is recorded as notified. It is not queued for later. The panel still shows it.
 
 ## Design (smallest complete)
 
 - **Where the logic lives**: a TS port of `HealthMonitor`'s accept/dedupe rules in the plugin (`src/monitor.ts`), as T5 of phase 4 ported `StateWords` to `states.ts`. Pure, no React, tested with `node --test`. (Moving the dedupe into the core would need persisted state for a stateless CLI; not worth it.)
 - **Where it runs**: the frontend, at module scope of `definePlugin` (it loads with Steam, not with the panel). One monitor instance; a `setInterval` of 5 min plus one check at load; cleared in `onDismount`. The panel's open-check and Check now feed the **same** monitor (desktop: window-shown checks count too). A check already running is not started twice.
-- **Toast**: `toaster.toast({ title: "SaveTether", body })` from `@decky/api`. Click does nothing (desktop parity, decision 2). Body text built exactly as `HealthMonitor.Problems`: `"{App} {role}: {word lowercased}."` joined with spaces; device-wide conditions use the headline + ".". Each toast also does `console.log("[SaveTether] toast: " + body)` so the harness can see it.
+- **Toast**: `toaster.toast({ title: "SaveTether", body })` from `@decky/api`. Click does nothing (desktop parity, decision 2). Body text is the panel's headline + ".", a count: "1 app needs attention.", "3 apps need attention.", or a device-wide condition's headline ("Sync folder not available."). Owner's decision (2026-11-25): a count, not the desktop's list of links, since the fix happens in the panel or the desktop app, which show the whole picture. When to toast still follows `HealthMonitor`. Each toast also does `console.log("[SaveTether] toast: " + body)` so the harness can see it.
 - **Polling cost**: background checks call `status --json` **without `--sizes`** (sizes walk every shared folder on the SD card). One AOT process every 5 min.
 - **Old CLI tolerance**: `operation_running` absent → false. `notifications` exit 64 (unknown command) → treat as on, hide the toggle.
 
@@ -54,7 +54,7 @@ Model key: **Opus** = judgement or a critical behaviour; **Sonnet** = fully spec
 - New `docs/plans/phase-4.1-decky-notifications.md`: this plan, self-contained, in the phase-4 file's style.
 - `phase-4-decky-plugin.md`: out-of-scope line "Background polling and toasts" → points to 4.1.
 - `desktop-app-spec.md` section 11: the switch also governs the Decky plugin's toasts; `CLAUDE.md` index row; `implementation-plan.md` progress entry.
-- `docs/design/decky-mockup.html` (Sonnet): add a "Mute notifications" `ToggleField` row under Check now in both states, and a third small panel showing an example Steam toast ("SaveTether" / "Stardew Valley saves: not linked."). Update the ASCII mockup in the phase file to match. Acceptance: the page opens standalone in a browser, both states plus the toast visible, colours unchanged from the existing page.
+- `docs/design/decky-mockup.html` (Sonnet): add a "Mute notifications" `ToggleField` row under Check now in both states, and a third small panel showing an example Steam toast ("SaveTether" / "1 app needs attention."). Update the ASCII mockup in the phase file to match. Acceptance: the page opens standalone in a browser, both states plus the toast visible, colours unchanged from the existing page.
 - Version bump + tag `v0.7.0-beta2` on `development` after merge (owner says go; `docs/releasing.md`).
 
 ### In SaveTether-Decky (branch `feature/toasts` from `development`)
@@ -65,33 +65,30 @@ Model key: **Opus** = judgement or a critical behaviour; **Sonnet** = fully spec
 
 **T6 — `src/monitor.ts` (Opus)** — the critical behaviour
 - `createMonitor()` returning `{ accept(result): string | null }` where `result` is the backend's status result plus app names. Port of `HealthMonitor.Accept/Failed/Problems`:
-  - problems = amber mappings keyed `${mapping_id}:${word}`, or one `condition:${headline}` for device-wide conditions; a toast names only keys not in the last accepted set; the set is replaced each accepted check.
+  - problems = amber mappings keyed `${mapping_id}:${word}`, or one `condition:${headline}` for device-wide conditions; a toast is due when a key is not in the last accepted set; the set is replaced each accepted check.
   - `operation_running === true` → return null, state untouched.
   - `ok: false` → failure count; at 3 in a row accept a "Health check failed" condition; before that keep state, return null. A success resets the count.
   - First accepted check that is amber → toast (the "at start" rule falls out of the empty initial set).
 - Reuse `cardsFor`/`overall`/`wordFor` from `states.ts` for words and headlines; no duplicate tables.
-- Tests (`node --test`, fixtures from `json-shapes.txt`): green → null; first amber → text matches the desktop format exactly (one fixture copied from `HealthMonitorTests`); same amber again → null; a second problem appears → only the new one; fixed then broken again → toast again; lock held → null and the next free check still toasts; two failures → null, third → "Health check failed."; failure then success resets; unknown state → amber, toasts with its word, no crash.
+- Tests (`node --test`, fixtures from `json-shapes.txt`): green → null; first amber → the headline ("1 app needs attention."; the rules of one `HealthMonitorTests` case); same amber again → null; a second problem appears → toast with the new count, also when it is another link of an app already counted; fixed then broken again → toast again; lock held → null and the next free check still toasts; two failures → null, third → "Health check failed."; failure then success resets; unknown state → amber, toasted, no crash.
 
-**T6b — Do Not Disturb spike (Opus, short, before T7)**
-- Read decky-loader's frontend toaster source (GitHub `SteamDeckHomebrew/decky-loader`, `frontend/src/toaster.tsx` or similar). Answer two questions: does it go through Steam's own notification path, which honours DND? And how does a plugin read `bDoNotDisturbMode`? (Candidates: the friends settings store, or `SteamClient.Settings`.)
-- On the Deck through the CEF debugger: switch DND on in the QAM, then read the value with the candidate call.
-- Output: a short note in the phase file giving the call to use, and whether Decky already suppresses toasts during DND. If it does, T7 still checks DND itself, so the log line (below) stays truthful and the harness can tell the cases apart.
+**T6b — Do Not Disturb spike (Opus, short, before T7)** — done; see Progress. Result: Decky's toasts go through Steam's `NotificationStore`, which drops a non-critical toast when "Show Notification Toasts" says Never, or When I'm not in-game while a game runs. The friends DND does not gate them. The owner chose the toast setting only.
 
 **T7 — Wiring and toggle (Opus)**
 - `src/index.tsx`: module-level monitor + interval in `definePlugin`, cleared in `onDismount`; guard against a second interval on hot reload. Panel checks call `accept` too. Background check: `status(false)` + `apps()` + `notifications()`.
-- Gate in one place, `notify(body)`: muted → log `[SaveTether] toast muted: …`; DND (T6b's call, read at toast time; if it throws, treat as not-DND) → log `[SaveTether] toast dnd: …`; else `toaster.toast(...)` and log `[SaveTether] toast: …`.
+- Gate in one place, `notify(body)`: muted → log `[SaveTether] toast muted: …`; else `toaster.toast(...)` (never `critical: true`, which would pass Steam's setting) and log `[SaveTether] toast hidden by Steam: …` when `window.settingsStore?.m_ClientSettings?.disable_all_toasts === true` (read at toast time; a failed read counts as false), else `[SaveTether] toast: …`. The in-game half of the setting is left to Steam, unlogged: the harness runs with no game.
 - QAM: a `ToggleField` "Mute notifications" under Check now (as in the mockup), bound to `notifications(!muted)`; hidden when the CLI lacks the command (exit 64). `data-st-muted` attribute for the harness.
-- Small pure helper `gate(muted, dnd) → "show" | "muted" | "dnd"` in `monitor.ts`, unit-tested (4 cases), so the rule isn't only checked on hardware.
+- Small pure helper `gate(muted, steamOff) → "muted" | "hidden" | "show"` in `monitor.ts`, unit-tested (4 cases), so the rule isn't only checked on hardware.
 - Acceptance: `pnpm run build`, `tsc --noEmit`, all tests pass.
 
 **T8 — Harness and test doc (Opus)**
 - `scripts/qam-check.mjs`: subscribe to `Runtime.consoleAPICalled` on SharedJSContext and collect `[SaveTether] toast:` lines; expected files gain `toasts: [...]`.
 - New scenarios via `deck-scenarios.sh` (throwaway `~/sttest` homes, the existing override):
   - (g) all linked → Check now → no toast.
-  - (h) break a link → Check now → exactly one toast with the desktop text; Check now again → none.
-  - (i) fix it, break a different one → one toast naming only the new one.
+  - (h) break a link → Check now → exactly one toast, "1 app needs attention."; Check now again → none.
+  - (i) fix it, break a different one → one toast again.
   - (j) Mute on (the harness clicks the toggle) → break another → `toast muted:` log only; `savetether notifications --json` says off; Mute off.
-  - (j2) Steam DND on (harness sets it, or the owner by hand if it can't be set over CEF) → break another → `toast dnd:` log, no toast on screen (screenshot); DND off.
+  - (j2) Steam's "Show Notification Toasts" on Never (the owner by hand, in Settings → Notifications) → break another → `toast hidden by Steam:` log, no toast on screen (screenshot); back to Anytime.
   - (k) background timer: QAM closed, break a link, wait ≤ 6 min → one toast. (`--slow` flag, not in the default run.)
   - (l) `CLI renamed away` ×3 checks → one "Health check failed" toast.
 - `docs/testing/hardware-testing.md`, "The Decky plugin in Game Mode": the new scenarios and the Desktop-Mode check below.
@@ -124,15 +121,16 @@ Not automatable: what the toast looks like over a running game, and the Desktop-
 6. **Shared switch means the plugin now writes one SaveTether file** (`notifications.txt`, via the CLI). Still nothing touches saves or links, so the "read-only, cannot harm the setup" promise holds for saves.
 
 7. **"Mute" in the QAM vs "Desktop notifications" in the app**: one switch, two labels, opposite polarity. Muting on the Deck also silences the desktop app on that device. If you'd rather they be independent, the toggle moves to Decky's plugin settings and T1/T2 shrink to just the lock field.
-8. **DND suppresses, doesn't queue.** A link that breaks during DND isn't toasted after DND ends (it is in the panel). Queuing would need a "pending" list plus a DND-ended watcher; I'd skip it.
-9. **DND read is an undocumented Steam internal.** A Steam update could rename it; the code treats a failed read as "not DND", so the worst case is a toast during DND, never a crash.
+8. **Steam's setting suppresses, doesn't queue.** A link that breaks while toasts are off isn't toasted later (it is in the panel). Queuing would need a "pending" list plus a watcher; I'd skip it.
+9. **`settingsStore.m_ClientSettings` is an undocumented Steam internal**, read only for the log line. Steam applies the setting itself, so a rename costs only the log's accuracy, never a crash or a toast.
 
 ## Out of scope (named, not built)
 
 - Click-to-open on a toast (the desktop app's toast does nothing on click either)
 - A configurable check interval
 - A "quiet while playing" mode
-- Queuing toasts suppressed by Do Not Disturb or mute
+- Queuing toasts suppressed by Steam's toast setting or mute
+- Following the friends-list "Do Not Disturb" (Steam uses it for chat only; the owner chose the toast setting)
 
 ## Progress
 
@@ -142,3 +140,6 @@ Not automatable: what the toast looks like over a running game, and the Desktop-
 - 2026-11-25: fixed from a second review: releasing the lock always lets it go, even when something other than a file sits at the holder path; a release that must wait for a reader finishes on its own thread, not the app's UI thread; `status` also compares the lock file's modified time (stamped on every take) before and after, catching an operation that started and ended while it read; a holder whose start time cannot be read counts only when its process is a SaveTether binary.
 - 2026-11-25: hardware run for T1 to T3 on the Deck (3ff410e; `dotnet test` 1025 passed on the Mint box): `notifications` on, off and a bad value; `operation_running` true throughout a slow apply run by another process, false before and after, with no holder file left; the app sends no notification when the switch is off and one when it is on. Flow and results in `docs/testing/hardware-testing.md`, "Notifications switch and `operation_running`". The Deck's real setup was unchanged. Not run on hardware: the app idling after an operation of its own.
 - 2026-11-25: T5 done in the plugin repo on `feature/toasts` (carlocgc/SaveTether-Decky#7): `status(sizes)` and `notifications(on)` in `main.py`; an older CLI's exit 64 passes through. `python3 -m unittest` passes on the Mint box (11 tests, Python 3.12). Next: T6 and T6b.
+- 2026-11-25: T6 done in the plugin repo on `feature/toasts`: `src/monitor.ts`, `createMonitor().accept(result, names)`, with the ten cases above in `tests/monitor.test.ts`; `states.ts` gains `operation_running?`. A per-link problem is told from a device-wide one by `overall()`'s "N app(s) need attention" headline, so the order of conditions lives only in `states.ts`. Found: the Rollup build's tsconfig refuses `.ts` in an import path and Node's type stripping needs it, so `src` files import each other without it and `pnpm test` loads `tests/resolve-ts.mjs`, a resolve hook that adds `.ts` (Node 22.15+, CI's Node 22 has it). `pnpm test` passes on Windows (20 tests, Node 24); not yet on the Mint box.
+- 2026-11-25: T6b, from source (decky-loader `frontend/src/hooks/toaster.tsx`, and Steam's `steamui/*.js` on the Deck): Decky's toast goes through Steam's own `NotificationStore.ProcessNotification`, but Steam does not gate that on Do Not Disturb. `bDoNotDisturbMode` is read only in `sp.js`, and every read there is at a friends-chat call site (sounds, chat and persona notifications), so **Decky's toasts are not suppressed by the friends DND**. It reads, in the plugin's context (`SharedJSContext`), as `window.settingsStore?.friendSettings?.bDoNotDisturbMode === true` (read over CEF: a boolean, `false` with DND off; `settingsStore.m_FriendSettings` is the same field). Also from `sp.js`: "Show Notification Toasts" is the client settings `disable_all_toasts` and `disable_toasts_in_game`, and `ProcessNotification` returns early for a non-critical toast when the first is true, or the second is true while a game runs. So Steam already applies that setting to Decky's toasts. Read over CEF: `settingsStore.m_ClientSettings.disable_all_toasts` and `.disable_toasts_in_game`, both `false` (Anytime). The owner chose to follow that setting only, not the friends DND; the Context, T7, T8 (j2) and concerns 8 and 9 are updated. Seeing a toast hidden on screen is left to T9's (j2).
+- 2026-11-25: T6 moved to its own PR (carlocgc/SaveTether-Decky#8), since #7 merged with T5 only. Owner's decision: the toast is the panel's headline as a count ("2 apps need attention."), not the desktop's list of links; the Design, T6 and T8 (h, i) are updated, and the mockup's example toast. When to toast is unchanged.
