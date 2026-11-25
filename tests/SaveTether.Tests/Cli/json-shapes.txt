@@ -694,6 +694,28 @@ $.status.sync_root_available: boolean
 $.status: object
 $: object
 
+## status-sizes
+$.command: string
+$.exit_code: number
+$.schema: number
+$.status.device_file_mismatch: boolean
+$.status.device_name: string
+$.status.journal_open: boolean
+$.status.mappings: array
+$.status.mappings[].bytes: number
+$.status.mappings[].detail: string
+$.status.mappings[].files: number
+$.status.mappings[].mapping_id: string
+$.status.mappings[].source: string
+$.status.mappings[].state: string
+$.status.mappings[].target: string
+$.status.mappings[]: object
+$.status.returned_devices: array
+$.status.sync_root: string
+$.status.sync_root_available: boolean
+$.status: object
+$: object
+
 ## status-sync-root-unavailable
 $.command: string
 $.exit_code: number

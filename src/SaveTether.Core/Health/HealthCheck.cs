@@ -82,12 +82,15 @@ public enum HealthReason
 
 /// <param name="Source">S on this device, or null when this device has no save folder set for the mapping.</param>
 /// <param name="Detail">One sentence saying what the state means here and what to do.</param>
+/// <param name="Bytes">Size of the shared copy, filled only when asked for (<c>status --sizes</c>) and the copy is there.</param>
+/// <param name="Files">Number of files in the shared copy, filled with <paramref name="Bytes"/>.</param>
 /// <param name="Reason">
 /// Which situation the state stands for, for Not applied, Replaced and Broken; null for the other states,
 /// which each stand for one situation.
 /// </param>
 public sealed record MappingHealth(
-    string MappingId, HealthState State, string? Source, string Target, Note Detail, HealthReason? Reason = null);
+    string MappingId, HealthState State, string? Source, string Target, Note Detail, HealthReason? Reason = null,
+    long? Bytes = null, int? Files = null);
 
 /// <summary>
 /// Works out a mapping's state from one look at S, one read of its link, and the seed markers.

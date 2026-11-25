@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SaveTether Decky plugin: Quick Access mockup</title>
+<!-- Layout guide for phase 4 (docs/plans/phase-4-decky-plugin.md). Colours approximate the Steam Deck UI; words and shades follow StateWords.cs. -->
+<style>
+body{background:#0e1015;color:#dcdedf;font-family:"Motiva Sans",Arial,sans-serif;margin:24px}
+.row{display:flex;gap:32px;flex-wrap:wrap}
+.label{font-size:13px;color:#8b929a;margin-bottom:6px}
+.qp{background:#1b2029;border-radius:8px;width:300px;padding:10px 0 14px}
+.qh{display:flex;align-items:center;gap:8px;padding:0 14px 8px;font-size:17px;color:#fff}
+.sec{font-size:11px;letter-spacing:.06em;color:#8b929a;padding:10px 14px 4px}
+.ov{margin:0 10px;padding:10px 12px;background:#23262e;border-radius:4px;font-size:12px;line-height:1.5}
+.ov .head{display:flex;align-items:center;gap:7px;font-size:13px;color:#fff}
+.muted{color:#8b929a}
+.btn{margin:8px 10px 0;background:#dcdedf;color:#1b2029;border-radius:3px;padding:8px 12px;font-size:13px;display:flex;justify-content:space-between}
+.card{margin:6px 10px 0;background:#23262e;border-radius:4px;padding:8px 10px;border-left:3px solid #59bf40}
+.card.amber{border-left-color:#e8a23a}.card.grey{border-left-color:#67707b}
+.r1{display:flex;align-items:center;gap:7px;font-size:13px;color:#fff}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:#59bf40}
+.amber .dot,.dot.amber{background:#e8a23a}.grey .dot{background:#67707b}
+.st{margin-left:auto;font-size:11px;color:#59bf40}
+.amber .st{color:#e8a23a}.grey .st{color:#8b929a}
+.r2{font-size:11px;color:#8b929a;margin:2px 0 0 15px}
+.err{font-size:11px;color:#e8a23a;margin:3px 0 0 15px;line-height:1.4}
+</style>
+</head>
+<body>
+<div class="row">
+<div>
+<div class="label">All linked</div>
+<div class="qp">
+<div class="qh">&larr; SaveTether</div>
+<div class="ov">
+<div class="head"><span class="dot"></span>All 4 links healthy</div>
+<div class="muted">Sync folder</div>
+<div>/run/media/deck/SD/Sync</div>
+<div class="muted">steamdeck · checked 14:21</div>
+</div>
+<div class="btn">Check now<span>&#x27F3;</span></div>
+<div class="sec">LINKS</div>
+<div class="card"><div class="r1"><span class="dot"></span>Hollow Knight<span class="st">Linked</span></div><div class="r2">2.1 MB · 14 files</div></div>
+<div class="card"><div class="r1"><span class="dot"></span>Stardew Valley<span class="st">Linked</span></div><div class="r2">18.4 MB · 62 files</div></div>
+<div class="card"><div class="r1"><span class="dot"></span>Celeste<span class="st">Linked</span></div><div class="r2">96 KB · 3 files</div></div>
+<div class="card grey"><div class="r1"><span class="dot"></span>Dolphin (GC)<span class="st">Not on this device</span></div><div class="r2">412 MB · 9 files</div></div>
+</div>
+</div>
+<div>
+<div class="label">Needs attention</div>
+<div class="qp">
+<div class="qh">&larr; SaveTether</div>
+<div class="ov">
+<div class="head"><span class="dot amber"></span>2 links need attention</div>
+<div class="muted">Sync folder</div>
+<div>/run/media/deck/SD/Sync</div>
+<div class="muted">steamdeck · checked 14:23</div>
+</div>
+<div class="btn">Check now<span>&#x27F3;</span></div>
+<div class="sec">LINKS</div>
+<div class="card amber"><div class="r1"><span class="dot"></span>Stardew Valley<span class="st">Not linked</span></div><div class="r2">18.4 MB · 62 files</div><div class="err">The save folder holds files again. Open the desktop app to compare and relink.</div></div>
+<div class="card amber"><div class="r1"><span class="dot"></span>Celeste<span class="st">Shared folder missing</span></div><div class="r2">size unknown</div><div class="err">The shared copy is gone from the sync folder.</div></div>
+<div class="card"><div class="r1"><span class="dot"></span>Hollow Knight<span class="st">Linked</span></div><div class="r2">2.1 MB · 14 files</div></div>
+<div class="card grey"><div class="r1"><span class="dot"></span>Dolphin (GC)<span class="st">Not on this device</span></div><div class="r2">412 MB · 9 files</div></div>
+</div>
+</div>
+</div>
+</body>
+</html>

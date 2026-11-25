@@ -179,7 +179,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 
 ### `status`
 
-`status [<id>]`, no flags. Exit 3 while an operation is unfinished.
+`status [<id>] [--sizes]`. Exit 3 while an operation is unfinished.
 
 `status` object:
 
@@ -197,7 +197,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `returned_devices` | array of string | Devices whose file is in the sync folder although they were removed: a sync tool put it back. Empty when none. |
 | `autostart_missing` | string | Present only when the desktop app is set to start with the session and the program the entry names is missing: that program's path. `status` only reports it; it does not change the entry. Added 2026-11-18. |
 
-`mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner).
+`mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner). With `--sizes` only: `bytes` (number, the shared copy's total size) and `files` (number, its file count), both absent when the shared copy is not there. Added 2026-11-25.
 
 ### `apply`, `revert`, `backup restore`, `recover`
 

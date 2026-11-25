@@ -750,6 +750,8 @@ If step 2 is skipped, `apply` finds a foreign link at S and refuses, so a leftov
 
 ### 5.11 Decky plugin shape
 
+Revised again on 2026-11-25 (phase 4 planning, [phase-4-decky-plugin.md](../plans/phase-4-decky-plugin.md)): the first version is **read-only**: an overview, Check now, and one card per mapping with its size from `status --sizes`; Recover and Apply come later. It lives in its own repository, `savetether-decky`, and ships as a zip on GitHub releases for Decky's manual install, not through the Decky store: the store refuses LLM-written plugins, and only its own CI publishes to it. Layout: [decky-mockup.html](decky-mockup.html).
+
 Revised by the owner on 2026-11-17: **status first.** Typing in Game Mode is fiddly and error-prone, and choosing between setup options needs reading, so the plugin shows health and offers only actions that need no input: Recover, and Apply when the planner needs no choice. Everything else is left to the desktop app in Desktop Mode. The outline below was the earlier, larger plan; the full-screen pages and "adding an app" are dropped from the plugin.
 
 The Quick Access panel is a narrow column, so it shows only what fits a list:

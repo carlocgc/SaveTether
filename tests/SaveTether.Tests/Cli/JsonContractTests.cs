@@ -132,6 +132,7 @@ public class JsonContractTests
         Record("apply-dry-run", 0, "apply", Id, "--copy", "--dry-run");
         Record("apply-completed", 0, "apply", Id, "--copy");
         Record("apply-all", 0, "apply", "--all");
+        Record("status-sizes", 0, "status", "--sizes");
         Record("device-list", 0, "device", "list");
 
         var aside = sandbox.At("pc", "sync-unplugged");
