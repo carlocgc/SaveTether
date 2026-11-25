@@ -67,6 +67,7 @@ internal static class ArgParser
         new("app add", 1, 1, [DryRun], ["--install", "--install-dir", "--sd-card", "--wine-prefix"], ["--role"]),
         new("app list", 0, 0, ["--found"], ["--search"], None),
         new("status", 0, 1, ["--sizes"], None, None),
+        new("notifications", 0, 1, None, None, None),
         new("device list", 0, 0, None, None, None),
         new("device rename", 1, 1, None, None, None),
         new("device remove", 0, 0, ["--delete-backups", "--delete-everything", "--confirm-remove", "--confirm-delete"], ["--other"], ["--delete-orphan"]),

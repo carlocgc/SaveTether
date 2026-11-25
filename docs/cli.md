@@ -6,7 +6,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 - [Concepts](#concepts)
 - [Options every command takes](#options-every-command-takes)
-- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [device list](#device-list) · [device rename](#device-rename) · [device remove](#device-remove) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
+- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [notifications](#notifications) · [device list](#device-list) · [device rename](#device-rename) · [device remove](#device-remove) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
 - [Workflows](#workflows)
 - [Files and environment](#files-and-environment)
 - [Exit codes](#exit-codes)
@@ -165,7 +165,7 @@ Lists the apps that have a definition, and whether each is built in, shared or i
 savetether status [<id>] [--sizes]
 ```
 
-Shows each mapping's state on this device, or one mapping's. It only reads. `--sizes` adds the size and file count of each shared copy; it walks every shared folder, so it takes longer on large saves. It warns when an earlier operation did not finish, when the sync root cannot be used, when this device's name is in use by another install, and when the desktop app's start-with-the-session entry points to a program that is gone. It also says when another device removed this one from the sync folder, when this device's own removal did not finish (`device remove` finishes it), and when the file of a removed device has come back (`device remove --other <name>` deletes it again).
+Shows each mapping's state on this device, or one mapping's. It only reads. It says when another SaveTether process is running an operation. `--sizes` adds the size and file count of each shared copy; it walks every shared folder, so it takes longer on large saves. It warns when an earlier operation did not finish, when the sync root cannot be used, when this device's name is in use by another install, and when the desktop app's start-with-the-session entry points to a program that is gone. It also says when another device removed this one from the sync folder, when this device's own removal did not finish (`device remove` finishes it), and when the file of a removed device has come back (`device remove --other <name>` deletes it again).
 
 | State | Meaning | Usually |
 |---|---|---|
@@ -181,6 +181,19 @@ Shows each mapping's state on this device, or one mapping's. It only reads. `--s
 savetether status
 savetether status cemu.save
 savetether status --sizes
+```
+
+## notifications
+
+```
+savetether notifications [on|off]
+```
+
+Shows this device's "Desktop notifications" switch, or sets it. It is the same switch as in the desktop app's Settings (`notifications.txt` in the local folder), and the Decky plugin is to follow it too. Off silences notifications only: `status` and the tray icon still show problems. It works on a device that is not set up, and while another operation runs.
+
+```bash
+savetether notifications
+savetether notifications off
 ```
 
 ## device list

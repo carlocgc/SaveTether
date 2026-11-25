@@ -1,7 +1,7 @@
-using SaveTether.Gui.Presentation;
+using SaveTether.Core.Startup;
 using SaveTether.Tests.FileSystem;
 
-namespace SaveTether.Tests.Gui;
+namespace SaveTether.Tests.Startup;
 
 /// <summary>Section 11: the "Desktop notifications" switch.</summary>
 public class NotificationSettingTests

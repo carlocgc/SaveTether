@@ -195,9 +195,20 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `removal` | string | Present when this install's ID is in a record of removed devices: `removed-by-another` (the device `removed_by` removed this one) or `unfinished` (this device's own removal did not finish). `mappings` is then empty if this device's file is gone. Added 2026-11-22. |
 | `removed_by` | string | Present with `removal`: the name of the device that did the removal. |
 | `returned_devices` | array of string | Devices whose file is in the sync folder although they were removed: a sync tool put it back. Empty when none. |
+| `operation_running` | boolean | Another SaveTether process holds the operation lock, or took it while the report was read, so links may be part way through a change: do not alert on this report. `status` does not take the lock. Added 2026-11-25. |
 | `autostart_missing` | string | Present only when the desktop app is set to start with the session and the program the entry names is missing: that program's path. `status` only reports it; it does not change the entry. Added 2026-11-18. |
 
 `mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner). With `--sizes` only: `bytes` (number, the shared copy's total size) and `files` (number, its file count), both absent when the shared copy is not there. Added 2026-11-25.
+
+### `notifications`
+
+`notifications [on|off]`: the device's "Desktop notifications" switch, shared by the desktop app and the Decky plugin. With no value it reports; with one it sets, then reports. It needs no set-up device and takes no operation lock. A setting that cannot be saved is refused (exit 1); any other value is a usage error (exit 64). Added 2026-11-25.
+
+`notifications` object:
+
+| Field | Type | |
+|---|---|---|
+| `on` | boolean | True unless turned off. |
 
 ### `apply`, `revert`, `backup restore`, `recover`
 

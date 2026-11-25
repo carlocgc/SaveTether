@@ -32,8 +32,176 @@ public class OperationLockTests
         using var again = OperationLock.Acquire(local, "cli", "revert");
         Assert.Equal("revert", OperationLock.TryReadHolder(local)!.Command);
 
-        // Neither file is ever deleted: a lock file deleted while held would let a second process lock a new one.
+        // The lock file is never deleted: one deleted while held would let a second process lock a new one.
         Assert.Equal(EntryKind.File, SafeFs.Probe(Path.Combine(local.Folder, OperationLock.FileName)));
+    }
+
+    [Fact]
+    public void Releasing_the_lock_removes_the_holder_file_and_a_second_dispose_leaves_the_next_one()
+    {
+        using var sandbox = new Sandbox();
+        var local = new LocalStore(sandbox.Dir("local"));
+
+        var first = OperationLock.Acquire(local, "gui", "apply");
+        first.Dispose();
+        Assert.Null(OperationLock.TryReadHolder(local));
+
+        using var next = OperationLock.Acquire(local, "cli", "revert");
+        first.Dispose();
+        Assert.Equal("revert", OperationLock.TryReadHolder(local)!.Command);
+    }
+
+    [Fact]
+    public void Status_says_when_another_process_is_running_an_operation()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        bool Running() => pc.Ok("status", "--json").Json().GetProperty("status").GetProperty("operation_running").GetBoolean();
+        const string Line = "Another SaveTether process is running an operation.";
+
+        Assert.False(Running());
+        Assert.DoesNotContain(Line, pc.Ok("status").Out, StringComparison.Ordinal);
+
+        using (var other = HoldInAnotherProcess(pc.LocalFolder))
+        {
+            // The stand-in takes the lock only; a SaveTether process also names itself.
+            File.WriteAllText(
+                Path.Combine(pc.LocalFolder, OperationLock.HolderFileName),
+                $$"""{"schema": 1, "process_id": {{other.ProcessId}}, "front_end": "gui", "command": "apply", "started_utc": "{{DateTimeOffset.UtcNow:O}}"}""");
+            Assert.True(Running());
+            Assert.Contains(Line, pc.Ok("status").Out, StringComparison.Ordinal);
+        }
+
+        // The file a killed process left behind.
+        Assert.False(Running());
+    }
+
+    [Fact]
+    public void Status_counts_an_operation_that_ends_while_it_is_reading()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        using var other = HoldInAnotherProcess(pc.LocalFolder);
+        var holder = Path.Combine(pc.LocalFolder, OperationLock.HolderFileName);
+        File.WriteAllText(
+            holder,
+            $$"""{"schema": 1, "process_id": {{other.ProcessId}}, "front_end": "gui", "command": "apply", "started_utc": "{{DateTimeOffset.UtcNow:O}}"}""");
+
+        // Status reads the autostart entry after the links: the operation lets go there.
+        pc.Autostart = new EndsTheOperation(holder);
+
+        Assert.True(pc.Ok("status", "--json").Json().GetProperty("status").GetProperty("operation_running").GetBoolean());
+        Assert.False(File.Exists(holder));
+    }
+
+    [Fact]
+    public void Releasing_waits_for_a_reader_to_close_the_holder_file()
+    {
+        using var sandbox = new Sandbox();
+        var local = new LocalStore(sandbox.Dir("local"));
+        var held = OperationLock.Acquire(local, "gui", "apply");
+
+        // Open as File.ReadAllText opens it. Windows refuses the delete meanwhile; Linux does not.
+        var reader = File.OpenRead(Path.Combine(local.Folder, OperationLock.HolderFileName));
+        // A thread of its own: a busy thread pool could close the file after the retries have given up.
+        var closing = new Thread(() =>
+        {
+            Thread.Sleep(100);
+            reader.Dispose();
+        });
+        closing.Start();
+        held.Dispose();
+        closing.Join();
+
+        // On Windows the release finishes on a thread of its own, the caller not waiting for the reader.
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (OperationLock.TryReadHolder(local) is not null && DateTime.UtcNow < deadline)
+        {
+            Thread.Sleep(10);
+        }
+
+        Assert.Null(OperationLock.TryReadHolder(local));
+        using var next = OperationLock.Acquire(local, "cli", "revert");
+    }
+
+    [Fact]
+    public void Something_other_than_a_file_at_the_holder_path_does_not_keep_the_lock()
+    {
+        using var sandbox = new Sandbox();
+        var local = new LocalStore(sandbox.Dir("local"));
+        var held = OperationLock.Acquire(local, "gui", "apply");
+        var holder = Path.Combine(local.Folder, OperationLock.HolderFileName);
+        File.Delete(holder);
+        Directory.CreateDirectory(holder);
+
+        held.Dispose();
+
+        Assert.True(Directory.Exists(holder));
+        using var free = new FileStream(Path.Combine(local.Folder, OperationLock.FileName), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+    }
+
+    [Fact]
+    public void Status_counts_an_operation_that_starts_and_ends_while_it_is_reading()
+    {
+        using var sandbox = new Sandbox();
+        var pc = new CliDevice(sandbox, "pc");
+        pc.SetUp(createRoot: true);
+        pc.Autostart = new RunsAnOperation(new LocalStore(pc.LocalFolder));
+
+        Assert.True(pc.Ok("status", "--json").Json().GetProperty("status").GetProperty("operation_running").GetBoolean());
+    }
+
+    private sealed class RunsAnOperation(LocalStore local) : SaveTether.Core.Startup.IAutostartStore
+    {
+        public string Location => "test entry";
+
+        public string? ReadProgram()
+        {
+            using (OperationLock.Acquire(local, "gui", "apply"))
+            {
+            }
+
+            return null;
+        }
+
+        public void Write(string program) => throw new InvalidOperationException("Status must not write the entry.");
+
+        public void Remove() => throw new InvalidOperationException("Status must not remove the entry.");
+    }
+
+    [Fact]
+    public void A_holder_file_that_may_not_be_read_names_no_holder()
+    {
+        // Windows gives the same refusal for a file being deleted, which cannot be staged.
+        if (OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess)
+        {
+            return;
+        }
+
+        using var sandbox = new Sandbox();
+        var local = new LocalStore(sandbox.Dir("local"));
+        var path = Path.Combine(local.Folder, OperationLock.HolderFileName);
+        File.WriteAllText(path, "{}");
+        File.SetUnixFileMode(path, UnixFileMode.None);
+
+        Assert.Null(OperationLock.TryReadHolder(local));
+    }
+
+    private sealed class EndsTheOperation(string holderFile) : SaveTether.Core.Startup.IAutostartStore
+    {
+        public string Location => "test entry";
+
+        public string? ReadProgram()
+        {
+            File.Delete(holderFile);
+            return null;
+        }
+
+        public void Write(string program) => throw new InvalidOperationException("Status must not write the entry.");
+
+        public void Remove() => throw new InvalidOperationException("Status must not remove the entry.");
     }
 
     [Fact]
@@ -71,22 +239,15 @@ public class OperationLockTests
         using var sandbox = new Sandbox();
         var local = new LocalStore(sandbox.Dir("local"));
 
-        // A holder file left by a process that has since ended, as after any earlier operation.
-        using (OperationLock.Acquire(local, "cli", "map add"))
-        {
-        }
-
         using (HoldInAnotherProcess(local.Folder))
         {
             var refused = Assert.Throws<StoreException>(() => OperationLock.Acquire(local, "cli", "apply"));
             Assert.Equal(StoreProblem.OperationRunning, refused.Problem);
 
-            // This process is alive, so its old record would be believed: name a dead process in it instead.
-            var stale = OperationLock.TryReadHolder(local)! with { ProcessId = DeadProcessId() };
-            File.WriteAllText(Path.Combine(local.Folder, OperationLock.HolderFileName), System.Text.Json.JsonSerializer.Serialize(new
-            {
-                schema = stale.Schema, process_id = stale.ProcessId, front_end = stale.FrontEnd, command = stale.Command, started_utc = stale.StartedUtc,
-            }));
+            // A holder file left by a process that was killed.
+            File.WriteAllText(
+                Path.Combine(local.Folder, OperationLock.HolderFileName),
+                $$"""{"schema": 1, "process_id": {{DeadProcessId()}}, "front_end": "cli", "command": "map add", "started_utc": "{{DateTimeOffset.UtcNow:O}}"}""");
             var unnamed = Assert.Throws<StoreException>(() => OperationLock.Acquire(local, "cli", "apply"));
             Assert.DoesNotContain("map add", unnamed.Message, StringComparison.Ordinal);
             Assert.Contains("Another SaveTether operation is running.", unnamed.Message, StringComparison.Ordinal);
@@ -166,6 +327,8 @@ public class OperationLockTests
 
     private sealed class Holder(Process process) : IDisposable
     {
+        public int ProcessId => process.Id;
+
         public void Dispose()
         {
             process.Kill(entireProcessTree: true);

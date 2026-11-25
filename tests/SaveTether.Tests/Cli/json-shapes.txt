@@ -573,6 +573,14 @@ $.mapping: object
 $.schema: number
 $: object
 
+## notifications
+$.command: string
+$.exit_code: number
+$.notifications.on: boolean
+$.notifications: object
+$.schema: number
+$: object
+
 ## operation-running
 $.command: string
 $.error: string
@@ -667,6 +675,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.operation_running: boolean
 $.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
@@ -688,6 +697,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.operation_running: boolean
 $.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
@@ -710,6 +720,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.operation_running: boolean
 $.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
@@ -731,6 +742,7 @@ $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
 $.status.mappings[]: object
+$.status.operation_running: boolean
 $.status.returned_devices: array
 $.status.sync_root: string
 $.status.sync_root_available: boolean
