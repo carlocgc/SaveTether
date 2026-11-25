@@ -54,10 +54,10 @@ Each card is a dark row with a 3 px left bar in its shade colour (green, grey or
   - Line 1: a dot, the app name, and the state word on the right.
   - Line 2: `size · N files`, or "size unknown".
   - Line 3: amber cards only, the `detail` sentence plus "Open the desktop app to fix" where the fix needs Desktop Mode.
-  - Amber cards sort first, then grey, then green, then by name.
+  - Cards needing attention (amber) sort first, then by app name, as the desktop app sorts them.
 - **States without a card list:**
   - CLI not found: "Install SaveTether in Desktop Mode" plus the path searched.
-  - Not set up.
+  - Not set up: shown as "Cannot check this device" with the CLI's sentence, because the CLI reports a missing setup as `not-found`, the same problem as a missing device file (found in T5).
   - Journal open: "Unfinished operation. Open the desktop app."
   - Sync folder unavailable.
   - Check failed (the CLI's `message`).
@@ -183,3 +183,4 @@ The model shown is the recommended implementer. Opus takes design-heavy or judge
 
 - 2026-11-25: T1 done: `status --sizes` adds `bytes` and `files` per mapping (the shared copy, measured with `Workspace.Measure`; absent when the copy is not there); the text output adds "(N file(s), size)". `StatusSizesTests`, a `status-sizes` scenario in `JsonContractTests`, `docs/cli.md`, `docs/cli-json.md`. T2 done: this file, the mockup page, design 5.11's revision note, the plan's section 6.
 - 2026-11-25: the owner created https://github.com/carlocgc/SaveTether-Decky (public) and installed Decky Loader on the Deck with Developer mode and CEF debugging on. Next: T3, T5 (and T7) in parallel.
+- 2026-11-25: T3 and T5 done in SaveTether-Decky (PR to its `development`, which was created from `main` for this). T3: the template's build config, v9 lockfile and `decky.pyi` kept; `backend/`, `defaults/`, `assets/` and `py_modules/` dropped; no `_root` flag; MIT plus the BSD-3 notice. T5: `src/states.ts` with 8 tests under `node --test`, after `tsc --noEmit --skipLibCheck`, which is needed because the template's libraries have type errors of their own. Pnpm runs through `corepack pnpm@9`. Next: T4 (backend), T7 (release workflow).
