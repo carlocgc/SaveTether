@@ -498,11 +498,21 @@ internal static class CliApp
             };
         }
 
-        /// <summary>Adds the shared copy's size and file count, left out when the copy is not there.</summary>
+        /// <summary>
+        /// Adds the shared copy's size and file count, left out when the copy is not there or cannot be read:
+        /// a sync tool swapping a folder mid-walk must not cost the whole report its health.
+        /// </summary>
         private static MappingHealth WithSize(MappingHealth mapping)
         {
-            var (exists, _, bytes, files) = Workspace.Measure(mapping.Target);
-            return exists ? mapping with { Bytes = bytes, Files = files } : mapping;
+            try
+            {
+                var (exists, _, bytes, files) = Workspace.Measure(mapping.Target);
+                return exists ? mapping with { Bytes = bytes, Files = files } : mapping;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return mapping;
+            }
         }
 
         private CliOutput Apply()
