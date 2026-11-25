@@ -139,8 +139,10 @@ The plugin lives in the `SaveTether-Decky` repository; its phase file is `docs/p
 - (g) `--expect expected/g.json`: all linked, no toast.
 - (h) `break ppsspp.savedata`, `--expect expected/h.json`: one `toast: 1 app needs attention.`; again with `expected/h-again.json`: none.
 - (i) `fix ppsspp.savedata`, `break dolphin.gc`, `--expect expected/h.json`: one toast again.
-- (j) `fix dolphin.gc`, then `--mute on --expect expected/j-mute.json` (the harness clicks the toggle before Check now); `SAVETETHER_HOME=~/sttest/decky/t/home savetether notifications --json` says `"on": false`. `break duckstation.memcards`, `--expect expected/j.json`: only `toast muted: …`. `--mute off --expect expected/j-unmute.json`: no toast (the problem was recorded while muted).
-- (j2) The owner sets Steam's Settings → Notifications → "Show Notification Toasts" to Never. `break pcsx2.memcards`, `--expect expected/j2.json --shot j2.png`: `toast hidden by Steam: 2 apps need attention.`, and no toast on screen. Back to Anytime.
+- (j) `fix dolphin.gc`, then `--mute on --expect expected/j-mute.json` (the harness clicks the toggle before Check now); `SAVETETHER_HOME=~/sttest/decky/t/home savetether notifications --json` says `"on": false`. `break duckstation.memcards`, `--expect expected/j.json`: Mute on, and only `toast muted: …`. `--mute off --expect expected/j-unmute.json`: no toast (the problem was recorded while muted).
+- (j2) The owner sets Steam's Settings → Notifications → "Show Notification Toasts" to Never. `break pcsx2.memcards`, `--expect expected/j2.json --shot j2.png`: Mute off, `toast hidden by Steam: 2 apps need attention.`, and no toast on screen. Back to Anytime.
+
+The toggle shows a click before the CLI has written the switch, and a Check now pressed meanwhile can read the old value. So `muted` is checked in the run after the one that clicks it (`j.json`, `j2.json`), whose opening check reads the switch as written.
 - (k) Slow, not in every run: with the QAM closed, start `--listen 400 --expect expected/k.json`, then `break ryujinx.saves`: the background check toasts `3 apps need attention.` within 5 minutes.
 - (l) With the owner's leave, as (e): rename the CLI away, run `--expect expected/e.json` (two failed checks, no toast), then `--expect expected/l.json` (the third: `toast: Health check failed.`), and rename it back.
 
