@@ -120,6 +120,52 @@ Some things only show with real data: the first run of setup on the Deck crashed
 4. Compare: `status`, `state.json` and the device file against the backup. Expect and explain any difference (a take-over gives the device file a new `install_id`).
 5. If the test fails part way, put the backed-up files back at once and check again.
 
+## The Decky plugin in Game Mode
+
+The plugin lives in the `SaveTether-Decky` repository; its phase file is `docs/plans/phase-4-decky-plugin.md`.
+
+**The harness** (T8, in the plugin repository): `scripts/qam-check.mjs` runs on the PC (Node 22+, no install) and `scripts/deck-scenarios.sh` on the Deck. The Deck must be in Game Mode with Decky's "Allow Remote CEF Debugging" on.
+
+1. Copy `deck-scenarios.sh` to `~/sttest` on the Deck and run `deck-scenarios.sh setup`. It builds four throwaway homes under `~/sttest/decky`, each with `ppsspp.savedata` and `dolphin.gc` linked: (a) as is; (b) the PPSSPP link replaced by a folder holding a file; (c) Dolphin's shared folder deleted; (d) the sync folder on a `fuse-overlayfs` mount whose process was then killed.
+2. Save the real setup's status first: `savetether status --json > real-before.json`, in a shell without `SAVETETHER_HOME`.
+3. Open the tunnel: `ssh -N -L 8081:localhost:8081 <deck>`.
+4. For each of a to d: `deck-scenarios.sh use <x>` on the Deck, then `node scripts/qam-check.mjs --expect scripts/expected/<x>.json --shot <x>.png` on the PC. Exit 0 means the panel matched; 1 prints both what it showed and what was expected; 2 means the harness could not run.
+5. (e) needs the owner's leave: it renames the real `~/.local/bin/savetether` to `savetether.st-away`, runs `--expect expected/e.json` (the "Install SaveTether in Desktop Mode" state), and renames it back.
+6. (f): `deck-scenarios.sh real`, then `--status real-before.json`: every mapping has a card, and a card says Linked exactly when the CLI says `ok`. Then save `status --json` again and `diff` it with the first: the real setup must be unchanged.
+7. `deck-scenarios.sh cleanup` (removes the plugin's `settings.json`, unmounts d, removes `~/sttest/decky`), stop the tunnel's own `ssh`, and switch CEF debugging off.
+
+**Toasts** (phase 4.1 T8; a plugin build with T7 and CLI 0.7.0-beta2 or later). The plugin logs every toast it decides on in `SharedJSContext`: `[SaveTether] toast: <body>`, `toast muted: …` or `toast hidden by Steam: …`. The harness collects those logged during its run as `toasts`; an expected file is compared only on the keys it has (`overall`, `cards`, `muted`, `toasts`), so files (g) to (l) leave the cards out. The panel's opening check counts too: a run toasts at most once for a new problem, whichever of its two checks sees it first. Before step 7, with `deck-scenarios.sh toasts` (home `t`: five apps linked) and `use t`; `break <id>` and `fix <id>` replace one app's link by a folder holding a file, and put it back. Run each harness line straight after the change before it: a background check (every 5 minutes) that lands in between takes the toast, and the run then shows `toasts: []`; run that step again from its `fix`.
+
+- (g) `--expect expected/g.json`: all linked, no toast.
+- (h) `break ppsspp.savedata`, `--expect expected/h.json`: one `toast: 1 app needs attention.`; again with `expected/h-again.json`: none.
+- (i) `fix ppsspp.savedata`, `break dolphin.gc`, `--expect expected/h.json`: one toast again.
+- (j) `fix dolphin.gc`, then `--mute on --expect expected/j-mute.json` (the harness clicks the toggle before Check now); `SAVETETHER_HOME=~/sttest/decky/t/home savetether notifications --json` says `"on": false`. `break duckstation.memcards`, `--expect expected/j.json`: Mute on, and only `toast muted: …`. `--mute off --expect expected/j-unmute.json`: no toast (the problem was recorded while muted).
+- (j2) The owner sets Steam's Settings → Notifications → "Show Notification Toasts" to Never. `break pcsx2.memcards`, `--expect expected/j2.json --shot j2.png`: Mute off, `toast hidden by Steam: 2 apps need attention.`, and no toast on screen. Back to Anytime.
+
+The toggle shows a click before the CLI has written the switch, and a Check now pressed meanwhile can read the old value. So `muted` is checked in the run after the one that clicks it (`j.json`, `j2.json`), whose opening check reads the switch as written.
+- (k) Slow, not in every run: with the QAM closed, start `--listen 400 --expect expected/k.json`, then `break ryujinx.saves`: the background check toasts `3 apps need attention.` within 5 minutes.
+- (l) With the owner's leave, as (e): rename the CLI away, run `--expect expected/e.json` (two failed checks, no toast), then `--expect expected/l.json` (the third: `toast: Health check failed.`), and rename it back.
+
+By hand, in T9: in Desktop Mode with the desktop app in the tray, break a link and count the notifications (one expected; two means Steam's desktop client shows Decky's toasts, concern 1 of the phase 4.1 file); after a reboot, an amber setup toasts once, about a minute after Game Mode comes up.
+
+- *Run on the Deck, 2026-11-25 (phase 4.1 T9):* (a) to (l) all matched. In Desktop Mode, Decky and the plugin do load in the desktop Steam client (`DeckyPluginLoader` and `saveTetherTimer` are in its `SharedJSContext`, on the same port 8081) and log `toast: …`, but nothing shows: one notification, the desktop app's. To time it, start the app with `systemd-run --user --on-calendar=<hh:mm:ss>` just before the plugin's next tick, and give the owner that window to watch. After a reboot, the check at load once ran before Steam could show a toast (17 s after Decky loaded it, 3 s before Steam's notification store finished loading): the toast was logged and lost, and the dedupe then kept the panel quiet. The plugin now checks a minute after load. To see what the plugin logged at boot, `Runtime.enable` on a fresh connection replays the earlier console lines with their timestamps.
+- The harness's `SharedJSContext` also shows Steam's own notification log lines ("NotificationStore", "SteamNotificationsStore"): useful for when Steam was ready.
+- The tunnel dies with a reboot (and an earlier session's tunnel may still hold port 8081 on the PC: `netstat -ano | grep :8081`; reuse it).
+- Staging on Windows: the scratch folder is case-insensitive, so the CLI binary `savetether` copied beside the plugin's `SaveTether/` folder lands inside it (and in the zip). Give the binary another name there.
+
+**Reload checks** (T9): over SSH, `steamos-session-select plasma` switches to Desktop Mode and `steamos-session-select gamescope` back; once `ss -ltn | grep :8081` shows the debugger again, rerun (a). A reboot is the owner's: `systemctl reboot` over SSH is refused for want of a password. The tunnel dies with the reboot; open it again. On a Windows checkout made before the plugin repository's `.gitattributes`, `deck-scenarios.sh` has CRLF endings and fails with `bash\r`: check it out again, or copy it with `tr -d '\r'`.
+
+The harness waits for the check the panel runs when it opens, presses Check now, and requires "Checking…" to show after the press: a `MutationObserver` catches it, because with the CLI missing the check ends within milliseconds and polling missed it. On Windows, end the script by closing its WebSockets and setting `process.exitCode`: `process.exit()` with a socket open trips a libuv assertion (`UV_HANDLE_CLOSING`). With a dead mount the CLI does not hang: it answers in under a second that the sync root cannot be read, so (d) never reaches the backend's 20 s timeout.
+
+**The README's screenshot** comes from `deck-scenarios.sh showcase` (home `s`: six emulator links, one replaced), never the real setup. The QuickAccess page's viewport is 854×454 CSS pixels at a device pixel ratio of 1.5, too short for every card: before `Page.captureScreenshot`, `Emulation.setDeviceMetricsOverride` with width 854, height 780 and `deviceScaleFactor` 1.5 shows them all (`Emulation.clearDeviceMetricsOverride` after). The left nav strip stretches with it, so crop to the panel.
+
+By hand (found in T6, 2026-11-25):
+
+- **Installing:** `~/homebrew/plugins` is owned by root and `sudo` needs the owner's password, so an agent cannot install over SSH. Build the zip (a `SaveTether/` folder holding `dist/index.js`, `main.py`, `plugin.json`, `package.json`, `LICENSE`, `README.md`) in `~/sttest` with `python3 -m zipfile -c` (there is no `zip`), and the owner installs it from Decky's Developer menu.
+- **Seeing the panel:** with Decky's "Allow Remote CEF Debugging" on, tunnel `ssh -L 8081:localhost:8081 <deck>` and use the debugger's WebSocket from Node 22+ (built-in `fetch` and `WebSocket`). In the `SharedJSContext` target, `DFL.Navigation.OpenQuickAccessMenu(999)` opens the Decky tab and `DeckyPluginLoader.deckyState.setActivePlugin("SaveTether")` opens the plugin. In the `QuickAccess` target, read `[data-st-overall]` and `[data-st-card]`, click the Check now button, and take `Page.captureScreenshot`. Stop only the tunnel's own `ssh` afterwards, and switch CEF debugging off when done: it is open to the whole network.
+- **Test setups:** `~/homebrew/settings/SaveTether` is owned by `deck`. A `settings.json` there with `{"savetether_home": "<home under ~/sttest>"}` points the plugin at a throwaway home on the next check (the backend refuses anything outside `~/sttest`). Delete the file afterwards, so the plugin reads the real setup again.
+- A CLI older than `status --sizes` (0.6.1 and before) answers exit 64; the backend retries without it and every card says "size unknown".
+
 ## Test flows by feature
 
 Each flow lists what to set up, what to do, and what to check. Run the flows of every feature the change touches; the Deck flows matter most.
@@ -148,6 +194,19 @@ Set up a throwaway device with the CLI: `init --create-root`, `map add`, a save 
 - Settings, Desktop notifications off: close the window again from a fresh start; no notification. On again: it shows.
 
 On Windows, check first that notifications are on at all: `HKCU\Software\Microsoft\Windows\CurrentVersion\PushNotifications`, `ToastEnabled` 0 means every toast is dropped silently, and the PowerShell that sends them still exits 0 (found 2026-11-23: why none had ever been seen). The first close to the tray raises one, so it is the quickest check. Who sent it: the installed copy, started from its Start menu entry's program, sends as that entry and shows SaveTether's name and icon; any other copy (a build, an unpacked package) sends as `SaveTether`, registered under `HKCU\Software\Classes\AppUserModelId`, and shows the name without an icon. Windows 11 ignored an `IconUri` there (PNG or ICO, with or without `IconBackgroundColor`).
+
+### Notifications switch and `operation_running` (CLI, and the app honouring the switch)
+
+Set up a throwaway device with the CLI (`init --create-root`), a small mapping applied with `--copy`, and a mapping whose source holds about 30,000 small files (30 folders of 1,000), not yet applied. Then:
+
+- `notifications`, then `notifications off`, `notifications on` and `notifications mute`: on, off (`notifications.txt` says `off`), on, and exit 64.
+- `status --json`, idle: `operation_running` false and no "Another SaveTether process" line.
+- Start `apply <big> --copy` in the background (about 8 s on the Deck) and poll `status --json` from the same shell while it runs: true on every poll once the lock is taken, the text line shows, `notifications off` still works, and a second `revert` is refused naming `cli apply`. After it: false, and no `operation-holder.json` left in the local folder.
+- The app: replace the small mapping's link with a real folder holding a file. Write the bin folder's path into `install-declined.txt` in the local folder, or the unpacked copy stops at the install offer and never checks. Watch `dbus-monitor --session "type='method_call',interface='org.freedesktop.Notifications',member='Notify'"` while it starts as a user unit (see "Running the app"): with `notifications off`, no `Notify`; with `on`, one, "<app> <role>: not linked.". While it idles, `status` says `operation_running` false.
+
+`--json` is indented: grep for `'"operation_running": *[a-z]*'`, with the space. An app older than this change (0.7.0-beta1 and before) leaves `operation-holder.json` behind after every operation. A new CLI then reports `operation_running` true for as long as that old app runs, if it was the last to take the lock.
+
+- *Run on the Deck, 2026-11-25 (branch `feature/decky-notification-support`, 3ff410e, Native AOT built on the Mint box, where `dotnet test` passed 1025):* all of the above as described; 108 of 109 polls during the apply said true (the first came before the lock was taken). Not run: the app finishing an operation of its own and then idling with no holder file (it needs the app driven to Apply; covered by `OperationLockTests`), and a holder whose start time cannot be read.
 
 ### First-run setup
 

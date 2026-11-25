@@ -5,7 +5,7 @@ namespace SaveTether.Gui.Presentation;
 /// <summary>What one check gave, for the window, the tray icon and the notification.</summary>
 /// <param name="Shown">What the window shows: this check's result.</param>
 /// <param name="Icon">What the tray icon shows. It stays as it was while another process holds the operation lock.</param>
-/// <param name="Notification">One sentence or more to notify, or null for none.</param>
+/// <param name="Notification">The sentence to notify, or null for none.</param>
 /// <param name="LockHeldBy">The other process holding the operation lock, when one does.</param>
 /// <param name="Error">An unexpected failure of this check. <see cref="Shown"/> is then the last good result.</param>
 public sealed record CheckResult(
@@ -19,8 +19,9 @@ public sealed record CheckResult(
 /// <item>A check already running is not started twice: <see cref="Run"/> returns null instead.</item>
 /// <item>While another process holds the operation lock, the folder it works on may look Replaced for a
 /// moment, so the result is shown but changes neither the icon nor what has been notified.</item>
-/// <item>A notification names only what is amber now and was not at the last accepted check, so one
-/// problem is notified once, not at every check. At start, an amber state is notified once.</item>
+/// <item>A notification is raised only when something is amber now that was not at the last accepted check,
+/// so one problem is notified once, not at every check. At start, an amber state is notified once.</item>
+/// <item>It says the headline ("2 apps need attention."), not each problem: the window shows the rest.</item>
 /// <item>An unexpected failure keeps the last state; three in a row turn it to "Health check failed".</item>
 /// </list>
 /// </remarks>
@@ -115,28 +116,24 @@ public sealed class HealthMonitor(Func<OverallStatus> check, Func<LockHolder?> l
         }
     }
 
-    /// <summary>Takes a result as the icon's state, and works out what is new since the last one.</summary>
+    /// <summary>Takes a result as the icon's state, and works out whether anything is new since the last one.</summary>
     private CheckResult Accept(OverallStatus next)
     {
         var problems = Problems(next);
-        var fresh = problems.Where(p => !_notified.Contains(p.Key)).Select(p => p.Text).ToList();
-        _notified = problems.Select(p => p.Key).ToHashSet(StringComparer.Ordinal);
+        var fresh = problems.Any(p => !_notified.Contains(p));
+        _notified = problems.ToHashSet(StringComparer.Ordinal);
         _accepted = next;
-        return new CheckResult(next, next, fresh.Count == 0 ? null : string.Join(" ", fresh));
+        return new CheckResult(next, next, fresh ? next.Headline + "." : null);
     }
 
     /// <summary>
-    /// What is amber, each with a key that stays the same while the problem does. A device-wide condition
+    /// What is amber, each as a key that stays the same while the problem does. A device-wide condition
     /// (section 3, rows 1 to 5) is one problem: the mappings under it are covered by its banner.
     /// </summary>
-    private static List<(string Key, string Text)> Problems(OverallStatus status) => status.Condition switch
+    private static List<string> Problems(OverallStatus status) => status.Condition switch
     {
         OverallCondition.AllLinked => [],
-        OverallCondition.NeedsAttention => status.Attention
-            .Select(m => ($"{m.MappingId}:{m.Word.Word}", $"{m.AppName} {m.Role}: {Lower(m.Word.Word)}."))
-            .ToList(),
-        _ => [($"condition:{status.Condition}", status.Headline + ".")],
+        OverallCondition.NeedsAttention => status.Attention.Select(m => $"{m.MappingId}:{m.Word.Word}").ToList(),
+        _ => [$"condition:{status.Condition}"],
     };
-
-    private static string Lower(string word) => word.Length == 0 ? word : char.ToLowerInvariant(word[0]) + word[1..];
 }

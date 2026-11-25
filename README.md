@@ -77,6 +77,7 @@ Each holds the desktop app (`savetether-gui`) and the command line (`savetether`
 
 - **Windows:** the installer puts SaveTether in `%LOCALAPPDATA%\Programs\SaveTether` with a Start menu entry; uninstall it from Settings > Apps. From the `.zip`, keep the files together.
 - **Linux:** unpack it anywhere and start `savetether-gui`. The first run offers to install it for your user (into `~/.local` and the app menu); Settings > Uninstall removes it.
+- **Steam Deck, Game Mode:** the [SaveTether Decky plugin](https://github.com/carlocgc/SaveTether-Decky) shows each link's state in the Quick Access menu, with Check now. It reads the installed command line, so install SaveTether in Desktop Mode first; fixes are made in the desktop app. It needs [Decky Loader](https://decky.xyz/), and installing it is described in its README.
 
 ## Getting started
 

@@ -30,7 +30,7 @@ public class StatusCheckTests
 
         Assert.Equal(new StateWord("Linked", Shade.Green), StateWords.For(HealthState.Ok, null));
         Assert.Equal(new StateWord("Ready to link", Shade.Grey), StateWords.For(HealthState.NotApplied, HealthReason.NotLinkedYet));
-        Assert.Equal(new StateWord("Not on this device", Shade.Grey), StateWords.For(HealthState.NotApplied, HealthReason.NoSaveFolder));
+        Assert.Equal(new StateWord("Not set up here", Shade.Grey), StateWords.For(HealthState.NotApplied, HealthReason.NoSaveFolder));
         Assert.Equal(new StateWord("Device file error", Shade.Amber), StateWords.For(HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute));
         Assert.Equal(new StateWord("Not linked", Shade.Amber), StateWords.For(HealthState.Replaced, HealthReason.FolderHoldsFiles));
         Assert.Equal(new StateWord("Link missing", Shade.Amber), StateWords.For(HealthState.Replaced, HealthReason.FolderEmpty));
@@ -150,7 +150,7 @@ public class StatusCheckTests
         deck.Ok("map", "add", "other.saves", "--target", "other/Saves", "--source", sandbox.Dir("deck", "other"));
         var mixed = StatusCheck.Run(local);
         Assert.Equal(OverallCondition.AllLinked, mixed.Condition);
-        Assert.Contains(mixed.Mappings, m => m.Word.Word == "Not on this device");
+        Assert.Contains(mixed.Mappings, m => m.Word.Word == "Not set up here");
         Assert.Equal("1 linked, 1 ready to link", mixed.Headline);
         pc.Ok("apply", "ppsspp.states");
         Assert.Equal("All linked", StatusCheck.Run(local).Headline);

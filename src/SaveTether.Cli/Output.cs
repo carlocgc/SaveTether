@@ -123,6 +123,9 @@ internal sealed record CliOutput
 
     public StatusReport? Status { get; init; }
 
+    /// <summary>"notifications": the switch as it now is.</summary>
+    public NotificationsOutput? Notifications { get; init; }
+
     /// <summary>"device list": the devices, the mappings and the backups.</summary>
     public MaintenanceOverview? Devices { get; init; }
 
@@ -165,6 +168,9 @@ public sealed record DeviceRemovalOutput(
     int BackupsDeleted,
     string? Other = null,
     [property: JsonIgnore] bool DeleteEverything = false);
+
+/// <summary>"notifications": whether the "Desktop notifications" switch is on.</summary>
+public sealed record NotificationsOutput(bool On);
 
 /// <summary>"uninstall": the paths removed, and each one left with the reason.</summary>
 public sealed record UninstallOutput(IReadOnlyList<string> Removed, IReadOnlyList<string> Left);
@@ -234,6 +240,11 @@ internal static class OutputWriter
         if (output.Status is { } status)
         {
             WriteStatus(status, stdout, stderr);
+        }
+
+        if (output.Notifications is { } notifications)
+        {
+            stdout.WriteLine($"Desktop notifications: {(notifications.On ? "on" : "off")}");
         }
 
         if (output.Devices is { } overview)
@@ -446,7 +457,13 @@ internal static class OutputWriter
         var width = status.Mappings.Select(m => m.MappingId.Length).DefaultIfEmpty(0).Max();
         foreach (var mapping in status.Mappings)
         {
-            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-12}  {Hints.Compose(mapping.Detail)}");
+            var size = mapping.Bytes is { } bytes ? $" ({mapping.Files} file(s), {FormatBytes(bytes)})" : "";
+            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-12}  {Hints.Compose(mapping.Detail)}{size}");
+        }
+
+        if (status.OperationRunning)
+        {
+            stdout.WriteLine("Another SaveTether process is running an operation.");
         }
 
         if (status.DeviceFileMismatch)

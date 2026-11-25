@@ -25,14 +25,21 @@ public class HealthMonitorTests
         Assert.Null(monitor.Run()!.Notification);
 
         next = Attention(("ryujinx.saves", "Ryujinx", HealthState.Replaced, HealthReason.FolderHoldsFiles));
-        Assert.Equal("Ryujinx saves: not linked.", monitor.Run()!.Notification);
+        Assert.Equal("1 app needs attention.", monitor.Run()!.Notification);
         Assert.Null(monitor.Run()!.Notification);
 
-        // A second problem: only the new one is named.
+        // A second problem: notified with the new count.
         next = Attention(
             ("ryujinx.saves", "Ryujinx", HealthState.Replaced, HealthReason.FolderHoldsFiles),
             ("eden.save", "Eden", HealthState.Broken, HealthReason.SharedFolderMissing));
-        Assert.Equal("Eden save: shared folder missing.", monitor.Run()!.Notification);
+        Assert.Equal("2 apps need attention.", monitor.Run()!.Notification);
+
+        // Another mapping of an app already counted is new too, though the count stays.
+        next = Attention(
+            ("ryujinx.saves", "Ryujinx", HealthState.Replaced, HealthReason.FolderHoldsFiles),
+            ("eden.save", "Eden", HealthState.Broken, HealthReason.SharedFolderMissing),
+            ("eden.config", "Eden", HealthState.Broken, HealthReason.SharedFolderMissing));
+        Assert.Equal("2 apps need attention.", monitor.Run()!.Notification);
 
         // Green again: nothing is notified, the icon changes.
         next = Green;
@@ -42,11 +49,11 @@ public class HealthMonitorTests
 
         // The same problem coming back is new again.
         next = Attention(("ryujinx.saves", "Ryujinx", HealthState.Replaced, HealthReason.FolderHoldsFiles));
-        Assert.Equal("Ryujinx saves: not linked.", monitor.Run()!.Notification);
+        Assert.Equal("1 app needs attention.", monitor.Run()!.Notification);
 
         // The same mapping in another amber state is a new problem.
         next = Attention(("ryujinx.saves", "Ryujinx", HealthState.Replaced, HealthReason.FolderEmpty));
-        Assert.Equal("Ryujinx saves: link missing.", monitor.Run()!.Notification);
+        Assert.Equal("1 app needs attention.", monitor.Run()!.Notification);
     }
 
     [Fact]

@@ -94,7 +94,7 @@ public sealed record OverallStatus(
 
     /// <summary>
     /// Green, so nothing needs the owner, but "All linked" only when it is so: the folders this device has and has not
-    /// linked yet ("Ready to link") are counted, as "Apply all" counts them. "Not on this device" is not counted: a
+    /// linked yet ("Ready to link") are counted, as "Apply all" counts them. "Not set up here" is not counted: a
     /// mapping set up on another device and not wanted here is normal (5.14). Found by the owner on 2026-11-20, with
     /// every link reverted and the header still saying "All linked".
     /// </summary>
