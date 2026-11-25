@@ -122,7 +122,23 @@ Some things only show with real data: the first run of setup on the Deck crashed
 
 ## The Decky plugin in Game Mode
 
-The plugin lives in the `SaveTether-Decky` repository; its phase file is `docs/plans/phase-4-decky-plugin.md`. T8 turns this into a scripted harness; until then, by hand (found in T6, 2026-11-25):
+The plugin lives in the `SaveTether-Decky` repository; its phase file is `docs/plans/phase-4-decky-plugin.md`.
+
+**The harness** (T8, in the plugin repository): `scripts/qam-check.mjs` runs on the PC (Node 22+, no install) and `scripts/deck-scenarios.sh` on the Deck. The Deck must be in Game Mode with Decky's "Allow Remote CEF Debugging" on.
+
+1. Copy `deck-scenarios.sh` to `~/sttest` on the Deck and run `deck-scenarios.sh setup`. It builds four throwaway homes under `~/sttest/decky`, each with `ppsspp.savedata` and `dolphin.gc` linked: (a) as is; (b) the PPSSPP link replaced by a folder holding a file; (c) Dolphin's shared folder deleted; (d) the sync folder on a `fuse-overlayfs` mount whose process was then killed.
+2. Save the real setup's status first: `savetether status --json > real-before.json`, in a shell without `SAVETETHER_HOME`.
+3. Open the tunnel: `ssh -N -L 8081:localhost:8081 <deck>`.
+4. For each of a to d: `deck-scenarios.sh use <x>` on the Deck, then `node scripts/qam-check.mjs --expect scripts/expected/<x>.json --shot <x>.png` on the PC. Exit 0 means the panel matched; 1 prints both what it showed and what was expected; 2 means the harness could not run.
+5. (e) needs the owner's leave: it renames the real `~/.local/bin/savetether` to `savetether.st-away`, runs `--expect expected/e.json` (the "Install SaveTether in Desktop Mode" state), and renames it back.
+6. (f): `deck-scenarios.sh real`, then `--status real-before.json`: every mapping has a card, and a card says Linked exactly when the CLI says `ok`. Then save `status --json` again and `diff` it with the first: the real setup must be unchanged.
+7. `deck-scenarios.sh cleanup` (removes the plugin's `settings.json`, unmounts d, removes `~/sttest/decky`), stop the tunnel's own `ssh`, and switch CEF debugging off.
+
+The harness waits for the check the panel runs when it opens, presses Check now, and requires "Checking…" to show after the press: a `MutationObserver` catches it, because with the CLI missing the check ends within milliseconds and polling missed it. On Windows, end the script by closing its WebSockets and setting `process.exitCode`: `process.exit()` with a socket open trips a libuv assertion (`UV_HANDLE_CLOSING`). With a dead mount the CLI does not hang: it answers in under a second that the sync root cannot be read, so (d) never reaches the backend's 20 s timeout.
+
+**The README's screenshot** comes from `deck-scenarios.sh showcase` (home `s`: six emulator links, one replaced), never the real setup. The QuickAccess page's viewport is 854×454 CSS pixels at a device pixel ratio of 1.5, too short for every card: before `Page.captureScreenshot`, `Emulation.setDeviceMetricsOverride` with width 854, height 780 and `deviceScaleFactor` 1.5 shows them all (`Emulation.clearDeviceMetricsOverride` after). The left nav strip stretches with it, so crop to the panel.
+
+By hand (found in T6, 2026-11-25):
 
 - **Installing:** `~/homebrew/plugins` is owned by root and `sudo` needs the owner's password, so an agent cannot install over SSH. Build the zip (a `SaveTether/` folder holding `dist/index.js`, `main.py`, `plugin.json`, `package.json`, `LICENSE`, `README.md`) in `~/sttest` with `python3 -m zipfile -c` (there is no `zip`), and the owner installs it from Decky's Developer menu.
 - **Seeing the panel:** with Decky's "Allow Remote CEF Debugging" on, tunnel `ssh -L 8081:localhost:8081 <deck>` and use the debugger's WebSocket from Node 22+ (built-in `fetch` and `WebSocket`). In the `SharedJSContext` target, `DFL.Navigation.OpenQuickAccessMenu(999)` opens the Decky tab and `DeckyPluginLoader.deckyState.setActivePlugin("SaveTether")` opens the plugin. In the `QuickAccess` target, read `[data-st-overall]` and `[data-st-card]`, click the Check now button, and take `Page.captureScreenshot`. Stop only the tunnel's own `ssh` afterwards, and switch CEF debugging off when done: it is open to the whole network.
