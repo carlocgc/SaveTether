@@ -446,7 +446,8 @@ internal static class OutputWriter
         var width = status.Mappings.Select(m => m.MappingId.Length).DefaultIfEmpty(0).Max();
         foreach (var mapping in status.Mappings)
         {
-            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-12}  {Hints.Compose(mapping.Detail)}");
+            var size = mapping.Bytes is { } bytes ? $" ({mapping.Files} file(s), {FormatBytes(bytes)})" : "";
+            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-12}  {Hints.Compose(mapping.Detail)}{size}");
         }
 
         if (status.DeviceFileMismatch)

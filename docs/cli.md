@@ -162,10 +162,10 @@ Lists the apps that have a definition, and whether each is built in, shared or i
 ## status
 
 ```
-savetether status [<id>]
+savetether status [<id>] [--sizes]
 ```
 
-Shows each mapping's state on this device, or one mapping's. It only reads. It warns when an earlier operation did not finish, when the sync root cannot be used, when this device's name is in use by another install, and when the desktop app's start-with-the-session entry points to a program that is gone. It also says when another device removed this one from the sync folder, when this device's own removal did not finish (`device remove` finishes it), and when the file of a removed device has come back (`device remove --other <name>` deletes it again).
+Shows each mapping's state on this device, or one mapping's. It only reads. `--sizes` adds the size and file count of each shared copy; it walks every shared folder, so it takes longer on large saves. It warns when an earlier operation did not finish, when the sync root cannot be used, when this device's name is in use by another install, and when the desktop app's start-with-the-session entry points to a program that is gone. It also says when another device removed this one from the sync folder, when this device's own removal did not finish (`device remove` finishes it), and when the file of a removed device has come back (`device remove --other <name>` deletes it again).
 
 | State | Meaning | Usually |
 |---|---|---|
@@ -180,6 +180,7 @@ Shows each mapping's state on this device, or one mapping's. It only reads. It w
 ```bash
 savetether status
 savetether status cemu.save
+savetether status --sizes
 ```
 
 ## device list

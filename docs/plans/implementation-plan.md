@@ -560,6 +560,10 @@ Progress: T1 done (design 5.16 and the "no admin" lines); T2 done (detection); T
 
 ## 6. Phase 4: Decky plugin
 
+Planned 2026-11-25: everything is in [phase-4-decky-plugin.md](phase-4-decky-plugin.md): the owner's decisions (read-only first version, a separate `SaveTether-Decky` repo, GitHub releases instead of the Decky store), the mockup, tasks T1 to T9 with the model for each, and the Game Mode test harness over the CEF debugger. The table below is the earlier outline; Recover and Apply move to after the first version.
+
+Progress: T1 done (`status --sizes`); T2 done (docs). The `SaveTether-Decky` repo exists and Decky (Developer mode, CEF debugging) is on the Deck (2026-11-25); T3 onward can start.
+
 Goal, revised 2026-11-17: status in Game Mode, with only the actions that need no input (design 5.11). Starts with a short design step against the then-current Decky API.
 
 | Item | Deliver | Tests |

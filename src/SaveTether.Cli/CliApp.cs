@@ -2,6 +2,7 @@ using SaveTether.Core;
 using SaveTether.Core.Backup;
 using SaveTether.Core.Diagnostics;
 using SaveTether.Core.Execution;
+using SaveTether.Core.Health;
 using SaveTether.Core.FileSystem;
 using SaveTether.Core.Model;
 using SaveTether.Core.Operations;
@@ -125,8 +126,9 @@ internal static class CliApp
               shared definitions folder. --search keeps those whose name or ID contains the text,
               or whose Steam app ID it is.
 
-          savetether status [<id>]
-              Show each mapping's state on this device.
+          savetether status [<id>] [--sizes]
+              Show each mapping's state on this device. --sizes adds the size and file count of
+              each shared copy; it reads every file's size, so it can take longer.
 
           savetether apply <id> [--copy | --no-copy | --add-missing | --replace-shared --confirm-replace]
                            [--assume-synced] [--assume-closed] [--grant-sandbox] [--dry-run]
@@ -485,10 +487,32 @@ internal static class CliApp
             {
                 AutostartMissing = SaveTether.Core.Startup.Autostart.Check(environment.Autostart).MissingProgram,
             };
+            if (command.Has("--sizes"))
+            {
+                report = report with { Mappings = report.Mappings.Select(WithSize).ToList() };
+            }
+
             return new CliOutput
             {
                 Command = command.Name, ExitCode = report.JournalOpen ? ExitRecoveryNeeded : ExitSuccess, Status = report,
             };
+        }
+
+        /// <summary>
+        /// Adds the shared copy's size and file count, left out when the copy is not there or cannot be read:
+        /// a sync tool swapping a folder mid-walk must not cost the whole report its health.
+        /// </summary>
+        private static MappingHealth WithSize(MappingHealth mapping)
+        {
+            try
+            {
+                var (exists, _, bytes, files) = Workspace.Measure(mapping.Target);
+                return exists ? mapping with { Bytes = bytes, Files = files } : mapping;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return mapping;
+            }
         }
 
         private CliOutput Apply()
