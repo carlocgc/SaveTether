@@ -283,7 +283,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     }
 
     /// <summary>
-    /// "Delete" (section 5), on a "Not on this device" row no device uses: <c>map delete</c> after its confirmation. It removes the
+    /// "Delete" (section 5), on a "Not set up here" row no device uses: <c>map delete</c> after its confirmation. It removes the
     /// shared saves, record and markers for every device, after a verified backup on this device (design 5.3, invariant 2).
     /// </summary>
     public Task DeleteMappingAsync(MappingState mapping) =>

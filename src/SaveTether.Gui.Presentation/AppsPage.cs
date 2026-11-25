@@ -30,12 +30,12 @@ public enum RowAction
     /// <summary>Open the shared folder's parent: the shared folder itself is missing.</summary>
     OpenSharedFolderParent,
 
-    /// <summary>"map remove": forget this device's folder for the mapping, which moves to "Not on this device". Only offered when Ready to link.</summary>
+    /// <summary>"map remove": forget this device's folder for the mapping, which moves to "Not set up here". Only offered when Ready to link.</summary>
     Remove,
 
     /// <summary>
     /// "map delete": a mapping no device uses is deleted from the shared folder (its shared copy and its record, on every device's sync folder). Shown as its own
-    /// red button, on a "Not on this device" row that says no device has a folder set for it.
+    /// red button, on a "Not set up here" row that says no device has a folder set for it.
     /// </summary>
     Delete,
 
@@ -48,7 +48,7 @@ public enum RowAction
     /// <summary>Folder gone, for a folder added by hand: the hand form for this mapping, to give where it is now (section 8).</summary>
     ChooseFolderAgain,
 
-    /// <summary>Not on this device: Add app's page 2 for this app (section 5.1), or the hand form when the app has no definition.</summary>
+    /// <summary>Not set up here: Add app's page 2 for this app (section 5.1), or the hand form when the app has no definition.</summary>
     AddHere,
 
     /// <summary>

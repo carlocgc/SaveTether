@@ -433,7 +433,7 @@ internal sealed class MainWindow : Window
     {
         var mapping = row.Mapping;
         var name = withApp ? $"{mapping.AppName} {mapping.Role}" : mapping.Role;
-        // In "Not on this device" every row has the same state, which the section's name already says, so that column is dropped
+        // In "Sync folders ignored by this device" every row has the same state, which the section's name already says, so that column is dropped
         // and its room goes to the name, which there carries the app as well.
         // The two button columns share their width across every row (the rows' parent is a shared size scope), so a row with an
         // extra button, such as Delete, does not move the sentence of the rows without one.

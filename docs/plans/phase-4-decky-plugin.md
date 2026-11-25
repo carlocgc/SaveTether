@@ -40,9 +40,9 @@ The mockup is the layout reference for T6 and the expected look in T9. Open [dec
 │ ▌● Celeste            Linked  │   │ ▌  desktop app to relink.     │
 │ ▌  96 KB · 3 files            │   │ ▌● Celeste  Shared folder     │ amber
 │ ▌● Dolphin (GC)               │   │ ▌           missing           │
-│ ▌     Not on this device      │   │ ▌  size unknown               │
+│ ▌     Not set up here         │   │ ▌  size unknown               │
 │ ▌  412 MB · 9 files           │   │ ▌● Hollow Knight      Linked  │ green
-└───────────────────────────────┘   │ ▌● Dolphin (GC)  Not on this… │ grey
+└───────────────────────────────┘   │ ▌● Dolphin (GC)  Not set up…  │ grey
                                     └───────────────────────────────┘
 ```
 
@@ -61,7 +61,7 @@ Each card is a dark row with a 3 px left bar in its shade colour (green, grey or
   - Journal open: "Unfinished operation. Open the desktop app."
   - Sync folder unavailable.
   - Check failed (the CLI's `message`).
-- Colours and words copy `StateWords.cs` exactly: green Linked; grey "Not on this device" and "Ready to link"; everything else amber. The overall order copies `OverallState.cs:156-162`.
+- Colours and words copy `StateWords.cs` exactly: green Linked; grey "Not set up here" and "Ready to link"; everything else amber. The overall order copies `OverallState.cs:156-162`.
 - The plugin checks when the panel opens, and again only on Check now. It never polls in the background, which saves battery during games.
 
 ## Tasks
