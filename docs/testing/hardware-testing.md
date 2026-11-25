@@ -176,6 +176,19 @@ Set up a throwaway device with the CLI: `init --create-root`, `map add`, a save 
 
 On Windows, check first that notifications are on at all: `HKCU\Software\Microsoft\Windows\CurrentVersion\PushNotifications`, `ToastEnabled` 0 means every toast is dropped silently, and the PowerShell that sends them still exits 0 (found 2026-11-23: why none had ever been seen). The first close to the tray raises one, so it is the quickest check. Who sent it: the installed copy, started from its Start menu entry's program, sends as that entry and shows SaveTether's name and icon; any other copy (a build, an unpacked package) sends as `SaveTether`, registered under `HKCU\Software\Classes\AppUserModelId`, and shows the name without an icon. Windows 11 ignored an `IconUri` there (PNG or ICO, with or without `IconBackgroundColor`).
 
+### Notifications switch and `operation_running` (CLI, and the app honouring the switch)
+
+Set up a throwaway device with the CLI (`init --create-root`), a small mapping applied with `--copy`, and a mapping whose source holds about 30,000 small files (30 folders of 1,000), not yet applied. Then:
+
+- `notifications`, then `notifications off`, `notifications on` and `notifications mute`: on, off (`notifications.txt` says `off`), on, and exit 64.
+- `status --json`, idle: `operation_running` false and no "Another SaveTether process" line.
+- Start `apply <big> --copy` in the background (about 8 s on the Deck) and poll `status --json` from the same shell while it runs: true on every poll once the lock is taken, the text line shows, `notifications off` still works, and a second `revert` is refused naming `cli apply`. After it: false, and no `operation-holder.json` left in the local folder.
+- The app: replace the small mapping's link with a real folder holding a file. Write the bin folder's path into `install-declined.txt` in the local folder, or the unpacked copy stops at the install offer and never checks. Watch `dbus-monitor --session "type='method_call',interface='org.freedesktop.Notifications',member='Notify'"` while it starts as a user unit (see "Running the app"): with `notifications off`, no `Notify`; with `on`, one, "<app> <role>: not linked.". While it idles, `status` says `operation_running` false.
+
+`--json` is indented: grep for `'"operation_running": *[a-z]*'`, with the space. An app older than this change (0.7.0-beta1 and before) leaves `operation-holder.json` behind after every operation. A new CLI then reports `operation_running` true for as long as that old app runs, if it was the last to take the lock.
+
+- *Run on the Deck, 2026-11-25 (branch `feature/decky-notification-support`, 3ff410e, Native AOT built on the Mint box, where `dotnet test` passed 1025):* all of the above as described; 108 of 109 polls during the apply said true (the first came before the lock was taken). Not run: the app finishing an operation of its own and then idling with no holder file (it needs the app driven to Apply; covered by `OperationLockTests`), and a holder whose start time cannot be read.
+
 ### First-run setup
 
 - **Fresh, throwaway:** an empty local folder and an empty sync folder. Type the sync folder, Next: "not set up for SaveTether yet". "This is my first device": the dialog opens with Cancel focused (outlined); Escape closes it and nothing is written. Confirm it, Return on step 2 (keeps the suggested name), Return on step 3 (Set up): "All linked", "No apps are set up yet", and `bootstrap.json` written.
