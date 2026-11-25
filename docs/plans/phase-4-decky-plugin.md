@@ -11,7 +11,7 @@ Design 5.11 (`docs/design/save-redirection-design.md`) already plans a status-fi
 Decisions made with the owner (2026-11-25):
 
 - **Distribution: GitHub releases only, not the Decky store.** The store rejects LLM-written plugins (wiki "Submitting Plugins", "AI, LLMs and so on"; the database PR checklist asks that "Generative AI was NOT used to write a majority of the code"). Store builds also come only from the database repo's own CI after a human-reviewed PR, so our CI could never publish to testing.deckbrew.xyz or plugins.deckbrew.xyz. Users install the zip with Decky's manual install (Developer mode).
-- **Repo: a separate `savetether-decky` repo**, MIT plus the template's BSD-3 notice. The plugin sits at the repo root, Node stays out of the .NET CI, and the only coupling is the frozen `--json` contract v1.
+- **Repo: a separate `SaveTether-Decky` repo**, MIT plus the template's BSD-3 notice. The plugin sits at the repo root, Node stays out of the .NET CI, and the only coupling is the frozen `--json` contract v1.
 - **Scope v1: read-only.** Overview, a Check now button, and one card per link. Recover and the choice-free Apply from 5.11 move to a later phase. A read-only plugin cannot harm the real setup.
 - **Sizes: a new opt-in `status --sizes`** adds `bytes` and `files` to each mapping. The desktop app measures today (`FolderSizes.cs`, `Workspace.Measure` at `Workspace.Apps.cs:436`), but the CLI does not.
 
@@ -89,7 +89,7 @@ The model shown is the recommended implementer. Opus takes design-heavy or judge
 - `implementation-plan.md`: a phase 4 progress entry.
 - `CLAUDE.md`: an index row for the phase file and the plugin repo.
 
-### In the new `savetether-decky` repo
+### In the new `SaveTether-Decky` repo
 
 **T3 — Scaffold (Sonnet)**
 - Start from `SteamDeckHomebrew/decky-plugin-template`. Delete `backend/`, `defaults/`, and `assets/` unless used.
@@ -162,7 +162,7 @@ The model shown is the recommended implementer. Opus takes design-heavy or judge
 ## Prerequisites needing the owner's leave
 
 - Decky Loader installed on the Deck. Its Developer mode and "Allow Remote CEF Debugging" are switched on for testing and off after.
-- A public GitHub repo `carlocgc/savetether-decky`, created by the owner.
+- A public GitHub repo `carlocgc/SaveTether-Decky`: created 2026-11-25.
 
 ## Verification (end to end)
 
@@ -182,4 +182,4 @@ The model shown is the recommended implementer. Opus takes design-heavy or judge
 ## Progress
 
 - 2026-11-25: T1 done: `status --sizes` adds `bytes` and `files` per mapping (the shared copy, measured with `Workspace.Measure`; absent when the copy is not there); the text output adds "(N file(s), size)". `StatusSizesTests`, a `status-sizes` scenario in `JsonContractTests`, `docs/cli.md`, `docs/cli-json.md`. T2 done: this file, the mockup page, design 5.11's revision note, the plan's section 6.
-- Next: the owner creates the public `savetether-decky` repo and confirms Decky Loader on the Deck; then T3, T5 (and T7) can start in parallel.
+- 2026-11-25: the owner created https://github.com/carlocgc/SaveTether-Decky (public) and installed Decky Loader on the Deck with Developer mode and CEF debugging on. Next: T3, T5 (and T7) in parallel.
