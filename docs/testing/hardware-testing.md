@@ -120,6 +120,15 @@ Some things only show with real data: the first run of setup on the Deck crashed
 4. Compare: `status`, `state.json` and the device file against the backup. Expect and explain any difference (a take-over gives the device file a new `install_id`).
 5. If the test fails part way, put the backed-up files back at once and check again.
 
+## The Decky plugin in Game Mode
+
+The plugin lives in the `SaveTether-Decky` repository; its phase file is `docs/plans/phase-4-decky-plugin.md`. T8 turns this into a scripted harness; until then, by hand (found in T6, 2026-11-25):
+
+- **Installing:** `~/homebrew/plugins` is owned by root and `sudo` needs the owner's password, so an agent cannot install over SSH. Build the zip (a `SaveTether/` folder holding `dist/index.js`, `main.py`, `plugin.json`, `package.json`, `LICENSE`, `README.md`) in `~/sttest` with `python3 -m zipfile -c` (there is no `zip`), and the owner installs it from Decky's Developer menu.
+- **Seeing the panel:** with Decky's "Allow Remote CEF Debugging" on, tunnel `ssh -L 8081:localhost:8081 <deck>` and use the debugger's WebSocket from Node 22+ (built-in `fetch` and `WebSocket`). In the `SharedJSContext` target, `DFL.Navigation.OpenQuickAccessMenu(999)` opens the Decky tab and `DeckyPluginLoader.deckyState.setActivePlugin("SaveTether")` opens the plugin. In the `QuickAccess` target, read `[data-st-overall]` and `[data-st-card]`, click the Check now button, and take `Page.captureScreenshot`. Stop only the tunnel's own `ssh` afterwards, and switch CEF debugging off when done: it is open to the whole network.
+- **Test setups:** `~/homebrew/settings/SaveTether` is owned by `deck`. A `settings.json` there with `{"savetether_home": "<home under ~/sttest>"}` points the plugin at a throwaway home on the next check (the backend refuses anything outside `~/sttest`). Delete the file afterwards, so the plugin reads the real setup again.
+- A CLI older than `status --sizes` (0.6.1 and before) answers exit 64; the backend retries without it and every card says "size unknown".
+
 ## Test flows by feature
 
 Each flow lists what to set up, what to do, and what to check. Run the flows of every feature the change touches; the Deck flows matter most.
