@@ -575,7 +575,7 @@ Goal, revised 2026-11-17: status in Game Mode, with only the actions that need n
 
 Exit test: every mapping's status readable in Game Mode with the controller; Recover and a choice-free Apply work from there.
 
-Phase 4.1, planned 2026-11-25: toasts in the plugin matching the desktop app's notifications ([phase-4.1-decky-notifications.md](phase-4.1-decky-notifications.md)). T1 to T4 done on `feature/decky-notification-support` (the CLI's `notifications` command, `status --json`'s `operation_running`, docs and mockup), and run on the Deck; T5 to T10 next.
+Phase 4.1, planned 2026-11-25: toasts in the plugin matching the desktop app's notifications ([phase-4.1-decky-notifications.md](phase-4.1-decky-notifications.md)). T1 to T4 done on `feature/decky-notification-support` (the CLI's `notifications` command, `status --json`'s `operation_running`, docs and mockup), and run on the Deck; T5 to T10 next. 2026-11-25, owner: the desktop app's notification and the plugin's toast say the headline as a count ("2 apps need attention.") instead of listing each mapping; when one is raised is unchanged (spec 3.1, as built).
 
 ## 7. Phase 5: public release
 
