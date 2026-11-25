@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using SaveTether.Core.Startup;
 using SaveTether.Gui.Presentation;
 
 namespace SaveTether.Gui;

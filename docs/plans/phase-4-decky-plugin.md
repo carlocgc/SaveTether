@@ -19,7 +19,7 @@ Decisions made with the owner (2026-11-25):
 
 Store plugins (Ludusavi, Syncthing, ZeroTier) all use the same QAM idiom: the title with a back arrow, short grey info lines, one full-width primary button, uppercase section headers, and full-width rows with a status icon on the left. We follow it.
 
-The mockup is the layout reference for T6 and the expected look in T9. Open [decky-mockup.html](../design/decky-mockup.html) in a browser; the text version below is the same layout.
+The mockup is the layout reference for T6 and the expected look in T9. The "Mute notifications" row and the toast in the page are [phase 4.1](phase-4.1-decky-notifications.md)'s, not built yet. Open [decky-mockup.html](../design/decky-mockup.html) in a browser; the text version below is the same layout.
 
 ```
  All linked                          Needs attention
@@ -32,6 +32,7 @@ The mockup is the layout reference for T6 and the expected look in T9. Open [dec
 │ │ steamdeck · checked 14:21 │ │   │ │ steamdeck · checked 14:23 │ │
 │ └───────────────────────────┘ │   │ └───────────────────────────┘ │
 │ [ Check now              ⟳ ]  │   │ [ Check now              ⟳ ]  │
+│ Mute notifications     (○ )   │   │ Mute notifications     (○ )   │
 │ LINKS                         │   │ LINKS                         │
 │ ▌● Hollow Knight      Linked  │   │ ▌● Stardew Valley  Not linked │ amber
 │ ▌  2.1 MB · 14 files          │   │ ▌  18.4 MB · 62 files         │
@@ -180,7 +181,7 @@ The model shown is the recommended implementer. Opus takes design-heavy or judge
 - Recover and Apply buttons
 - Per-card actions
 - Full-screen pages
-- Background polling and toasts
+- Background polling and toasts (planned later: [phase 4.1](phase-4.1-decky-notifications.md))
 - Bundling the CLI in the plugin zip (the plugin relies on the installed CLI, like Decky Ludusavi does)
 - Store submission
 

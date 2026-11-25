@@ -147,6 +147,10 @@ internal static class CliApp
           savetether revert <id> [--assume-closed] [--dry-run]
               Make the save folder a real folder again, holding a copy of the shared saves.
 
+          savetether notifications [on|off]
+              Show, or set, this device's "Desktop notifications" switch, which the desktop app
+              follows. Off silences notifications only; status still shows problems.
+
           savetether device list
               The devices in the sync folder, the mappings, and this device's backups.
 
@@ -217,7 +221,7 @@ internal static class CliApp
                 using var held = Writes ? OperationLock.Acquire(_local, "cli", command.Name) : null;
 
                 // While an operation is unfinished, only looking and recovering are allowed.
-                var readOnly = command.Name is "status" or "backup list" or "recover" or "app list" or "device list"
+                var readOnly = command.Name is "status" or "backup list" or "recover" or "app list" or "device list" or "notifications"
                     || (command.Name == "app add" && command.Has(ArgParser.DryRun));
                 if (!readOnly && Journal.For(_local).IsOpen)
                 {
@@ -233,6 +237,7 @@ internal static class CliApp
                     "app add" => AppAdd(),
                     "app list" => AppList(),
                     "status" => Status(),
+                    "notifications" => Notifications(),
                     "device list" => new CliOutput
                     {
                         Command = command.Name, ExitCode = ExitSuccess, Devices = Maintenance.Overview(Open()),
@@ -274,7 +279,7 @@ internal static class CliApp
         /// guarded against.
         /// </remarks>
         private bool Writes =>
-            command.Name is not ("status" or "backup list" or "app list" or "device list" or "uninstall")
+            command.Name is not ("status" or "backup list" or "app list" or "device list" or "notifications" or "uninstall")
             && !command.Has(ArgParser.DryRun)
             && (command.Name != "init" || Directory.Exists(_local.Folder));
 
@@ -483,9 +488,18 @@ internal static class CliApp
 
         private CliOutput Status()
         {
+            // Looked at before and after: an operation that ends while the links are read leaves them half changed in the
+            // report, and its holder file is gone by then. The lock's time catches one that starts and ends within the read.
+            var taken = OperationLock.LastTaken(_local);
+            var running = OperationLock.HeldByAnotherProcess(_local) is not null;
             var report = Open().Status(command.FirstPositional) with
             {
                 AutostartMissing = SaveTether.Core.Startup.Autostart.Check(environment.Autostart).MissingProgram,
+            };
+            // Reads the holder file only: status never takes the lock.
+            report = report with
+            {
+                OperationRunning = running || OperationLock.HeldByAnotherProcess(_local) is not null || OperationLock.LastTaken(_local) != taken,
             };
             if (command.Has("--sizes"))
             {
@@ -495,6 +509,31 @@ internal static class CliApp
             return new CliOutput
             {
                 Command = command.Name, ExitCode = report.JournalOpen ? ExitRecoveryNeeded : ExitSuccess, Status = report,
+            };
+        }
+
+        /// <summary>
+        /// The "Desktop notifications" switch, shared with the app and the Decky plugin. It needs no setup and no
+        /// operation lock: it touches no saves, and muting must work while an operation runs.
+        /// </summary>
+        private CliOutput Notifications()
+        {
+            var setting = new NotificationSetting(_local.Folder);
+            bool? asked = command.FirstPositional switch
+            {
+                null => null,
+                "on" => true,
+                "off" => false,
+                var other => throw new UsageException($"'notifications' takes 'on' or 'off', not '{other}'"),
+            };
+            if (asked is { } on && setting.Set(on) is { } problem)
+            {
+                return Failed(ExitRefused, problem);
+            }
+
+            return new CliOutput
+            {
+                Command = command.Name, ExitCode = ExitSuccess, Notifications = new NotificationsOutput(asked ?? setting.IsOn),
             };
         }
 

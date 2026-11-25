@@ -47,6 +47,12 @@ public sealed record StatusReport(
     /// section 11). Set by the front end that reads the entry, not by <see cref="Workspace.Status"/>.
     /// </summary>
     public string? AutostartMissing { get; init; }
+
+    /// <summary>
+    /// Another process holds the operation lock, so links may be part way through a change. Set by the front end,
+    /// like <see cref="AutostartMissing"/>.
+    /// </summary>
+    public bool OperationRunning { get; init; }
 }
 
 /// <summary>

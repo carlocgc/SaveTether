@@ -134,6 +134,7 @@ public class JsonContractTests
         Record("apply-all", 0, "apply", "--all");
         Record("status-sizes", 0, "status", "--sizes");
         Record("device-list", 0, "device", "list");
+        Record("notifications", 0, "notifications");
 
         var aside = sandbox.At("pc", "sync-unplugged");
         Directory.Move(pc.SyncRoot, aside);

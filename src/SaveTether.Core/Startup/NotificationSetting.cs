@@ -1,6 +1,6 @@
 using SaveTether.Core.FileSystem;
 
-namespace SaveTether.Gui.Presentation;
+namespace SaveTether.Core.Startup;
 
 /// <summary>
 /// Settings' "Desktop notifications" switch (desktop-app-spec.md, section 11): on unless turned off. Kept in the

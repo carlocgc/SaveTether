@@ -24,6 +24,11 @@ body{background:#0e1015;color:#dcdedf;font-family:"Motiva Sans",Arial,sans-serif
 .amber .st{color:#e8a23a}.grey .st{color:#8b929a}
 .r2{font-size:11px;color:#8b929a;margin:2px 0 0 15px}
 .err{font-size:11px;color:#e8a23a;margin:3px 0 0 15px;line-height:1.4}
+.tgl{margin:8px 10px 0;padding:4px 2px;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+.sw{width:34px;height:18px;border-radius:9px;background:#3d4450;position:relative}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#dcdedf}
+.toast{background:#23262e;border-radius:4px;width:300px;padding:10px 14px;font-size:12px;line-height:1.5;box-shadow:0 4px 14px #000}
+.toast b{display:block;font-size:13px;color:#fff}
 </style>
 </head>
 <body>
@@ -39,6 +44,7 @@ body{background:#0e1015;color:#dcdedf;font-family:"Motiva Sans",Arial,sans-serif
 <div class="muted">steamdeck · checked 14:21</div>
 </div>
 <div class="btn">Check now<span>&#x27F3;</span></div>
+<div class="tgl">Mute notifications<span class="sw" role="switch" aria-checked="false" aria-label="Mute notifications"></span></div>
 <div class="sec">LINKS</div>
 <div class="card"><div class="r1"><span class="dot"></span>Hollow Knight<span class="st">Linked</span></div><div class="r2">2.1 MB · 14 files</div></div>
 <div class="card"><div class="r1"><span class="dot"></span>Stardew Valley<span class="st">Linked</span></div><div class="r2">18.4 MB · 62 files</div></div>
@@ -57,12 +63,17 @@ body{background:#0e1015;color:#dcdedf;font-family:"Motiva Sans",Arial,sans-serif
 <div class="muted">steamdeck · checked 14:23</div>
 </div>
 <div class="btn">Check now<span>&#x27F3;</span></div>
+<div class="tgl">Mute notifications<span class="sw" role="switch" aria-checked="false" aria-label="Mute notifications"></span></div>
 <div class="sec">LINKS</div>
 <div class="card amber"><div class="r1"><span class="dot"></span>Stardew Valley<span class="st">Not linked</span></div><div class="r2">18.4 MB · 62 files</div><div class="err">The save folder holds files again. Open the desktop app to compare and relink.</div></div>
 <div class="card amber"><div class="r1"><span class="dot"></span>Celeste<span class="st">Shared folder missing</span></div><div class="r2">size unknown</div><div class="err">The shared copy is gone from the sync folder.</div></div>
 <div class="card"><div class="r1"><span class="dot"></span>Hollow Knight<span class="st">Linked</span></div><div class="r2">2.1 MB · 14 files</div></div>
 <div class="card grey"><div class="r1"><span class="dot"></span>Dolphin (GC)<span class="st">Not set up here</span></div><div class="r2">412 MB · 9 files</div></div>
 </div>
+</div>
+<div>
+<div class="label">Steam toast</div>
+<div class="toast" role="status"><b>SaveTether</b>Stardew Valley saves: not linked.</div>
 </div>
 </div>
 </body>

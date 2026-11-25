@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
+using SaveTether.Core.FileSystem;
 
 namespace SaveTether.Core.Storage;
 
@@ -48,9 +49,14 @@ public sealed class OperationLock : IDisposable
 
     private readonly FileStream _handle;
 
-    private OperationLock(FileStream handle, LockHolder holder)
+    private readonly string _holderPath;
+
+    private int _released;
+
+    private OperationLock(FileStream handle, string holderPath, LockHolder holder)
     {
         _handle = handle;
+        _holderPath = holderPath;
         Holder = holder;
     }
 
@@ -84,6 +90,16 @@ public sealed class OperationLock : IDisposable
             throw new StoreException(StoreProblem.OperationRunning, RunningMessage(current), e);
         }
 
+        try
+        {
+            // For LastTaken: a time read without opening the file, which no one else may open while it is held.
+            File.SetLastWriteTimeUtc(handle.SafeFileHandle, DateTime.UtcNow);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Only status's check for an operation that came and went while it read is lost.
+        }
+
         var holder = new LockHolder
         {
             Schema = LockHolder.CurrentSchema,
@@ -93,9 +109,10 @@ public sealed class OperationLock : IDisposable
             StartedUtc = (time ?? TimeProvider.System).GetUtcNow(),
         };
 
+        var holderPath = Path.Combine(local.Folder, HolderFileName);
         try
         {
-            JsonFiles.Write(Path.Combine(local.Folder, HolderFileName), holder, LockJsonContext.Default.LockHolder, LockHolder.CurrentSchema);
+            JsonFiles.Write(holderPath, holder, LockJsonContext.Default.LockHolder, LockHolder.CurrentSchema);
         }
         catch
         {
@@ -103,12 +120,12 @@ public sealed class OperationLock : IDisposable
             throw;
         }
 
-        return new OperationLock(handle, holder);
+        return new OperationLock(handle, holderPath, holder);
     }
 
     /// <summary>
-    /// Who took the lock last, or null when no one has or the file cannot be read. It is left in place
-    /// after the lock is released, so it says who holds the lock only while the lock is held.
+    /// The holder file, or null when there is none or it cannot be read. A killed process leaves its file
+    /// behind, so it says who holds the lock only while the lock is held.
     /// </summary>
     public static LockHolder? TryReadHolder(LocalStore local)
     {
@@ -121,9 +138,27 @@ public sealed class OperationLock : IDisposable
         {
             return null;
         }
-        catch (IOException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            // Windows denies access to a file while another process is deleting it.
             return null;
+        }
+    }
+
+    /// <summary>
+    /// When the lock was last taken, by any process: two reads that differ mean an operation started in between,
+    /// even one that has ended since. Reads only, like <see cref="HeldByAnotherProcess"/>.
+    /// </summary>
+    public static DateTime LastTaken(LocalStore local)
+    {
+        ArgumentNullException.ThrowIfNull(local);
+        try
+        {
+            return File.GetLastWriteTimeUtc(Path.Combine(local.Folder, FileName));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return DateTime.MinValue;
         }
     }
 
@@ -161,8 +196,31 @@ public sealed class OperationLock : IDisposable
         }
         catch (System.ComponentModel.Win32Exception)
         {
-            // Its start time cannot be read (another user's process): count it as the holder, which only delays the icon.
-            return holder;
+            // Its start time cannot be read (an elevated or another user's process). A killed holder's ID may have
+            // gone to any program since, so believe only a SaveTether one.
+            return IsSaveTether(holder.ProcessId) ? holder : null;
+        }
+    }
+
+    /// <summary>
+    /// Whether the process is one of SaveTether's binaries, or true when its name cannot be read either, as before.
+    /// shortcut: a build run through <c>dotnet</c> is not recognised; count the host too if that ever matters.
+    /// </summary>
+    private static bool IsSaveTether(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return process.ProcessName.StartsWith("savetether", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException)
+        {
+            // It has ended.
+            return false;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return true;
         }
     }
 
@@ -192,8 +250,81 @@ public sealed class OperationLock : IDisposable
         }
     }
 
-    /// <summary>Releases the lock. The lock file and the holder file stay.</summary>
-    public void Dispose() => _handle.Dispose();
+    /// <summary>
+    /// Releases the lock, first deleting the holder file: left behind, it would name a process that runs on,
+    /// such as the desktop app, as still holding the lock. The lock file stays. When a reader has the holder
+    /// file open, which Windows refuses a delete for, the release finishes on a thread of its own within
+    /// about half a second, so the caller (the app's UI thread among them) does not wait.
+    /// </summary>
+    public void Dispose()
+    {
+        // A second Dispose must not delete the next holder's file.
+        if (Interlocked.Exchange(ref _released, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            if (TryRemoveHolderFile())
+            {
+                _handle.Dispose();
+                return;
+            }
+        }
+        catch
+        {
+            _handle.Dispose();
+            throw;
+        }
+
+        // Not a background thread: a process that is ending waits for it, as it waited for the release before.
+        new Thread(() =>
+        {
+            try
+            {
+                for (var attempt = 1; attempt <= 20; attempt++)
+                {
+                    Thread.Sleep(25);
+                    if (TryRemoveHolderFile())
+                    {
+                        return;
+                    }
+                }
+
+                // shortcut: a file held longer stays until the next operation, and names this process until then.
+            }
+            finally
+            {
+                // Released only after the delete, which must never take the next holder's file.
+                _handle.Dispose();
+            }
+        })
+        {
+            Name = "SaveTether lock release",
+        }.Start();
+    }
+
+    /// <summary>
+    /// False while a reader has the file open. Something other than a file at its path is left alone: it is
+    /// not this lock's to delete, and it must not keep the lock held.
+    /// </summary>
+    private bool TryRemoveHolderFile()
+    {
+        try
+        {
+            new SafeFs().RemoveFile(_holderPath);
+            return true;
+        }
+        catch (SafeFsException)
+        {
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 }
 
 [JsonSourceGenerationOptions(

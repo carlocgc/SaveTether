@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using SaveTether.Core.Startup;
 using SaveTether.Gui.Presentation;
 
 namespace SaveTether.Gui;
