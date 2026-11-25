@@ -23,7 +23,7 @@ public static class StateWords
     {
         (HealthState.Ok, _) => new("Linked", Shade.Green),
 
-        (HealthState.NotApplied, HealthReason.NoSaveFolder) => new("Not on this device", Shade.Grey),
+        (HealthState.NotApplied, HealthReason.NoSaveFolder) => new("Not set up here", Shade.Grey),
 
         // Unlike the core's Not applied, a folder setting that is wrong turns the icon amber (decision 4).
         (HealthState.NotApplied, HealthReason.SaveFolderNotAbsolute) => new("Device file error", Shade.Amber),
