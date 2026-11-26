@@ -24,6 +24,9 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
     private readonly LocalStore _local = new(localFolder);
 
+    /// <summary>Unsafe mode ("Back up before actions" off): the texts then promise no backup. Read each time, as the core does.</summary>
+    private bool NoBackups => !new DeviceSettings(localFolder).BackupBeforeActions;
+
     /// <summary>
     /// Work off the UI thread behind a busy dialog (<see cref="Overlay.WorkAsync{T}"/>): the page is locked at once,
     /// so nothing can be opened meanwhile, and the dialog shows if the work is not quick.
@@ -330,7 +333,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             {
                 var described = await Work("Checking what the shared folder holds…", () => session.DescribeMappingDeletion(mappingId));
                 if (!confirmed && !await overlay.ConfirmAsync(
-                        AppsPage.DeleteTitle(role), AppsPage.DeleteText(session.HasOtherDevices), "Delete", Overlay.OperationDialogTimeout, danger: true))
+                        AppsPage.DeleteTitle(role), AppsPage.DeleteText(session.HasOtherDevices, NoBackups), "Delete", Overlay.OperationDialogTimeout, danger: true))
                 {
                     return;
                 }
@@ -383,7 +386,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
                 var empty = new Button { Content = AppsPage.FirstDeviceStartEmpty };
                 var share = new Button { Content = AppsPage.FirstDeviceShare };
                 var pressed = await overlay.ShowAsync(
-                    AppsPage.FirstDeviceTitle(names.Count, names[0]), Overlay.Body(AppsPage.FirstDeviceText(names, session.HasOtherDevices)), [leave, empty, share], leave, Overlay.OperationDialogTimeout);
+                    AppsPage.FirstDeviceTitle(names.Count, names[0]), Overlay.Body(AppsPage.FirstDeviceText(names, session.HasOtherDevices, NoBackups)), [leave, empty, share], leave, Overlay.OperationDialogTimeout);
                 if (pressed != leave)
                 {
                     var choice = pressed == share ? SetupChoice.Copy : SetupChoice.NoCopy;
@@ -678,7 +681,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     private async Task<RefusalAction?> HandleRefusalAsync(OperationSession session, Subject mapping, string role, Refusal refusal)
     {
         var grant = await Work("Checking the sandbox…", () => session.GrantableSandbox(mapping.MappingId, refusal));
-        var view = ActionTexts.Describe(refusal, role, mapping.AppName, grant is not null);
+        var view = ActionTexts.Describe(refusal, role, mapping.AppName, grant is not null, NoBackups);
         var close = new Button { Content = view.Actions.Count == 0 ? "Close" : "Cancel" };
         var buttons = new List<Button> { close };
         var actionOf = new Dictionary<Button, RefusalAction>();
@@ -728,7 +731,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         var cont = new Button { Content = "Continue", IsEnabled = false };
         var chosen = (SetupChoice?)null;
-        foreach (var option in ActionTexts.Choices(refusal, mapping.AppName, others))
+        foreach (var option in ActionTexts.Choices(refusal, mapping.AppName, others, NoBackups))
         {
             var radio = new RadioButton { GroupName = "choice", Content = new StackPanel
             {
@@ -750,7 +753,10 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
             body.Children.Add(radio);
         }
 
-        body.Children.Add(new TextBlock { Text = ActionTexts.EveryChoiceBacksUp, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+        if (!NoBackups)
+        {
+            body.Children.Add(new TextBlock { Text = ActionTexts.EveryChoiceBacksUp, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+        }
         var cancel = new Button { Content = "Cancel" };
         var pressed = await overlay.ShowAsync(ActionTexts.ChoiceTitle(role), body, [cancel, cont], cancel, Overlay.OperationDialogTimeout);
         if (pressed != cont || chosen is not { } choice)
@@ -773,7 +779,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         {
             Header = "Show steps",
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Content = new TextBlock { Text = string.Join("\n", plan.Steps.Select((s, i) => $"{i + 1}. {ActionTexts.Step(s)}")), TextWrapping = TextWrapping.Wrap },
+            Content = new TextBlock { Text = string.Join("\n", plan.Steps.Select((s, i) => $"{i + 1}. {ActionTexts.Step(s, plan.NoBackups)}")), TextWrapping = TextWrapping.Wrap },
         };
         var go = view.Phrase is { } phrase
             ? await overlay.AskTextAsync(view.Title, text, view.Button, typed => MaintenancePage.TypedPhraseProblem(typed, phrase), danger: true, timeout: Overlay.OperationDialogTimeout, details: steps) is not null
@@ -800,7 +806,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         {
             var mark = new TextBlock { Text = "○", Width = 20 };
             marks.Add(mark);
-            lines.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { mark, new TextBlock { Text = ActionTexts.Step(step), TextWrapping = TextWrapping.Wrap } } });
+            lines.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { mark, new TextBlock { Text = ActionTexts.Step(step, plan!.NoBackups), TextWrapping = TextWrapping.Wrap } } });
         }
 
         if (marks.Count == 0)

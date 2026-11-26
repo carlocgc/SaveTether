@@ -254,13 +254,15 @@ public sealed record SpaceFacts(string Path, long NeededBytes, long FreeBytes);
 /// <param name="ConfirmReplace">The second confirmation that replace-shared needs.</param>
 /// <param name="AssumeSynced">The owner states the shared copy has fully arrived.</param>
 /// <param name="AssumeClosed">The owner states the app is closed, overriding the process check.</param>
+/// <param name="NoBackups">Unsafe mode ("Back up before actions" off): plan no backup, and need no room for one.</param>
 public sealed record ApplyRequest(
-    SetupChoice? Choice = null, bool ConfirmReplace = false, bool AssumeSynced = false, bool AssumeClosed = false);
+    SetupChoice? Choice = null, bool ConfirmReplace = false, bool AssumeSynced = false, bool AssumeClosed = false, bool NoBackups = false);
 
 /// <summary>What the owner asked for when restoring a backup.</summary>
 /// <param name="ConfirmReplace">Needed when the backup is of a shared folder: restoring it replaces shared data.</param>
 /// <param name="AssumeClosed">The owner states the app is closed, overriding the process check.</param>
-public sealed record RestoreRequest(bool ConfirmReplace = false, bool AssumeClosed = false);
+/// <param name="NoBackups">Unsafe mode: plan no backup, and need no room for one.</param>
+public sealed record RestoreRequest(bool ConfirmReplace = false, bool AssumeClosed = false, bool NoBackups = false);
 
 /// <summary>The steps to run, in order. A dry run prints exactly this; a real run executes it.</summary>
 /// <param name="Source">Apply and revert: S. Restore: the backup's data folder.</param>
@@ -274,7 +276,11 @@ public sealed record Plan(
     IReadOnlyList<PlanStep> Steps,
     IReadOnlyList<Note> Notes,
     bool NeedsFirstSeedConfirmation,
-    PlanOperation Operation = PlanOperation.Apply);
+    PlanOperation Operation = PlanOperation.Apply)
+{
+    /// <summary>Unsafe mode: the backup steps were left out, so clearing shared data that was not backed up is allowed.</summary>
+    public bool NoBackups { get; init; }
+}
 
 /// <summary>Why nothing will be done, and what the owner can do about it. Nothing has been changed.</summary>
 public sealed record Refusal(

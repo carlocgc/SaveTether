@@ -5,13 +5,14 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using SaveTether.Core.Startup;
+using SaveTether.Core.Storage;
 using SaveTether.Gui.Presentation;
 
 namespace SaveTether.Gui;
 
 /// <summary>
 /// The Settings page (desktop-app-spec.md, section 11), in place of the Apps page while open. Built so far:
-/// Start with the session, Desktop notifications, and About. The backup location and This device come later.
+/// Start with the session, Desktop notifications, Backups (before actions, how many to keep), and About. The backup location and This device come later.
 /// </summary>
 internal sealed class SettingsScreen : UserControl, IScreen
 {
@@ -31,8 +32,9 @@ internal sealed class SettingsScreen : UserControl, IScreen
             },
         };
 
-        // An on/off switch whose change is saved by set; on a problem it is logged, shown, and the switch put back.
-        ToggleSwitch Switch(string name, Func<bool> isOn, Func<bool, string?> set)
+        // An on/off switch whose change is saved by set; on a problem it is logged, shown, and the switch put back. When allow is
+        // given and answers false for the new position, nothing is saved and the switch goes back too.
+        ToggleSwitch Switch(string name, Func<bool> isOn, Func<bool, string?> set, Func<bool, Task<bool>>? allow = null)
         {
             var toggle = new ToggleSwitch { IsChecked = isOn(), OnContent = "On", OffContent = "Off" };
             AutomationProperties.SetName(toggle, name);
@@ -45,6 +47,14 @@ internal sealed class SettingsScreen : UserControl, IScreen
                 }
 
                 var on = toggle.IsChecked == true;
+                if (allow is not null && !await allow(on))
+                {
+                    reverting = true;
+                    toggle.IsChecked = isOn();
+                    reverting = false;
+                    return;
+                }
+
                 if (set(on) is { } problem)
                 {
                     App.Options.Log.Write(problem);
@@ -74,10 +84,77 @@ internal sealed class SettingsScreen : UserControl, IScreen
         }
 
         page.Children.Add(Heading("Desktop notifications"));
-        var notifications = new NotificationSetting(localFolder);
-        page.Children.Add(Switch("Desktop notifications", () => notifications.IsOn, notifications.Set));
+        var settings = new DeviceSettings(localFolder);
+        page.Children.Add(Switch("Desktop notifications", () => settings.Notifications, settings.SetNotifications));
         page.Children.Add(Note(
             "SaveTether tells you when a save folder needs attention. With this off, only the tray icon's colour shows it."));
+
+        page.Children.Add(Heading("Backups"));
+        var unsafeNote = new TextBlock
+        {
+            Text = SettingsTexts.UnsafeModeNote,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Danger.Text,
+            FontWeight = FontWeight.SemiBold,
+            IsVisible = !settings.BackupBeforeActions,
+        };
+        var beforeActions = Switch(
+            SettingsTexts.BackupBeforeActions,
+            () => settings.BackupBeforeActions,
+            on =>
+            {
+                var problem = settings.SetBackupBeforeActions(on);
+                unsafeNote.IsVisible = !settings.BackupBeforeActions;
+                return problem;
+            },
+            async on => on || await overlay.AskTextAsync(
+                SettingsTexts.UnsafeModeTitle, SettingsTexts.UnsafeModeText, SettingsTexts.UnsafeModeConfirm,
+                typed => MaintenancePage.TypedPhraseProblem(typed, SettingsTexts.UnsafeModePhrase), danger: true) is not null);
+        page.Children.Add(new TextBlock { Text = SettingsTexts.BackupBeforeActions, FontWeight = FontWeight.SemiBold });
+        page.Children.Add(beforeActions);
+        page.Children.Add(unsafeNote);
+        page.Children.Add(Note(SettingsTexts.BackupBeforeActionsNote));
+
+        var maxBackups = new NumericUpDown
+        {
+            Minimum = 0,
+            Maximum = DeviceSettings.MaxBackupsLimit,
+            Increment = 1,
+            FormatString = "0",
+            ParsingNumberStyle = System.Globalization.NumberStyles.Integer,
+            Value = settings.MaxBackupsPerFolder,
+            Width = 140,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        AutomationProperties.SetName(maxBackups, SettingsTexts.MaxBackups);
+        maxBackups.ValueChanged += async (_, e) =>
+        {
+            // An emptied box keeps the saved value; the box shows it again.
+            if (e.NewValue is not { } value)
+            {
+                maxBackups.Value = settings.MaxBackupsPerFolder;
+                return;
+            }
+
+            var count = (int)Math.Round(value);
+            if (count == settings.MaxBackupsPerFolder)
+            {
+                return;
+            }
+
+            if (settings.SetMaxBackupsPerFolder(count) is { } problem)
+            {
+                App.Options.Log.Write(problem);
+                maxBackups.Value = settings.MaxBackupsPerFolder;
+                await overlay.InformAsync("Nothing was changed", problem);
+                return;
+            }
+
+            App.Options.Log.Write($"max backups per folder: {count}");
+        };
+        page.Children.Add(new TextBlock { Text = SettingsTexts.MaxBackups, FontWeight = FontWeight.SemiBold });
+        page.Children.Add(maxBackups);
+        page.Children.Add(Note(SettingsTexts.MaxBackupsNote));
 
         // Linux, in the installed copy only (section 11, "Installing"). On Windows, Settings > Apps uninstalls what the installer put there.
         if (InstallOffer.ForSystem(localFolder, AppContext.BaseDirectory, Program.Version) is { CanUninstall: true } installed)

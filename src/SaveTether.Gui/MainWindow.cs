@@ -164,6 +164,7 @@ internal sealed class MainWindow : Window
             },
         });
         Content = _overlay;
+        _overlay.UnsafeMode = () => !new DeviceSettings(localFolder).BackupBeforeActions;
         BuildStrip();
         Tasks.Changed += RequestStripRefresh;
         _actions = new ActionFlow(localFolder, _overlay, App.Options.Log);

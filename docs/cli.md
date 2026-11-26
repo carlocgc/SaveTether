@@ -190,7 +190,7 @@ savetether status --sizes
 savetether notifications [on|off]
 ```
 
-Shows this device's "Desktop notifications" switch, or sets it. It is the same switch as in the desktop app's Settings (`notifications.txt` in the local folder), and the Decky plugin is to follow it too. Off silences notifications only: `status` and the tray icon still show problems. It works on a device that is not set up, and while another operation runs.
+Shows this device's "Desktop notifications" switch, or sets it. It is the same switch as in the desktop app's Settings (`settings.json` in the local folder; an older `notifications.txt` is read until the next change moves it there), and the Decky plugin is to follow it too. Off silences notifications only: `status` and the tray icon still show problems. It works on a device that is not set up, and while another operation runs.
 
 ```bash
 savetether notifications
@@ -340,6 +340,31 @@ The second form clears many at once, for one mapping (`--mapping`) or all: `--al
 
 ```bash
 savetether backup delete --keep-last --mapping cemu.save
+```
+
+## backup auto
+
+```
+savetether backup auto [on|off] [--confirm-unsafe]
+```
+
+Shows whether actions back up first, or sets it. On (the default), apply, revert, restore and `map delete` back up what they change first. Off is unsafe mode: no action takes a backup, so replacing the shared copy, restoring or deleting can lose saves for good, and a plan says so in its notes. Off needs `--confirm-unsafe`. The desktop app's Settings has the same switch, and every dialog that asks for a choice says "Unsafe mode enabled" while it is off. It works on a device that is not set up, and while another operation runs.
+
+```bash
+savetether backup auto off --confirm-unsafe
+savetether backup auto on
+```
+
+## backup keep
+
+```
+savetether backup keep [<0-20>]
+```
+
+Shows, or sets, how many backups of each folder are kept besides its first (default 5). Older ones are deleted after each action that backed the folder up, and after "Back up now" in the app. 0 keeps every backup. The first backup of each folder is always kept: it is usually the only copy of the folder from before SaveTether changed it.
+
+```bash
+savetether backup keep 2
 ```
 
 ## recover

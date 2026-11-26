@@ -65,6 +65,9 @@ public static class ActionTexts
 
     public const string ReplaceText = "The shared copy is backed up on this device, then replaced with this device's data.";
 
+    /// <summary><see cref="ReplaceText"/> in unsafe mode, when no backup is taken.</summary>
+    public const string ReplaceUnbackedText = "The shared copy is replaced with this device's data. No backup is taken.";
+
     /// <summary>Typed to confirm replacing the shared copy, as for every other deletion of saves.</summary>
     public const string ReplacePhrase = "replace shared data";
 
@@ -73,6 +76,8 @@ public static class ActionTexts
     /// no backup of them and the replacement can remove them elsewhere.
     /// </summary>
     public const string ReplaceAnywayText = "Files another device shared that have not arrived here are not in the backup and can be lost.";
+
+    public const string ReplaceAnywayUnbackedText = "Files another device shared that have not arrived here can be lost.";
 
     public static string FirstSeed(string role) =>
         $"If {role} is set up on another device, cancel until that device's data has arrived here. Otherwise both become the shared copy.";
@@ -124,7 +129,8 @@ public static class ActionTexts
     }
 
     /// <summary>A refusal as a dialog shows it. <see cref="RefusalKind.ChoiceNeeded"/> and <see cref="RefusalKind.ConfirmationNeeded"/> have their own dialogs.</summary>
-    public static RefusalView Describe(Refusal refusal, string role, string app, bool sandboxGrantPossible)
+    /// <param name="noBackups">Unsafe mode: no backup will be taken, so none is promised.</param>
+    public static RefusalView Describe(Refusal refusal, string role, string app, bool sandboxGrantPossible, bool noBackups = false)
     {
         ArgumentNullException.ThrowIfNull(refusal);
         string[] messages = [refusal.Message.Text, .. refusal.Failures.Select(f => f.Message.Text)];
@@ -152,7 +158,7 @@ public static class ActionTexts
                 [RefusalAction.CheckAgain],
                 details),
             RefusalKind.ChoiceNeeded => new RefusalView(ChoiceTitle(role), [refusal.Message.Text], [], details),
-            RefusalKind.ConfirmationNeeded => new RefusalView(ReplaceTitle(role), [ReplaceText], [], details),
+            RefusalKind.ConfirmationNeeded => new RefusalView(ReplaceTitle(role), [noBackups ? ReplaceUnbackedText : ReplaceText], [], details),
             RefusalKind.ChoiceNotAllowed => new RefusalView(
                 "Something went wrong", ["SaveTether offered a choice the core does not allow here. Nothing was changed."], [], details),
             _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal.Kind, "A refusal with no text."),
@@ -163,16 +169,18 @@ public static class ActionTexts
 
     /// <summary>The choice dialog's options: exactly the allowed choices, in the core's order, worded per section 9.2.</summary>
     /// <param name="others">Another device is registered, so replacing the shared copy reaches it.</param>
-    public static IReadOnlyList<ChoiceOption> Choices(Refusal refusal, string app, bool others)
+    /// <param name="noBackups">Unsafe mode: this device's data is not kept anywhere once it is not used.</param>
+    public static IReadOnlyList<ChoiceOption> Choices(Refusal refusal, string app, bool others, bool noBackups = false)
     {
+        var dropped = noBackups ? "This device's data is deleted." : "This device's data is kept only in the backup.";
         ArgumentNullException.ThrowIfNull(refusal);
         var sharedHasData = refusal.Comparison?.Entries.Any(e => e.Presence != EntryPresence.OnlyLocal) == true;
         return refusal.AllowedChoices.Select(choice => choice switch
         {
             SetupChoice.Copy => new ChoiceOption(choice, "Share this device's data", "This device's data becomes the shared copy."),
             SetupChoice.NoCopy => sharedHasData
-                ? new ChoiceOption(choice, "Use the shared copy", $"{app} uses the shared copy. This device's data is kept only in the backup.")
-                : new ChoiceOption(choice, "Start empty", $"{app} starts with no data. This device's data is kept only in the backup."),
+                ? new ChoiceOption(choice, "Use the shared copy", $"{app} uses the shared copy. {dropped}")
+                : new ChoiceOption(choice, "Start empty", $"{app} starts with no data. {dropped}"),
             SetupChoice.AddMissing => new ChoiceOption(
                 choice, "Use the shared copy, and add what only this device has",
                 "Nothing in the shared copy is changed or deleted."),
@@ -219,7 +227,8 @@ public static class ActionTexts
     /// <summary>The core's notes that the confirmation already says in its own words.</summary>
     private static readonly HashSet<string> Restated = new(StringComparer.Ordinal)
     {
-        Planner.RevertLeavesSharedNote, Planner.AlreadyAppliedReplaceNote, Planner.ReplaceSharedNote, RestorePlanner.SharedChangesNote,
+        Planner.RevertLeavesSharedNote, Planner.AlreadyAppliedReplaceNote, Planner.ReplaceSharedNote, Planner.ReplaceSharedUnbackedNote,
+        RestorePlanner.SharedChangesNote,
     };
 
     /// <summary>The one dialog before a plan runs (sections 9.2, 9.6, 9.7). The backup is said once, here.</summary>
@@ -240,7 +249,8 @@ public static class ActionTexts
                 break;
             case PlanOperation.Restore when clears:
                 (title, button, phrase) = (BackupsPage.RestoreSharedTitle(role), "Restore", BackupsPage.RestoreSharedPhrase);
-                sentences.Add(others ? $"{BackupsPage.RestoreSharedText} {OthersGetChange}" : BackupsPage.RestoreSharedText);
+                var restoreText = plan.NoBackups ? BackupsPage.RestoreSharedUnbackedText : BackupsPage.RestoreSharedText;
+                sentences.Add(others ? $"{restoreText} {OthersGetChange}" : restoreText);
                 sentences.Add($"Shared folder: {plan.Target}");
                 break;
             case PlanOperation.Restore:
@@ -250,10 +260,11 @@ public static class ActionTexts
                 if (clears)
                 {
                     (title, button, phrase) = (ReplaceTitle(role), "Replace", ReplacePhrase);
-                    sentences.Add(others ? $"{ReplaceText} {OthersGetChange}" : ReplaceText);
+                    var replaceText = plan.NoBackups ? ReplaceUnbackedText : ReplaceText;
+                    sentences.Add(others ? $"{replaceText} {OthersGetChange}" : replaceText);
                     if (assumedSynced)
                     {
-                        sentences.Add(ReplaceAnywayText);
+                        sentences.Add(plan.NoBackups ? ReplaceAnywayUnbackedText : ReplaceAnywayText);
                     }
                 }
                 else if (plan.Classification == Classification.AlreadyApplied && plan.Choice == SetupChoice.ReplaceShared)
@@ -290,7 +301,8 @@ public static class ActionTexts
     }
 
     /// <summary>One step in plain words, for "Show steps" and the progress list.</summary>
-    public static string Step(PlanStep step)
+    /// <param name="noBackups">The plan is unsafe mode's (<see cref="Plan.NoBackups"/>): nothing is in a backup.</param>
+    public static string Step(PlanStep step, bool noBackups = false)
     {
         ArgumentNullException.ThrowIfNull(step);
         return step.Kind switch
@@ -308,7 +320,7 @@ public static class ActionTexts
             StepKind.WriteSeedMarker => "Record this device's data as the shared copy",
             StepKind.SupersedeMarkers => "Mark other devices' shared copies as replaced",
             StepKind.WriteState => "Record what was done",
-            StepKind.DeleteAside => "Remove the folder moved aside (it is in the backup)",
+            StepKind.DeleteAside => noBackups ? "Remove the folder moved aside" : "Remove the folder moved aside (it is in the backup)",
             StepKind.CopyToStaging => "Copy the data to a new folder beside the save folder",
             StepKind.RemoveLink => "Remove the link",
             StepKind.RenameIntoPlace => "Put the copy in place of the save folder",
@@ -324,7 +336,7 @@ public static class ActionTexts
     public static (string Title, IReadOnlyList<string> Steps, IReadOnlyList<string> Sentences) FinishedView(Plan? plan, ExecutionResult result, string role, bool recovery = false)
     {
         var (title, sentences) = Result(result, role, recovery);
-        return (title, plan is null || result.Status == ExecutionStatus.Refused ? [] : plan.Steps.Select(Step).ToList(), sentences);
+        return (title, plan is null || result.Status == ExecutionStatus.Refused ? [] : plan.Steps.Select(s => Step(s, plan.NoBackups)).ToList(), sentences);
     }
 
     /// <summary>A result as section 9.3 shows it.</summary>

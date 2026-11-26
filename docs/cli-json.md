@@ -210,6 +210,19 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 |---|---|---|
 | `on` | boolean | True unless turned off. |
 
+Since 2026-11-26 the switch is kept in the local folder's `settings.json`, with the backup settings; an older `notifications.txt` is read until the next change moves it there.
+
+### `backup auto`, `backup keep`
+
+`backup auto [on|off] [--confirm-unsafe]` and `backup keep [<0-20>]`: the device's backup settings, shared with the desktop app. With no value they report; with one they set, then report. `backup auto off` (unsafe mode: no action takes a backup) needs `--confirm-unsafe`. Like `notifications`, they need no set-up device and take no operation lock. A setting that cannot be saved is refused (exit 1); a missing confirmation or any other value is a usage error (exit 64). Added 2026-11-26.
+
+`backup_settings` object, the same for both:
+
+| Field | Type | |
+|---|---|---|
+| `before_actions` | boolean | True unless unsafe mode is on. |
+| `max_per_folder` | number | Backups of each folder kept besides its first, 0 to 20; 0 keeps all. Default 5. |
+
 ### `apply`, `revert`, `backup restore`, `recover`
 
 Flags:
@@ -245,6 +258,7 @@ Flags:
 | `steps` | array of object | In order. Each: `kind` (a step kind below), `path`, `other_path` (the second path, where a step has one), `entries` (for `copy-into-target` with only some entries). |
 | `notes` | array of string | |
 | `needs_first_seed_confirmation` | boolean | The owner should confirm no other device has shared these saves yet (design 5.3). |
+| `no_backups` | boolean | Unsafe mode: the plan has no backup steps, and a note says so. Added 2026-11-26. |
 
 `refusal`:
 

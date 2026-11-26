@@ -82,6 +82,65 @@ public class FaultMatrixTests
         }
     }
 
+    /// <summary>
+    /// Unsafe mode ("Back up before actions" off): a replace of the shared copy takes no backup, so the matrix's "nothing lost"
+    /// cannot hold. What must: the journal keeps the plan's <see cref="Plan.NoBackups"/>, recovery ends at every step (the
+    /// executor's "not backed up" refusal must not stop it), and a partly emptied shared folder says no backup was taken.
+    /// </summary>
+    [Fact]
+    public void A_crash_at_any_step_of_an_unsafe_mode_replace_is_recovered_and_says_no_backup_was_taken()
+    {
+        int stepCount;
+        using (var probe = new ExecWorld())
+        {
+            stepCount = ArrangeUnsafeReplace(probe).Steps.Count;
+        }
+
+        foreach (var point in new[] { FaultPoint.BeforeStep, FaultPoint.AfterStep })
+        {
+            for (var index = 0; index < stepCount; index++)
+            {
+                using var world = new ExecWorld();
+                var plan = ArrangeUnsafeReplace(world);
+                var label = $"[unsafe replace, {point} step {index + 1} of {stepCount}: {plan.Steps[index].Kind}] ";
+
+                Assert.Throws<SimulatedCrashException>(() => world.Executor(new CrashAt(index, point)).Run(plan));
+                Assert.True(world.Journal.TryRead()?.Plan.NoBackups == true, label + "the journal lost NoBackups");
+
+                var result = world.Executor().Recover();
+
+                Assert.True(
+                    result.Status is ExecutionStatus.RolledBack or ExecutionStatus.Completed,
+                    label + $"recovery ended as {result.Status}: {result.Error}");
+                Assert.False(world.Journal.IsOpen, label + "the journal should be closed after recovery");
+                Assert.Empty(result.BackupIds);
+                if (result.Status == ExecutionStatus.Completed)
+                {
+                    Linked(world, label);
+                }
+
+                var clearStarted = plan.Steps[index].Kind == StepKind.ClearTarget
+                    || plan.Steps.Take(index).Any(s => s.Kind == StepKind.ClearTarget);
+                if (clearStarted && result.Status == ExecutionStatus.RolledBack)
+                {
+                    Assert.Contains(result.Messages, m => m.Text.Contains("No backup was taken (unsafe mode).", StringComparison.Ordinal));
+                }
+
+                world.Sandbox.AssertCanaryIntact();
+            }
+        }
+    }
+
+    private static Plan ArrangeUnsafeReplace(ExecWorld world)
+    {
+        LocalSaves(world);
+        SharedSaves(world);
+        var plan = ExecWorld.Planned(world.PlanApply(new ApplyRequest(SetupChoice.ReplaceShared, ConfirmReplace: true, NoBackups: true)));
+        Assert.True(plan.NoBackups);
+        Assert.Contains(plan.Steps, s => s.Kind == StepKind.ClearTarget);
+        return plan;
+    }
+
     private static (Plan Plan, Action<ExecWorld, string> AssertCompleted) Arrange(ExecWorld world, string scenario)
     {
         const string id = ExecWorld.MappingId;

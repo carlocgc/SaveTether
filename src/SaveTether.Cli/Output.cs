@@ -126,6 +126,9 @@ internal sealed record CliOutput
     /// <summary>"notifications": the switch as it now is.</summary>
     public NotificationsOutput? Notifications { get; init; }
 
+    /// <summary>"backup auto" and "backup keep": the backup settings as they now are.</summary>
+    public BackupSettingsOutput? BackupSettings { get; init; }
+
     /// <summary>"device list": the devices, the mappings and the backups.</summary>
     public MaintenanceOverview? Devices { get; init; }
 
@@ -171,6 +174,9 @@ public sealed record DeviceRemovalOutput(
 
 /// <summary>"notifications": whether the "Desktop notifications" switch is on.</summary>
 public sealed record NotificationsOutput(bool On);
+
+/// <summary>"backup auto" and "backup keep": whether actions back up first (false is unsafe mode), and how many backups of each folder are kept besides its first (0: all).</summary>
+public sealed record BackupSettingsOutput(bool BeforeActions, int MaxPerFolder);
 
 /// <summary>"uninstall": the paths removed, and each one left with the reason.</summary>
 public sealed record UninstallOutput(IReadOnlyList<string> Removed, IReadOnlyList<string> Left);
@@ -245,6 +251,12 @@ internal static class OutputWriter
         if (output.Notifications is { } notifications)
         {
             stdout.WriteLine($"Desktop notifications: {(notifications.On ? "on" : "off")}");
+        }
+
+        if (output.BackupSettings is { } backupSettings)
+        {
+            stdout.WriteLine($"Back up before actions: {(backupSettings.BeforeActions ? "on" : "off (unsafe mode)")}");
+            stdout.WriteLine($"Max backups per folder: {(backupSettings.MaxPerFolder == 0 ? "unlimited" : backupSettings.MaxPerFolder)}, besides the first");
         }
 
         if (output.Devices is { } overview)

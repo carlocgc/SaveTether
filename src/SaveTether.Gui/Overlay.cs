@@ -25,6 +25,14 @@ internal sealed class Overlay : Panel
         Children.Add(page);
     }
 
+    /// <summary>
+    /// True while unsafe mode is on ("Back up before actions" off). Every dialog that asks for a choice then says so in red, above its
+    /// text (owner, 2026-11-26); one with a single button only tells, and does not. Read each time, so a change in Settings shows at once.
+    /// </summary>
+    public Func<bool>? UnsafeMode { get; set; }
+
+    public const string UnsafeModeLine = "Unsafe mode enabled";
+
     /// <summary>Tells something that needs no choice; closed with OK or Escape.</summary>
     public async Task InformAsync(string title, string text, Control? details = null)
     {
@@ -94,6 +102,12 @@ internal sealed class Overlay : Panel
     public Task<Button> ShowAsync(string title, Control body, IReadOnlyList<Button> buttons, Button safe, TimeSpan? timeout = null, Control? focus = null)
     {
         ArgumentNullException.ThrowIfNull(buttons);
+        if (buttons.Count > 1 && UnsafeMode?.Invoke() == true)
+        {
+            var line = new TextBlock { Text = UnsafeModeLine, Foreground = Danger.Text, FontWeight = FontWeight.SemiBold };
+            body = new StackPanel { Spacing = 12, Children = { line, body } };
+        }
+
         var answer = new TaskCompletionSource<Button>();
         var buttonRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
         foreach (var button in buttons)

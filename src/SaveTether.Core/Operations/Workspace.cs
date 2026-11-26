@@ -541,7 +541,7 @@ public sealed partial class Workspace
     /// <summary>The mappings this device has a save folder for, in order: what "apply --all" runs.</summary>
     public IReadOnlyList<string> MappingsWithPaths() => ReadOwnDevice().Paths.Keys.Order(StringComparer.Ordinal).ToList();
 
-    public PlanOutcome PlanApply(string mappingId, ApplyRequest request) => Planner.Plan(WithSandbox(ReadSnapshot(mappingId)), request);
+    public PlanOutcome PlanApply(string mappingId, ApplyRequest request) => Planner.Plan(WithSandbox(ReadSnapshot(mappingId)), request with { NoBackups = NoBackups });
 
     /// <summary>Adds the Flatpak precheck: only apply makes a link the app must follow.</summary>
     private Snapshot WithSandbox(Snapshot s) =>
@@ -581,15 +581,18 @@ public sealed partial class Workspace
     /// <summary>Takes back SaveTether's grant to a Flatpak app. Call it only once the owner has agreed. True when it succeeded.</summary>
     public bool RevokeSandbox(SandboxGrant grant) => _flatpak?.Revoke(grant) ?? false;
 
-    public PlanOutcome PlanRevert(string mappingId, bool assumeClosed) => Planner.PlanRevert(ReadSnapshot(mappingId), assumeClosed);
+    public PlanOutcome PlanRevert(string mappingId, bool assumeClosed) => Planner.PlanRevert(ReadSnapshot(mappingId), assumeClosed, NoBackups);
 
     public PlanOutcome PlanRestore(string backupId, RestoreRequest request)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(backupId);
         var device = ReadOwnDevice();
         var processNames = device.Paths.GetValueOrDefault(backupId.Split('/')[0])?.ProcessNames ?? [];
-        return RestorePlanner.Plan(OpenBackups(device), Shared, backupId, request, processNames, _processes, Journal.IsOpen);
+        return RestorePlanner.Plan(OpenBackups(device), Shared, backupId, request with { NoBackups = NoBackups }, processNames, _processes, Journal.IsOpen);
     }
+
+    /// <summary>Unsafe mode: "Back up before actions" is off in this device's settings, so plans take no backup.</summary>
+    private bool NoBackups => !new DeviceSettings(Local.Folder).BackupBeforeActions;
 
     /// <summary>Runs a plan made by one of the Plan methods.</summary>
     /// <param name="progress">Told as each step starts and finishes; see <see cref="Executor.Run"/>.</param>
@@ -645,11 +648,27 @@ public sealed partial class Workspace
 
     /// <summary>
     /// A backup taken by hand of a mapping's shared copy, which is what a linked save folder holds. Copies only; the backup is
-    /// verified, and discarded if it does not match. Call it under the operation lock.
+    /// verified, and discarded if it does not match. Then older backups of it beyond "Max backups per folder" go, as after an
+    /// action; a problem there does not undo the backup. Call it under the operation lock.
     /// </summary>
     public BackupInfo BackUpNow(string mappingId)
     {
-        return OpenBackups(ReadOwnDevice()).Create(mappingId, Shared.TargetPathOf(ReadMapping(mappingId)), BackupReason.Snapshot);
+        var backups = OpenBackups(ReadOwnDevice());
+        var backup = backups.Create(mappingId, Shared.TargetPathOf(ReadMapping(mappingId)), BackupReason.Snapshot);
+        var keep = new DeviceSettings(Local.Folder).MaxBackupsPerFolder;
+        try
+        {
+            if (keep > 0)
+            {
+                backups.Prune(mappingId, keep);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or BackupException or SafeFsException)
+        {
+            // shortcut: a failed cleanup is silent here; the next action's cleanup reports it.
+        }
+
+        return backup;
     }
 
     private Executor NewExecutor(DeviceFile? device)

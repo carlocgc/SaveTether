@@ -152,6 +152,9 @@ public static class BackupsPage
 
     public const string RestoreSharedText = "The shared copy is backed up on this device, then replaced with this backup.";
 
+    /// <summary><see cref="RestoreSharedText"/> in unsafe mode.</summary>
+    public const string RestoreSharedUnbackedText = "The shared copy is replaced with this backup. No backup of it is taken.";
+
     /// <summary>Typed to confirm restoring the shared copy, as for every other deletion of saves.</summary>
     public const string RestoreSharedPhrase = "restore shared data";
 

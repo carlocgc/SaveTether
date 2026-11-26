@@ -95,8 +95,9 @@ public enum NextStepKind
 /// <param name="MappingId">The mapping it is about, where the kind says one is set.</param>
 /// <param name="Value">Anything else the kind needs, such as a backup ID.</param>
 /// <param name="Choices">For <see cref="NextStepKind.ChooseSetup"/> and <see cref="NextStepKind.UseAllowedChoice"/>: the choices to pick from.</param>
+/// <param name="NoBackups">For <see cref="NextStepKind.ChooseSetup"/>: unsafe mode, so a choice that drops this device's data deletes it, with no backup.</param>
 public sealed record NextStep(
-    NextStepKind Kind, string? MappingId = null, string? Value = null, IReadOnlyList<SetupChoice>? Choices = null);
+    NextStepKind Kind, string? MappingId = null, string? Value = null, IReadOnlyList<SetupChoice>? Choices = null, bool NoBackups = false);
 
 /// <summary>
 /// A message for the owner: what is wrong or what happened, with the facts, in words that suit every

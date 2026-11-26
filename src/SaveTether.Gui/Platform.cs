@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using SaveTether.Core.Startup;
+using SaveTether.Core.Storage;
 using SaveTether.Gui.Presentation;
 
 namespace SaveTether.Gui;
@@ -34,7 +35,7 @@ internal static class Notifier
 
     public static void Show(string body, GuiLog log)
     {
-        if (!new NotificationSetting(App.Options.LocalFolder).IsOn)
+        if (!new DeviceSettings(App.Options.LocalFolder).Notifications)
         {
             return;
         }
