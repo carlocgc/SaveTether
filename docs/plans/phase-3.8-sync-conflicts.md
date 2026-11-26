@@ -4,7 +4,7 @@ Section 5d of the [implementation plan](implementation-plan.md) points here. Thi
 
 Planned 2026-11-26 by the owner and the agent. Nothing built yet.
 
-**Goal.** When a sync tool cannot merge two edits, it keeps both and renames one. Syncthing writes `save.sync-conflict-20261126-101500-ABCDEFG.dat`; Nextcloud, ownCloud and Dropbox write `save (conflicted copy 2026-11-26 101500).dat`. A conflict copy in a shared folder means one device's save lost to another's, and today SaveTether still shows that folder as green "Linked". With an opt-in device setting (off by default), SaveTether looks for conflict copies in each linked shared folder. If it finds any, the row shows a new amber state, **"File conflict"**, and the usual toast follows, in the desktop app and in the Decky plugin.
+**Goal.** When a sync tool cannot merge two edits, it keeps both and renames one. Syncthing writes `save.sync-conflict-20261126-101500-ABCDEFG.dat`; Dropbox and Nextcloud write `save (conflicted copy 2026-11-26 101500).dat`; ownCloud and older Nextcloud clients write `save_conflict-20261126-101500.dat`. A conflict copy in a shared folder means one device's save lost to another's, and today SaveTether still shows that folder as green "Linked". With an opt-in device setting (off by default), SaveTether looks for conflict copies in each linked shared folder. If it finds any, the row shows a new amber state, **"File conflict"**, and the usual toast follows, in the desktop app and in the Decky plugin.
 
 ## Decisions
 
@@ -12,7 +12,7 @@ Planned 2026-11-26 by the owner and the agent. Nothing built yet.
 |---|---|
 | D1 | **Opt-in, off by default.** A device setting, `detect_sync_conflicts`, like the notifications switch. Set in the app's Settings, with `savetether sync-conflicts on\|off`, and with a toggle in the Decky plugin (owner, 2026-11-26) |
 | D2 | **Only flagged when the mapping is otherwise Linked** (owner, 2026-11-26). The other amber states already need the owner first and keep their own word |
-| D3 | **Patterns** (owner, 2026-11-26): a file name containing `.sync-conflict-` (Syncthing) or `conflicted copy` (Nextcloud, ownCloud, Dropbox), ignoring case. OneDrive's `name-PCNAME.ext` and Google Drive's `name (1).ext` are not matched, because games make such names themselves |
+| D3 | **Patterns** (owner, 2026-11-26): a file name containing `.sync-conflict-` (Syncthing), `conflicted copy` (Dropbox and current Nextcloud clients) or `_conflict-` (ownCloud and older Nextcloud clients, e.g. `save_conflict-20261126-101500.dat`), ignoring case. Confirm the ownCloud form against its current client in T1. OneDrive's `name-PCNAME.ext` and Google Drive's `name (1).ext` are not matched, because games make such names themselves |
 | D4 | **Resolved by hand.** The row names the file and opens the shared folder. SaveTether deletes nothing. Once the copies are gone, the next check shows Linked |
 | D5 | **Toasts come from the existing rules.** A new amber word is a new problem key in `HealthMonitor` (and the plugin's `monitor.ts`), so it is notified once, and the notifications switch mutes it |
 
@@ -43,23 +43,23 @@ and matches `Path.GetFileName` against D3. It does not use `SafeFs.EnumerateTree
 - Nothing is opened, locked or written. Only directory entries are read. On Windows the directory handle shares read, write and delete; Linux has no locks. No mtime changes, so the sync tool has nothing to sync. Syncthing's watcher listens for create, write, remove and rename, not reads, so no rescan is triggered.
 - A file deleted or renamed during the listing is seen under its old name or not at all. At worst, a conflict copy just deleted is flagged for one more check. Syncthing's temp files (`.syncthing.*.tmp`, `~syncthing~*.tmp`) and SaveTether's `.*.tmp` do not match.
 - Listing names does not download OneDrive or Dropbox placeholders.
-- Cost: one recursive listing per linked mapping per check. The app checks every 5 minutes (`App.CheckInterval`); the plugin checks when its panel opens and on its timer. That is cheaper than the `--sizes` walk the plugin already runs, which stats every file.
+- Cost: one recursive listing per linked mapping per check. The app checks every 5 minutes (`App.CheckInterval`), and so does the plugin in the background (`CHECK_EVERY_MS`), as well as when its panel opens. This is new work: today the plugin's background checks run without `--sizes` and walk nothing, so with the setting on, the Deck lists every shared folder every 5 minutes, also while a game runs. It stays small, because it reads names only (no stat per file, unlike `--sizes`), and save folders are tens to a few thousand files. It runs only when the owner turns the setting on.
 - Known limit: a network share that stops answering in the middle of the listing can stall it, like any other read there. The app's check runs off the UI thread and is never started twice; the plugin's backend kills the CLI on timeout. A share already down is caught earlier, as Broken.
 
 ## Tasks
 
 ### T1 Core: state, setting, scan (M)
-- `HealthCheck.cs`: `HealthState.FileConflict`, `[JsonStringEnumMemberName("file-conflict")]`. `MappingHealth` gains `IReadOnlyList<string>? Conflicts = null` (paths relative to the shared folder, `/`-separated, sorted). `Check(..., bool detectConflicts = false)`: in the `Ok` branch, when on, `ConflictCopies(target)`. If it finds any, the state is `FileConflict` with the detail "The sync tool left {n} conflict copies in the shared folder, such as '{first}'. Keep the right one and delete the others." Use a `NextStep` only if a fitting `NextStepKind` already exists.
-- `public static bool IsConflictCopy(string fileName)`: the two patterns of D3.
+- `HealthCheck.cs`: `HealthState.FileConflict`, `[JsonStringEnumMemberName("file-conflict")]`. `MappingHealth` gains `IReadOnlyList<string>? Conflicts = null` (paths relative to the shared folder, `/`-separated, sorted). `Check(..., bool detectConflicts = false)`: in the `Ok` branch, when on, `ConflictCopies(target)`. If it finds any, the state is `FileConflict` with the detail "The sync tool left a conflict copy in the shared folder, '{first}'. Keep the right one and delete the other." for one copy, and "The sync tool left {n} conflict copies in the shared folder, such as '{first}'. Keep the right ones and delete the others." for more. No `NextStep`: `NextStepKind` has no kind for opening a folder, and the app's row action `OpenSharedFolder` covers it.
+- `public static bool IsConflictCopy(string fileName)`: the three patterns of D3.
 - `DeviceSettings.cs`: `DetectSyncConflicts => Read().DetectSyncConflicts ?? false`, `SetDetectSyncConflicts(bool)`, `bool? DetectSyncConflicts` on `SettingsFile`.
 - `Workspace.Status`: read the setting once and pass it to `Check`.
-- Tests: `IsConflictCopy` cases (Syncthing, Nextcloud, Dropbox true; `save (1).dat`, `save-PC.dat`, `.syncthing.save.dat.tmp` false); a linked temp mapping with a conflict file is `FileConflict` with the setting on and `Ok` with it off; the setting defaults to off and round-trips.
+- Tests: `IsConflictCopy` cases (Syncthing, `conflicted copy`, `_conflict-20261126-101500` true; `save (1).dat`, `save-PC.dat`, `.syncthing.save.dat.tmp` false); a linked temp mapping with a conflict file is `FileConflict` with the setting on and `Ok` with it off; the one-copy and two-copy detail sentences; the setting defaults to off and round-trips.
 
 ### T2 Presentation and app (M)
 - `StateWords.cs`: `(HealthState.FileConflict, _) => new("File conflict", Shade.Amber)`.
-- `AppsPage.cs`, beside `DoubleSeed`: the sentence "Conflict copy from the sync tool: {first} (+{n} more).", main action `RowAction.OpenSharedFolder`, others `Backups` and `Details`.
+- `AppsPage.cs`, beside `DoubleSeed`: the sentence "Conflict copy from the sync tool: {first}." for one copy, and "Conflict copies from the sync tool: {first} and {n - 1} more." for more, main action `RowAction.OpenSharedFolder`, others `Backups` and `Details`.
 - `SettingsScreen.cs`, after Backups: the heading "Sync conflicts", a switch bound to the setting, and a note (texts in `SettingsTexts.cs`). If the other switches trigger a check, this one does too; otherwise the next background check picks it up.
-- Tests: the word and the row for `FileConflict`; `HealthMonitor` toasts once for a new `FileConflict` and not again on the next check.
+- Tests: the word and the row for `FileConflict`, with one copy and with two; `HealthMonitor` toasts once for a new `FileConflict` and not again on the next check.
 
 ### T3 CLI and JSON (S)
 - `Output.cs`: `HealthState.FileConflict => "File conflict"`; human `status` lists the conflict paths under the row.

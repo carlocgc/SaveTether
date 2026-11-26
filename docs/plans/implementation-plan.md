@@ -563,7 +563,7 @@ Progress: T1 done (design 5.16 and the "no admin" lines); T2 done (detection); T
 
 ## 5d. Phase 3.8: sync-tool conflict copies
 
-Planned 2026-11-26. Goal: an opt-in device setting (off by default) that finds sync-tool conflict copies (Syncthing's `.sync-conflict-`, and the "conflicted copy" files of Nextcloud, ownCloud and Dropbox) in each linked shared folder. Such a folder shows a new amber state, "File conflict", with the usual toast, in the app and in the Decky plugin.
+Planned 2026-11-26. Goal: an opt-in device setting (off by default) that finds sync-tool conflict copies (Syncthing's `.sync-conflict-`, Dropbox's and Nextcloud's "conflicted copy", and ownCloud's `_conflict-`) in each linked shared folder. Such a folder shows a new amber state, "File conflict", with the usual toast, in the app and in the Decky plugin.
 
 Everything else is in [phase-3.8-sync-conflicts.md](phase-3.8-sync-conflicts.md): decisions, design, tasks T1 to T5 (T5 in the plugin's repo), the exit test, and progress.
 
