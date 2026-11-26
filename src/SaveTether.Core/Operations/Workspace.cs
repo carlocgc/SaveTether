@@ -643,6 +643,15 @@ public sealed partial class Workspace
         return OpenBackups(ReadOwnDevice()).RemoveMany(mappingId, mode);
     }
 
+    /// <summary>
+    /// A backup taken by hand of a mapping's shared copy, which is what a linked save folder holds. Copies only; the backup is
+    /// verified, and discarded if it does not match. Call it under the operation lock.
+    /// </summary>
+    public BackupInfo BackUpNow(string mappingId)
+    {
+        return OpenBackups(ReadOwnDevice()).Create(mappingId, Shared.TargetPathOf(ReadMapping(mappingId)), BackupReason.Snapshot);
+    }
+
     private Executor NewExecutor(DeviceFile? device)
     {
         BackupStore? backups = null;

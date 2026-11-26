@@ -581,7 +581,7 @@ internal sealed class MainWindow : Window
     /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
         actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.Remove or RowAction.Delete
-            or RowAction.FindAppAgain or RowAction.ChooseFolderAgain or RowAction.AddHere or RowAction.ChooseFolder);
+            or RowAction.FindAppAgain or RowAction.ChooseFolderAgain or RowAction.AddHere or RowAction.ChooseFolder or RowAction.BackUpNow);
 
     /// <summary>Banner B5's Fix it (write the entry with this app's path) or Turn it off (remove it); then a check redraws.</summary>
     private void SetSessionStart(bool on)
@@ -655,6 +655,9 @@ internal sealed class MainWindow : Window
                 break;
             case RowAction.Backups:
                 OpenScreen(new BackupsScreen(_localFolder, _operate, CloseScreen, mapping.AppId));
+                break;
+            case RowAction.BackUpNow:
+                _ = _operate(flow => flow.BackUpNowAsync(mapping));
                 break;
             case RowAction.OpenFolder when mapping.Health.Source is { } source:
                 FolderOpener.Open(source, log);

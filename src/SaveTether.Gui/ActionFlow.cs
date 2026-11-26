@@ -282,6 +282,32 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         }
     }
 
+    /// <summary>"Back up now" (section 5), on a Linked row: a verified backup of the shared copy. Copies only, so no confirmation.</summary>
+    public async Task BackUpNowAsync(MappingState mapping)
+    {
+        var session = await BeginAsync("back up now");
+        if (session is null)
+        {
+            return;
+        }
+
+        using (session)
+        {
+            try
+            {
+                var backup = await Work("Backing up…", () => session.BackUpNow(mapping.MappingId));
+                log.Write($"back up now {mapping.MappingId}: {backup.Id}");
+                await overlay.InformAsync("Backed up", AppsPage.BackedUpText($"{mapping.AppName} {mapping.Role}", backup.FileCount, backup.Location));
+            }
+            catch (Exception e) when (e is StoreException or IOException or UnauthorizedAccessException or SafeFsException or BackupException)
+            {
+                log.Write($"back up now {mapping.MappingId} failed: {e.Message}");
+                // The AOT build keeps only resource keys for the system's messages ("UnauthorizedAccess_IODenied_Path, <path>").
+                await overlay.InformAsync("No backup was made", e is IOException or UnauthorizedAccessException ? AppsPage.BackUpFailedText : e.Message);
+            }
+        }
+    }
+
     /// <summary>
     /// "Delete" (section 5), on a "Not set up here" row no device uses: <c>map delete</c> after its confirmation. It removes the
     /// shared saves, record and markers for every device, after a verified backup on this device (design 5.3, invariant 2).
