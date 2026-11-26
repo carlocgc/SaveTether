@@ -24,7 +24,7 @@ public class AppsPageTests
         Assert.Equal("Symlink", AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.Ok) with { LinkKind = "Symlink" }).Sentence);
         Assert.Equal("Junction", AppsPage.Row(Mapping("ppsspp.savedata", "PPSSPP", HealthState.Ok) with { LinkKind = "Junction" }).Sentence);
         Assert.Null(ok.Main);
-        Assert.Equal([RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert], ok.Others);
+        Assert.Equal([RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.BackUpNow, RowAction.Backups, RowAction.Revert], ok.Others);
 
         // Backups, where section 5.1 lists it: Linked, Not linked, Two shared copies.
         Assert.Contains(RowAction.Backups, For(HealthState.Replaced, HealthReason.FolderHoldsFiles).Others);
@@ -34,6 +34,11 @@ public class AppsPageTests
         Assert.Equal("Original", ready.Sentence);
         Assert.Equal((RowAction?)RowAction.Apply, ready.Main);
         Assert.Equal([RowAction.OpenFolder, RowAction.Remove], ready.Others);
+
+        // Back up now only on a Linked row (owner).
+        Assert.All(
+            Enum.GetValues<HealthState>().Where(s => s != HealthState.Ok),
+            s => Assert.DoesNotContain(RowAction.BackUpNow, For(s).Others));
 
         // Remove is offered only when Ready to link: the core refuses it while applied.
         Assert.All(
