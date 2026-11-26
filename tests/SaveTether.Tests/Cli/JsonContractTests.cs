@@ -135,6 +135,12 @@ public class JsonContractTests
         Record("status-sizes", 0, "status", "--sizes");
         Record("device-list", 0, "device", "list");
         Record("notifications", 0, "notifications");
+        Record("sync-conflicts", 0, "sync-conflicts", "on");
+        var conflict = Path.Combine(pc.Target, "GAME1", "save.sync-conflict-20261126-101500-ABC.bin");
+        File.WriteAllText(conflict, "theirs");
+        Record("status-file-conflict", 0, "status");
+        File.Delete(conflict);
+        pc.Ok("sync-conflicts", "off");
         Record("backup-keep", 0, "backup", "keep");
 
         var aside = sandbox.At("pc", "sync-unplugged");

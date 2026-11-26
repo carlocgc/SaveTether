@@ -152,6 +152,11 @@ internal static class CliApp
               Show, or set, this device's "Desktop notifications" switch, which the desktop app
               follows. Off silences notifications only; status still shows problems.
 
+          savetether sync-conflicts [on|off]
+              Show, or set, this device's "Detect sync conflicts" switch (off by default). On, status
+              shows "File conflict" for a linked folder whose shared copy holds conflict copies
+              that a sync tool left.
+
           savetether device list
               The devices in the sync folder, the mappings, and this device's backups.
 
@@ -229,7 +234,7 @@ internal static class CliApp
 
                 // While an operation is unfinished, only looking and recovering are allowed.
                 var readOnly = command.Name is "status" or "backup list" or "recover" or "app list" or "device list" or "notifications"
-                    or "backup auto" or "backup keep"
+                    or "sync-conflicts" or "backup auto" or "backup keep"
                     || (command.Name == "app add" && command.Has(ArgParser.DryRun));
                 if (!readOnly && Journal.For(_local).IsOpen)
                 {
@@ -246,6 +251,7 @@ internal static class CliApp
                     "app list" => AppList(),
                     "status" => Status(),
                     "notifications" => Notifications(),
+                    "sync-conflicts" => SyncConflicts(),
                     "backup auto" or "backup keep" => BackupSettings(),
                     "device list" => new CliOutput
                     {
@@ -288,7 +294,7 @@ internal static class CliApp
         /// guarded against.
         /// </remarks>
         private bool Writes =>
-            command.Name is not ("status" or "backup list" or "app list" or "device list" or "notifications" or "backup auto" or "backup keep" or "uninstall")
+            command.Name is not ("status" or "backup list" or "app list" or "device list" or "notifications" or "sync-conflicts" or "backup auto" or "backup keep" or "uninstall")
             && !command.Has(ArgParser.DryRun)
             && (command.Name != "init" || Directory.Exists(_local.Folder));
 
@@ -530,22 +536,38 @@ internal static class CliApp
         private CliOutput Notifications()
         {
             var setting = new DeviceSettings(_local.Folder);
+            return OnOff(setting.SetNotifications, out var problem) is var asked && problem is not null
+                ? Failed(ExitRefused, problem)
+                : new CliOutput
+                {
+                    Command = command.Name, ExitCode = ExitSuccess, Notifications = new NotificationsOutput(asked ?? setting.Notifications),
+                };
+        }
+
+        /// <summary>"Detect sync conflicts", shared with the app and the Decky plugin. Like "notifications": no setup, no lock.</summary>
+        private CliOutput SyncConflicts()
+        {
+            var setting = new DeviceSettings(_local.Folder);
+            return OnOff(setting.SetDetectSyncConflicts, out var problem) is var asked && problem is not null
+                ? Failed(ExitRefused, problem)
+                : new CliOutput
+                {
+                    Command = command.Name, ExitCode = ExitSuccess, SyncConflicts = new SyncConflictsOutput(asked ?? setting.DetectSyncConflicts),
+                };
+        }
+
+        /// <summary>An on/off command's argument, saved with set when given: the value asked for, or null when only shown.</summary>
+        private bool? OnOff(Func<bool, string?> set, out string? problem)
+        {
             bool? asked = command.FirstPositional switch
             {
                 null => null,
                 "on" => true,
                 "off" => false,
-                var other => throw new UsageException($"'notifications' takes 'on' or 'off', not '{other}'"),
+                var other => throw new UsageException($"'{command.Name}' takes 'on' or 'off', not '{other}'"),
             };
-            if (asked is { } on && setting.SetNotifications(on) is { } problem)
-            {
-                return Failed(ExitRefused, problem);
-            }
-
-            return new CliOutput
-            {
-                Command = command.Name, ExitCode = ExitSuccess, Notifications = new NotificationsOutput(asked ?? setting.Notifications),
-            };
+            problem = asked is { } on ? set(on) : null;
+            return asked;
         }
 
         /// <summary>

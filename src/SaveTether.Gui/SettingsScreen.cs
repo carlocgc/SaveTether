@@ -12,7 +12,7 @@ namespace SaveTether.Gui;
 
 /// <summary>
 /// The Settings page (desktop-app-spec.md, section 11), in place of the Apps page while open. Built so far:
-/// Start with the session, Desktop notifications, Backups (before actions, how many to keep), and About. The backup location and This device come later.
+/// Start with the session, Desktop notifications, Backups (before actions, how many to keep), Sync conflicts, and About. The backup location and This device come later.
 /// </summary>
 internal sealed class SettingsScreen : UserControl, IScreen
 {
@@ -155,6 +155,24 @@ internal sealed class SettingsScreen : UserControl, IScreen
         page.Children.Add(new TextBlock { Text = SettingsTexts.MaxBackups, FontWeight = FontWeight.SemiBold });
         page.Children.Add(maxBackups);
         page.Children.Add(Note(SettingsTexts.MaxBackupsNote));
+
+        page.Children.Add(Heading(SettingsTexts.SyncConflicts));
+        page.Children.Add(new TextBlock { Text = SettingsTexts.DetectSyncConflicts, FontWeight = FontWeight.SemiBold });
+        page.Children.Add(Switch(
+            SettingsTexts.DetectSyncConflicts,
+            () => settings.DetectSyncConflicts,
+            on =>
+            {
+                // Checks at once, so the rows show the result without waiting for the next background check.
+                var problem = settings.SetDetectSyncConflicts(on);
+                if (problem is null)
+                {
+                    App.Instance?.CheckNow();
+                }
+
+                return problem;
+            }));
+        page.Children.Add(Note(SettingsTexts.DetectSyncConflictsNote));
 
         // Linux, in the installed copy only (section 11, "Installing"). On Windows, Settings > Apps uninstalls what the installer put there.
         if (InstallOffer.ForSystem(localFolder, AppContext.BaseDirectory, Program.Version) is { CanUninstall: true } installed)

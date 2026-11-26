@@ -17,15 +17,18 @@ public class DeviceSettingsTests
         Assert.True(fresh.Notifications);
         Assert.True(fresh.BackupBeforeActions);
         Assert.Equal(BackupStore.DefaultKeep, fresh.MaxBackupsPerFolder);
+        Assert.False(fresh.DetectSyncConflicts); // opt-in: off until the owner turns it on
 
         Assert.Null(new DeviceSettings(local).SetNotifications(false));
         Assert.Null(new DeviceSettings(local).SetBackupBeforeActions(false));
         Assert.Null(new DeviceSettings(local).SetMaxBackupsPerFolder(0));
+        Assert.Null(new DeviceSettings(local).SetDetectSyncConflicts(true));
 
         var read = new DeviceSettings(local);
         Assert.False(read.Notifications);
         Assert.False(read.BackupBeforeActions);
         Assert.Equal(0, read.MaxBackupsPerFolder);
+        Assert.True(read.DetectSyncConflicts);
 
         Assert.Null(read.SetNotifications(true));
         Assert.False(new DeviceSettings(local).BackupBeforeActions); // setting one keeps the others

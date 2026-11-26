@@ -142,6 +142,8 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
                 $"The folder now links to {link} instead of the shared folder. Remove that link by hand, then apply.", RowAction.OpenFolder,
                 new[] { RowAction.Details }),
             (HealthState.DoubleSeed, _) => ("More than one device made its saves the shared copy.", RowAction.UseThisCopy, new[] { RowAction.Backups, RowAction.Details }),
+            (HealthState.FileConflict, _) => (
+                ConflictSentence(mapping.Health.Conflicts ?? []), RowAction.OpenSharedFolder, new[] { RowAction.Backups, RowAction.Details }),
             (HealthState.ForeignLink, _) => (
                 $"The folder is a link SaveTether did not make, to {link}. Remove it by hand, then apply.", RowAction.OpenFolder,
                 new[] { RowAction.Details }),
@@ -152,6 +154,18 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         var unused = mapping is { Health.Reason: HealthReason.NoSaveFolder, SetUpOn.Count: 0 };
         var devices = mapping.Health.Reason == HealthReason.NoSaveFolder && mapping.SetUpOn.Count > 0 ? mapping.SetUpOn : null;
         return new AppRow(mapping, sentence, main, others, unused ? RowAction.Delete : null, devices);
+    }
+
+    /// <summary>A File conflict row's sentence: the first conflict copy, and how many more there are.</summary>
+    public static string ConflictSentence(IReadOnlyList<string> conflicts)
+    {
+        ArgumentNullException.ThrowIfNull(conflicts);
+        return conflicts.Count switch
+        {
+            0 => "The sync tool left conflict copies in the shared folder.",
+            1 => $"Conflict copy from the sync tool: {conflicts[0]}.",
+            _ => $"Conflict copies from the sync tool: {conflicts[0]} and {conflicts.Count - 1} more.",
+        };
     }
 
     /// <summary>

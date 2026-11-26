@@ -35,6 +35,10 @@ public enum HealthState
     /// <summary>S is a link SaveTether did not make.</summary>
     [JsonStringEnumMemberName("foreign-link")]
     ForeignLink,
+
+    /// <summary>Linked, but the shared folder holds conflict copies a sync tool left. Only looked for when the device's setting is on.</summary>
+    [JsonStringEnumMemberName("file-conflict")]
+    FileConflict,
 }
 
 /// <summary>
@@ -89,9 +93,10 @@ public enum HealthReason
 /// Which situation the state stands for, for Not applied, Replaced and Broken; null for the other states,
 /// which each stand for one situation.
 /// </param>
+/// <param name="Conflicts">For File conflict: the conflict copies, relative to the shared folder, '/'-separated and sorted; null otherwise.</param>
 public sealed record MappingHealth(
     string MappingId, HealthState State, string? Source, string Target, Note Detail, HealthReason? Reason = null,
-    long? Bytes = null, int? Files = null, string? Name = null);
+    long? Bytes = null, int? Files = null, string? Name = null, IReadOnlyList<string>? Conflicts = null);
 
 /// <summary>
 /// Works out a mapping's state from one look at S, one read of its link, and the seed markers.
@@ -101,7 +106,9 @@ public static class HealthCheck
 {
     /// <param name="path">This device's entry for the mapping, or null when it has none.</param>
     /// <param name="recorded">What the state file says was applied here, or null.</param>
-    public static MappingHealth Check(SharedStore shared, MappingFile mapping, DevicePath? path, AppliedMapping? recorded)
+    /// <param name="detectConflicts">Look for sync-tool conflict copies in a linked shared folder (the device's opt-in setting).</param>
+    public static MappingHealth Check(
+        SharedStore shared, MappingFile mapping, DevicePath? path, AppliedMapping? recorded, bool detectConflicts = false)
     {
         ArgumentNullException.ThrowIfNull(shared);
         ArgumentNullException.ThrowIfNull(mapping);
@@ -148,13 +155,25 @@ public static class HealthCheck
             }
 
             var seeders = shared.ReadSeedMarkers(mapping.Id).Where(m => m.IsActive).Select(m => m.DeviceName).ToList();
-            return seeders.Count > 1
-                ? Is(
+            if (seeders.Count > 1)
+            {
+                return Is(
                     HealthState.DoubleSeed,
                     new Note(
                         $"More than one device made its saves the shared copy ({string.Join(", ", seeders)}).",
-                        new NextStep(NextStepKind.MakeThisCopyWin, mapping.Id)))
-                : Is(HealthState.Ok, "Linked to the shared folder.");
+                        new NextStep(NextStepKind.MakeThisCopyWin, mapping.Id)));
+            }
+
+            var conflicts = detectConflicts ? ConflictCopies(PathRules.ResolveAll(target)) : [];
+            if (conflicts.Count > 0)
+            {
+                var detail = conflicts.Count == 1
+                    ? $"The sync tool left a conflict copy in the shared folder, '{conflicts[0]}'. Keep the right one and delete the other."
+                    : $"The sync tool left {conflicts.Count} conflict copies in the shared folder, such as '{conflicts[0]}'. Keep the right ones and delete the others.";
+                return Is(HealthState.FileConflict, detail) with { Conflicts = conflicts };
+            }
+
+            return Is(HealthState.Ok, "Linked to the shared folder.");
         }
 
         if (recorded is not null)
@@ -209,6 +228,42 @@ public static class HealthCheck
 
         var (detail, reason) = Replaced(mappingId, recorded.Source, kind);
         return Is(HealthState.Replaced, detail, reason);
+    }
+
+    /// <summary>
+    /// A name a sync tool gives the copy it keeps when two edits clash: Syncthing's, the "conflicted copy" of Dropbox and
+    /// Nextcloud, and the "_conflict-" of ownCloud and older Nextcloud clients.
+    /// </summary>
+    public static bool IsConflictCopy(string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(fileName);
+        return fileName.Contains(".sync-conflict-", StringComparison.OrdinalIgnoreCase)
+            || fileName.Contains("conflicted copy", StringComparison.OrdinalIgnoreCase)
+            || fileName.Contains("_conflict-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The conflict copies under the shared folder. Names only: no file is opened or stat'ed, so a file the game or the sync
+    /// tool deletes mid-listing cannot fail the walk. A failure that still escapes finds nothing this time; the next check looks again.
+    /// </summary>
+    private static List<string> ConflictCopies(string target)
+    {
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = true,
+        };
+        try
+        {
+            return Directory.EnumerateFiles(target, "*", options)
+                .Where(f => IsConflictCopy(Path.GetFileName(f)))
+                .Select(f => Path.GetRelativePath(target, f).Replace('\\', '/'))
+                .Order(StringComparer.Ordinal)
+                .ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
     }
 
     /// <summary>What has taken the link's place at the save folder, and what to say about it.</summary>

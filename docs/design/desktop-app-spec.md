@@ -103,7 +103,7 @@ Page actions: **Add app** (section 8), **Apply all** (section 9.4, shown when at
 
 ### 5.1 States
 
-The core's `HealthState` has seven values. Not applied, Replaced and Broken each cover situations that need different words and actions, so the core says which with a `HealthReason` (section 13, item 2), shown below in the Situation column.
+The core's `HealthState` has eight values (File conflict since 2026-11-26). Not applied, Replaced and Broken each cover situations that need different words and actions, so the core says which with a `HealthReason` (section 13, item 2), shown below in the Situation column.
 
 *Restored 2026-11-26:* sections 5 to 7 were dropped by mistake in #77 (2026-11-20), together with the old 4.2 it meant to replace, and are back as they were then. The table below was brought up to the build of 2026-11-26 (`StateWords`, `AppsPage.Row`) when it was restored; the dated notes after it say what changed and why. The notes the Apps page gathered while this section was missing (they had landed after Apply all, 9.4) are moved here unchanged.
 
@@ -122,6 +122,7 @@ The core's `HealthState` has seven values. Not applied, Replaced and Broken each
 | Retargeted | | Linked elsewhere | amber | "The folder now links to <path> instead of the shared folder. Remove that link by hand, then apply." | Open folder | Details |
 | Double seed | | Two shared copies | amber | "More than one device made its saves the shared copy." | **Use this device's copy** (section 9.2, Double seed) | Backups, Details |
 | Foreign link | | Not SaveTether's link | amber | "The folder is a link SaveTether did not make, to <path>. Remove it by hand, then apply." | Open folder | Details |
+| File conflict | the shared folder holds a sync tool's conflict copies; only with "Detect sync conflicts" on (section 11, phase 3.8) | File conflict | amber | "Conflict copy from the sync tool: <file>." or "Conflict copies from the sync tool: <file> and <n> more." | Open shared folder | Backups, Details |
 
 "Not applied, no folder set" counts as grey but is listed after everything else, under a collapsed heading, so a device that uses three of ten shared apps is not cluttered. The heading was "Not on this device (*n*)"; it is **Sync folders ignored by this device (*n*)** since 2026-11-21 (see the notes below).
 
@@ -472,6 +473,7 @@ The screen behind the **Maintenance** button (after Settings), and the dialogs i
 - **Desktop notifications**: a switch, on by default. Off, SaveTether shows no notifications (3.1); the tray icon still shows the state. Kept in the local folder (`notifications.txt`; `settings.json` since 2026-11-26, see below). The switch also governs the Decky plugin's toasts on the same device (phase 4.1, planned), and `savetether notifications [on|off]` reads and sets it.
 - **Backups**: the location, with **Change**, which runs `Init` again with the new backup root after a confirmation that existing backups stay where they are and are no longer listed. Moving them is not offered, since the core has no operation for it (decision 8).
 - **Backups before actions and how many to keep** (2026-11-26, owner): see "Backup settings, as built" below.
+- **Detect sync conflicts** (2026-11-26, owner; phase 3.8): a switch under its own "Sync conflicts" heading, after Backups, off by default. On, each check lists the files of every linked shared folder (names only: nothing is opened or written, so the sync tool sees no change) and looks for the conflict copies a sync tool leaves. A folder with one shows the amber word **File conflict**, the row says "Conflict copy from the sync tool: <file>." (or "<file> and <n> more."), and its main action is Open shared folder; the owner keeps the right copy and deletes the other by hand, and the next check shows Linked. A new File conflict is notified like any other amber state (3.1). Turning the switch on or off runs a check. Kept in `settings.json` as `detect_sync_conflicts`; `savetether sync-conflicts [on|off]` and the Decky plugin's toggle read and set it.
 - **This device**: name and sync folder, read only. Changing either is "Set up again", which shows the setup pages with the current values filled in. A new sync folder is refused while any mapping is applied here, as `map remove` is (decision 9): those links point into the old sync folder. The core's `Init` checks this (section 13, item 7); the refusal's next steps are one Revert per mapping, shown as a Revert button for each.
 - **About**: version, the local folder (with Open), the licence.
 

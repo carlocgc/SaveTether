@@ -525,10 +525,12 @@ public sealed partial class Workspace
         }
         var state = Local.ReadState();
         var mappings = mappingId is null ? Shared.ListMappings() : [ReadMapping(mappingId)];
+        var detectConflicts = new DeviceSettings(Local.Folder).DetectSyncConflicts;
         return new StatusReport(
             DeviceName, Shared.SyncRoot, !DeviceIdentity.Matches(Bootstrap, device), Journal.IsOpen,
             mappings
-                .Select(m => HealthCheck.Check(Shared, m, device.Paths.GetValueOrDefault(m.Id), state.Mappings.GetValueOrDefault(m.Id)))
+                .Select(m => HealthCheck.Check(
+                    Shared, m, device.Paths.GetValueOrDefault(m.Id), state.Mappings.GetValueOrDefault(m.Id), detectConflicts))
                 .ToList())
         {
             Removal = own is null ? null : RemovalOf(own), RemovedBy = own?.RemovedBy, ReturnedDevices = returned,

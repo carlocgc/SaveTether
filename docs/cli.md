@@ -6,7 +6,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 - [Concepts](#concepts)
 - [Options every command takes](#options-every-command-takes)
-- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [notifications](#notifications) · [device list](#device-list) · [device rename](#device-rename) · [device remove](#device-remove) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
+- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [notifications](#notifications) · [sync-conflicts](#sync-conflicts) · [device list](#device-list) · [device rename](#device-rename) · [device remove](#device-remove) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
 - [Workflows](#workflows)
 - [Files and environment](#files-and-environment)
 - [Exit codes](#exit-codes)
@@ -177,6 +177,7 @@ Shows each mapping's state on this device, or one mapping's. It only reads. It s
 | `Retargeted` | The link points somewhere other than the shared folder. | Remove that link by hand, then `apply`. |
 | `Double seed` | More than one device made its own saves the shared copy. | Choose which to keep: `apply <id> --replace-shared --confirm-replace` on that device. |
 | `Foreign link` | The folder is a link SaveTether did not make. | Remove it by hand, then `apply`. |
+| `File conflict` | Linked, but the shared folder holds conflict copies a sync tool left; they are listed under the row. Only shown with `sync-conflicts on`. | Keep the right copy and delete the other, in the shared folder. |
 
 ```bash
 savetether status
@@ -195,6 +196,19 @@ Shows this device's "Desktop notifications" switch, or sets it. It is the same s
 ```bash
 savetether notifications
 savetether notifications off
+```
+
+## sync-conflicts
+
+```
+savetether sync-conflicts [on|off]
+```
+
+Shows this device's "Detect sync conflicts" switch, or sets it. Off by default. On, `status` looks in each linked shared folder for the conflict copies a sync tool leaves when two devices changed the same file (Syncthing's `save.sync-conflict-…`, the "conflicted copy" files of Dropbox and Nextcloud, ownCloud's `_conflict-…`), and shows such a folder as `File conflict`, with the copies listed. It reads file names only. It is the same switch as in the desktop app's Settings and the Decky plugin, works on a device that is not set up, and works while another operation runs.
+
+```bash
+savetether sync-conflicts on
+savetether status
 ```
 
 ## device list

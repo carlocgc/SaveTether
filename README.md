@@ -59,7 +59,7 @@ flowchart LR
 
 ## Limits
 
-- **One device in use at a time.** Let the sync tool finish before switching devices; two devices writing the same saves at once is left to the sync tool's conflict handling.
+- **One device in use at a time.** Let the sync tool finish before switching devices; two devices writing the same saves at once is left to the sync tool's conflict handling. With *Detect sync conflicts* on (Settings), the app flags the conflict copies Syncthing, Dropbox, Nextcloud and ownCloud leave: see [ways to share the folder](docs/sharing.md#when-two-machines-changed-the-same-save).
 - **Early days.** Tested on Windows, Linux and the Steam Deck. Keep your own backup of saves you care about too.
 - **Imported game definitions are unverified:** they are converted from the manifest, not tried by hand, so check the save folders the plan shows before applying.
 

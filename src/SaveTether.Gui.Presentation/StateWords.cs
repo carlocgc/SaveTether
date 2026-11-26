@@ -38,6 +38,7 @@ public static class StateWords
         (HealthState.Retargeted, _) => new("Linked elsewhere", Shade.Amber),
         (HealthState.DoubleSeed, _) => new("Two shared copies", Shade.Amber),
         (HealthState.ForeignLink, _) => new("Not SaveTether's link", Shade.Amber),
+        (HealthState.FileConflict, _) => new("File conflict", Shade.Amber),
         _ => throw new ArgumentOutOfRangeException(nameof(state), state, "A state with no word in section 5.1."),
     };
 }
