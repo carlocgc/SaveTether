@@ -31,7 +31,7 @@ public class ArgParserTests
     public void The_command_table_is_what_the_design_lists()
     {
         Assert.Equal(
-            ["init", "map add", "map remove", "map delete", "app add", "app list", "status", "notifications", "device list", "device rename", "device remove", "apply", "revert", "backup list", "backup restore", "backup delete", "recover", "uninstall"],
+            ["init", "map add", "map remove", "map delete", "app add", "app list", "status", "notifications", "sync-conflicts", "device list", "device rename", "device remove", "apply", "revert", "backup list", "backup auto", "backup keep", "backup restore", "backup delete", "recover", "uninstall"],
             ArgParser.Commands.Select(c => c.Name));
     }
 
@@ -97,7 +97,7 @@ public class ArgParserTests
     [InlineData("'map' needs a subcommand: add, remove, delete", "map")]
     [InlineData("'map' needs a subcommand: add, remove, delete", "map", "--json")]
     [InlineData("unknown command 'map rename'; 'map' takes: add, remove, delete", "map", "rename")]
-    [InlineData("'backup' needs a subcommand: list, restore, delete", "backup")]
+    [InlineData("'backup' needs a subcommand: list, auto, keep, restore, delete", "backup")]
     [InlineData("unknown option '--force' for 'apply'", "apply", "x.y", "--force")]
     [InlineData("unknown option '--copy' for 'revert'", "revert", "x.y", "--copy")]
     [InlineData("unknown option '-f' for 'apply'", "apply", "-f")]

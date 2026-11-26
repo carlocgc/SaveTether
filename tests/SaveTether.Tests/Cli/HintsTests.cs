@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
 using SaveTether.Cli;
 using SaveTether.Core.Model;
+using SaveTether.Core.Planning;
+using SaveTether.Tests.Planning;
 using SaveTether.Tests.FileSystem;
 
 namespace SaveTether.Tests.Cli;
@@ -49,6 +51,24 @@ public partial class HintsTests
         var guard = Hints.For(new NextStep(
             NextStepKind.UseAllowedChoice, Id, Choices: [SetupChoice.NoCopy, SetupChoice.AddMissing, SetupChoice.ReplaceShared]));
         Assert.Equal("Use --no-copy, --add-missing, or --replace-shared --confirm-replace.", guard);
+    }
+
+    [Fact]
+    public void The_no_copy_hint_says_deleted_only_in_unsafe_mode()
+    {
+        NextStep Step(SetupChoice[] choices, bool noBackups) => new(NextStepKind.ChooseSetup, Id, Choices: choices, NoBackups: noBackups);
+        SetupChoice[] firstDevice = [SetupChoice.Copy, SetupChoice.NoCopy];
+        SetupChoice[] guard = [SetupChoice.NoCopy, SetupChoice.AddMissing, SetupChoice.ReplaceShared];
+
+        Assert.Contains("stay only in the backup (--no-copy)", Hints.For(Step(firstDevice, noBackups: false)), StringComparison.Ordinal);
+        Assert.Contains("are deleted (--no-copy)", Hints.For(Step(firstDevice, noBackups: true)), StringComparison.Ordinal);
+        Assert.Contains("this device's stay in the backup", Hints.For(Step(guard, noBackups: false)), StringComparison.Ordinal);
+        Assert.Contains("this device's are deleted", Hints.For(Step(guard, noBackups: true)), StringComparison.Ordinal);
+        Assert.DoesNotContain("deleted", Hints.For(Step(guard, noBackups: false)), StringComparison.Ordinal);
+
+        // The planner sets it from the request.
+        var refusal = Planner.Plan(Snap.WithLocalSaves(), new ApplyRequest(NoBackups: true)).Refusal!;
+        Assert.True(refusal.Message.Next.Single(n => n.Kind == NextStepKind.ChooseSetup).NoBackups);
     }
 
     [Fact]

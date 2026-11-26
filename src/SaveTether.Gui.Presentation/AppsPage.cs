@@ -59,6 +59,9 @@ public enum RowAction
 
     /// <summary>The Backups page, filtered to this row's app (section 9.7).</summary>
     Backups,
+
+    /// <summary>A backup taken by hand of the shared copy a linked folder points to. Only on a Linked row.</summary>
+    BackUpNow,
 }
 
 /// <summary>One row of the Apps page: a mapping, its sentence and its actions.</summary>
@@ -114,7 +117,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         var (sentence, main, others) = (mapping.Health.State, mapping.Health.Reason) switch
         {
             (HealthState.Ok, _) => (mapping.LinkKind ?? "Link", (RowAction?)null,
-                new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.Backups, RowAction.Revert }),
+                new[] { RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.BackUpNow, RowAction.Backups, RowAction.Revert }),
             (HealthState.NotApplied, HealthReason.NoSaveFolder) => (
                 SetUpOnSentence(mapping.SetUpOn),
                 RowAction.AddHere, mapping.HasDefinition ? new[] { RowAction.ChooseFolder } : []),
@@ -139,6 +142,8 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
                 $"The folder now links to {link} instead of the shared folder. Remove that link by hand, then apply.", RowAction.OpenFolder,
                 new[] { RowAction.Details }),
             (HealthState.DoubleSeed, _) => ("More than one device made its saves the shared copy.", RowAction.UseThisCopy, new[] { RowAction.Backups, RowAction.Details }),
+            (HealthState.FileConflict, _) => (
+                ConflictSentence(mapping.Health.Conflicts ?? []), RowAction.OpenSharedFolder, new[] { RowAction.Backups, RowAction.Details }),
             (HealthState.ForeignLink, _) => (
                 $"The folder is a link SaveTether did not make, to {link}. Remove it by hand, then apply.", RowAction.OpenFolder,
                 new[] { RowAction.Details }),
@@ -149,6 +154,18 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         var unused = mapping is { Health.Reason: HealthReason.NoSaveFolder, SetUpOn.Count: 0 };
         var devices = mapping.Health.Reason == HealthReason.NoSaveFolder && mapping.SetUpOn.Count > 0 ? mapping.SetUpOn : null;
         return new AppRow(mapping, sentence, main, others, unused ? RowAction.Delete : null, devices);
+    }
+
+    /// <summary>A File conflict row's sentence: the first conflict copy, and how many more there are.</summary>
+    public static string ConflictSentence(IReadOnlyList<string> conflicts)
+    {
+        ArgumentNullException.ThrowIfNull(conflicts);
+        return conflicts.Count switch
+        {
+            0 => "The sync tool left conflict copies in the shared folder.",
+            1 => $"Conflict copy from the sync tool: {conflicts[0]}.",
+            _ => $"Conflict copies from the sync tool: {conflicts[0]} and {conflicts.Count - 1} more.",
+        };
     }
 
     /// <summary>
@@ -205,6 +222,7 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
         RowAction.AddHere => "Add",
         RowAction.ChooseFolder => "Choose the folder myself",
         RowAction.Backups => "Backups",
+        RowAction.BackUpNow => "Back up now",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, "An action with no label."),
     };
 
@@ -214,12 +232,21 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     /// Delete's confirmation: the title says what. With other devices registered, the owner confirms the condition nothing
     /// here can check: none of them is still writing to the role's shared folder. The result says where the backup is.
     /// </summary>
-    public static string DeleteText(bool others) => others
-        ? "Its shared copy is backed up on this device first. Other devices that use the sync folder lose it too: make sure none is still writing to it."
-        : "Its shared copy is backed up on this device first.";
+    /// <param name="noBackups">Unsafe mode: no backup is taken, so none is promised.</param>
+    public static string DeleteText(bool others, bool noBackups = false) =>
+        (noBackups ? "No backup of its shared copy is taken." : "Its shared copy is backed up on this device first.") +
+        (others ? " Other devices that use the sync folder lose it too: make sure none is still writing to it." : string.Empty);
 
     public static string DeletedText(string role, bool hadBackup) =>
         $"{role} was deleted from the sync folder." + (hadBackup ? " Its shared copy is in Backups." : string.Empty);
+
+    /// <summary>Back up now's result: the folder the backup was written to.</summary>
+    public static string BackedUpText(string role, int files, string folder) =>
+        $"{role}: {files} file{(files == 1 ? string.Empty : "s")} backed up to {folder}";
+
+    /// <summary>Back up now, when a file could not be read or written: the system's own text is in gui.log.</summary>
+    public const string BackUpFailedText =
+        "A file could not be copied. Make sure the app is closed and SaveTether can read every file in the folder. The details are in gui.log.";
 
     /// <summary>Remove's confirmation (section 5).</summary>
     public static string RemoveWarning(string role) =>
@@ -244,10 +271,10 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
 
     /// <summary>One question for every mapping with saves only on this device (apply all, section 9.4, as built 2026-11-21).</summary>
     /// <param name="others">Another device is registered: only then can one of these already be set up elsewhere.</param>
-    public static string FirstDeviceText(IReadOnlyList<string> roles, bool others) =>
+    public static string FirstDeviceText(IReadOnlyList<string> roles, bool others, bool noBackups = false) =>
         $"{string.Join("\n", roles)}\n\nNo shared copy yet. One answer for {(roles.Count == 1 ? "it" : "all of them")}:\n" +
         $"{FirstDeviceShare}: this device's data becomes the shared copy.\n" +
-        $"{FirstDeviceStartEmpty}: this device's data is kept only in the backup." +
+        $"{FirstDeviceStartEmpty}: this device's data is {(noBackups ? "deleted" : "kept only in the backup")}." +
         (others ? $"\n\nIf any of these is set up on another device, choose {FirstDeviceLeave} until its data has arrived here." : string.Empty);
 
     /// <summary>Apply all's summary (section 9.4).</summary>

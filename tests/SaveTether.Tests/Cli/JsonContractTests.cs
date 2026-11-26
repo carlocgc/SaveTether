@@ -120,7 +120,7 @@ public class JsonContractTests
         void Record(string name, int exit, params string[] args) => RecordOn(pc, name, exit, args);
 
         Record("init", 0, "init", "--sync-root", pc.SyncRoot, "--device", "pc", "--create-root");
-        Record("map-add", 0, "map", "add", Id, "--target", "ppsspp/SAVEDATA", "--source", pc.Source, "--process", "PPSSPPSDL");
+        Record("map-add", 0, "map", "add", Id, "--target", "ppsspp/SAVEDATA", "--source", pc.Source, "--process", "PPSSPPSDL", "--name", "PPSSPP");
         Record("map-add-conflict", 1, "map", "add", "other.saves", "--target", "other/saves", "--source", pc.Source);
         pc.Save("GAME1/save.bin", "mine");
         pc.Save("GAME2/save.bin", "only-here");
@@ -135,6 +135,13 @@ public class JsonContractTests
         Record("status-sizes", 0, "status", "--sizes");
         Record("device-list", 0, "device", "list");
         Record("notifications", 0, "notifications");
+        Record("sync-conflicts", 0, "sync-conflicts", "on");
+        var conflict = Path.Combine(pc.Target, "GAME1", "save.sync-conflict-20261126-101500-ABC.bin");
+        File.WriteAllText(conflict, "theirs");
+        Record("status-file-conflict", 0, "status");
+        File.Delete(conflict);
+        pc.Ok("sync-conflicts", "off");
+        Record("backup-keep", 0, "backup", "keep");
 
         var aside = sandbox.At("pc", "sync-unplugged");
         Directory.Move(pc.SyncRoot, aside);

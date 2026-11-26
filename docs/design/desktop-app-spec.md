@@ -93,6 +93,156 @@ While B1, B2 or B3 is shown, every action on the Apps and Backups pages is disab
 
 *As built (2026-11-20):* `BackgroundTasks` (presentation) is the registry, `MainWindow.Tasks` holds it and `MainWindow` draws the footer line (`Idle` is `MainWindow.Idle`). The health check does not report through it yet.
 
+## 5. Apps page
+
+Mappings are grouped by app: the part of the mapping ID before the dot, named from the app's definition when there is one ("Ryujinx"), otherwise the ID itself. Inside an app, one row per role (mapping), named from the definition's role name ("Saves") or the part after the dot.
+
+Each row shows: the state word and icon, one sentence, and the folder on this device. Rows needing attention, and the apps holding them, sort to the top; the rest are in name order.
+
+Page actions: **Add app** (section 8), **Apply all** (section 9.4, shown when at least one row is Ready to link).
+
+### 5.1 States
+
+The core's `HealthState` has eight values (File conflict since 2026-11-26). Not applied, Replaced and Broken each cover situations that need different words and actions, so the core says which with a `HealthReason` (section 13, item 2), shown below in the Situation column.
+
+*Restored 2026-11-26:* sections 5 to 7 were dropped by mistake in #77 (2026-11-20), together with the old 4.2 it meant to replace, and are back as they were then. The table below was brought up to the build of 2026-11-26 (`StateWords`, `AppsPage.Row`) when it was restored; the dated notes after it say what changed and why. The notes the Apps page gathered while this section was missing (they had landed after Apply all, 9.4) are moved here unchanged.
+
+| Core state | Situation (reason) | Word | Colour | Sentence | Main action | Other actions |
+|---|---|---|---|---|---|---|
+| OK | | Linked | green | The link's kind: "Symlink" or "Junction" ("Link" when it cannot be told) | none | Open folder, Open shared folder, Back up now, Backups, Revert |
+| Not applied | no folder set on this device (`no-save-folder`) | Not set up here | grey | "<n> devices have a link." ("1 device has a link."; their names when hovered), or "No device links this role." | Add (Add app's page 2 for this app, or the form for a folder by hand) | Choose the folder myself (a definition's app); a red **Delete** when no device links the role |
+| Not applied | folder set, not linked (`not-linked-yet`) | Ready to link | grey | "Original" | **Apply** | Open folder, Remove |
+| Not applied | the folder in the device file is not an absolute path (`save-folder-not-absolute`) | Device file error | amber | "This device's file has '<value>' as the folder." | none (Add again is not built) | Details |
+| Replaced | the folder holds files (`folder-holds-files`) | Not linked | amber | "The link was replaced by a real folder. Saves made here are not shared." | **Apply** (stops at the choice, section 9.2) | Open folder, Backups |
+| Replaced | the folder is empty (`folder-empty`) | Link missing | amber | "The link is gone and the folder is empty." | **Apply** | Open folder |
+| Replaced | nothing at the folder (`folder-missing`) | Folder gone | amber | "Nothing is at <path>. If the app has moved, find it again." | **Find the app again** (Add app, section 8); **Choose the folder again** for a folder added by hand | Apply; Choose the folder myself (a definition's app) |
+| Replaced | a file or something else is where the folder was (`not-a-folder`) | Not a folder | amber | "Something other than a folder is at <path>. Move it away by hand, then apply." | Open folder's parent | Details |
+| Broken | the shared folder is missing (`shared-folder-missing`) | Shared folder missing | amber | "The link is in place, but its shared folder is missing. If you use a sync tool, it may not have arrived yet." | Check again | Open folder, Open shared folder's parent |
+| Broken | the sync root cannot be used (`sync-root-unavailable`) | Shared folder missing | amber | Covered by banner B3; the row repeats only "The sync folder is not available." | Check again | Open folder |
+| Retargeted | | Linked elsewhere | amber | "The folder now links to <path> instead of the shared folder. Remove that link by hand, then apply." | Open folder | Details |
+| Double seed | | Two shared copies | amber | "More than one device made its saves the shared copy." | **Use this device's copy** (section 9.2, Double seed) | Backups, Details |
+| Foreign link | | Not SaveTether's link | amber | "The folder is a link SaveTether did not make, to <path>. Remove it by hand, then apply." | Open folder | Details |
+| File conflict | the shared folder holds a sync tool's conflict copies; only with "Detect sync conflicts" on (section 11, phase 3.8) | File conflict | amber | "Conflict copy from the sync tool: <file>." or "Conflict copies from the sync tool: <file> and <n> more." | Open shared folder | Backups, Details |
+
+"Not applied, no folder set" counts as grey but is listed after everything else, under a collapsed heading, so a device that uses three of ten shared apps is not cluttered. The heading was "Not on this device (*n*)"; it is **Sync folders ignored by this device (*n*)** since 2026-11-21 (see the notes below).
+
+*As built (2026-11-18):* `AppsPage` (presentation project) holds this table, the grouping and the order; the window shows each row's main action as a button and the others under **More**.
+
+Changes from the table above:
+- **Linked rows** have no main button, as the table says. Revert is under More. The previous build had made Revert the main action, which the table does not.
+- **Opening folders.** Open folder uses `explorer` on Windows and `xdg-open` on Linux.
+- **No device has a folder.** When no device has a folder set for the mapping, the row says "No device has a folder set for it." instead of "Set up on <devices>".
+- **The collapsed section** stays open across checks, and its rows name their app, since there is no app heading above them.
+- **The page's buttons stay in view** (2026-11-19, asked for by the owner). Add app, Apply all, Backups and Settings sit in a bar above the scrolling area. A page shown in place of the Apps page (Add app with its hand form, Backups, Settings) puts its way back, "Back" or "Back to apps", in that same bar, so it is in the same place on every page and stays in view however long the page is. A page's own action, such as Add or Look again, stays below what it acts on. Setup keeps Back beside Next, as in any step-by-step form.
+
+*As built (2026-11-18), with Add app:* **Find the app again** (Folder gone) and **Add** (Not on this device) open Add app's page 2 for the row's app. Both are offered only when the catalog has a usable definition for the app (`MappingState.HasDefinition`); a mapping made by hand with `map add` has none, so its row keeps no main action there, as Add app could only refuse it.
+
+*As built (2026-11-19), with "Add a folder by hand":* a mapping with no definition now has a main action too, which opens the hand form for that mapping (section 8): **Add** on a Not on this device row, and **Choose the folder again** on a Folder gone row.
+
+*As built (2026-11-18), with the Backups page:* **Backups** is under More on Linked, Not linked and Two shared copies, as the table lists it.
+
+Not built yet:
+- **Add again** on "Folder setting is wrong".
+- **Opening the other actions by keyboard:** they are a Tab stop (the More button), not the Menu key or Shift+F10 (section 12).
+
+**Stop using here** is `map remove`: refused by the core while applied, so it is only offered when Ready to link. It asks for confirmation: "Forget this device's folder for <role>? Nothing is deleted; the shared copy and other devices are not affected."
+
+The "Device file error" row (first called "Folder setting is wrong") turns the overall state amber, unlike the core's Not applied (decision 4). Keeping it green, as the CLI does, would leave a misconfiguration unnoticed.
+
+*Apps page rows, as built (2026-11-21, owner):* a row's sentence names what its folder is, since the state word beside it already says Linked or Ready to link: **Symlink** or **Junction** for a linked folder, **Original** for one not yet linked (it said "Saves here are the shared copy." and "Not linked yet."). In "Sync folders ignored by this device" the name column takes the room of the dropped state column and keeps a gap before the sentence. The "Sync folders ignored by this device" section drops the state column, since its name already says it, and a row's folder line is left out when it has none, so the sentence is centred on the row. **Stop using here** is renamed **Remove** in More (a ready row only), with the same confirmation and effect: the folder is forgotten, nothing is deleted, and the row moves to "Sync folders ignored by this device". The page has a title, "Manage links", above its buttons, as the other pages have. On Add app the scan is one button, **Scan for saves** (it was Scan for saves, with System files and Save states boxes in a frame). The boxes are removed: no shipped definition has a system or state folder (every imported role and Cemu's is a save folder), so they changed no result, and the scan looks for save folders only.
+
+A row of an app from the imported set, in "Sync folders ignored by this device" or with its folder missing, now opens Add app's page 2 for that app (its folders as checkboxes) like a built-in one; before, only built-in and shared definitions did, and an imported app got the form for a folder by hand. A mapping made by hand under an imported app's name, with a role the definition lacks, still gets the form.
+
+*Not-here list, as built (2026-11-21, owner):* the section that was "Not on this device (n)" is headed **Sync folders ignored by this device (n)**. The button columns of every row share one width (a shared size scope), so a row with an extra button, such as Delete, does not move the sentence of the rows without one.
+
+*State word, as built (2026-11-25, owner):* a mapping this device has no save folder for (Not applied, no save folder) reads **Not set up here**, not "Not on this device": its shared copy may well be on this device, in the sync folder. It stays grey and apart from the amber **Not linked**. The Decky plugin uses the same word.
+
+*Choose the folder myself, as built (2026-11-23, owner):* a row of a definition's app, in "Sync folders ignored by this device" or Folder gone, has **Choose the folder myself** under More. It opens the form for a folder by hand for that mapping, so the folder is given directly. Before, Add and Find the app again were the only ways in, and both ended at "No install of <app> was found" when the app was not where the definition looks: on Linux every time for a portable copy, since no built-in definition has a Linux install that asks for an install folder (found on Mint with PPSSPP). In the not-here list Add is the right-most button, with Delete and More to its left. *As built (2026-11-24, owner):* Delete and More sit at the right of their shared column, so on a row without Delete, More is next to Add.
+
+*Back up now, as built (2026-11-26, owner):* a Linked row, and only a Linked row (owner), has **Back up now** under More, before Backups. It takes a verified backup (reason `snapshot`, shown as "snapshot" in Backups) of the shared copy the folder links to (`Workspace.BackUpNow`). It copies only, so it asks nothing first; it runs under the operation lock and says how many files were backed up and the backup's folder ("Test linked: 1 file backed up to <backup folder>"), or why none was ("No backup was made"). There is no CLI command for it yet.
+
+*Sizes, as built (2026-11-24, owner):* each Apps row has a Size column between State and Details, in Add app's words ("12 files, 3.4 MiB", "not there yet"): this device's folder, read through its link so a linked one shows the shared copy, or the shared copy when the device has no folder for it. The header's sync folder line ends with the whole sync folder's size the same way. Each is read off the UI thread at every check; until the first read ends it says "measuring…" (at least the busy minimum, as Add app), and after that the last size stays shown while it is read again. One folder is never read twice at once. Nothing is read while the sync folder is unavailable, or for a row whose shared folder is out of reach (Broken): on a network share each read could wait out the network timeout. Add app reads its unticked folders the same way (`FolderSizes`). The sync folder line wraps, so a long path does not push the size out of view.
+
+*Column widths, as built (2026-11-24, owner):* on the Apps page and Backups each column but the last fits its content, measured in the window's font (`Navigation.FitWidth`): the widest text it shows, or its name if wider, plus a 24 px gap. On Apps, Folder fits the role names on the page (at most 220 px), State the state words on the page, and Size the sizes last read, or "measuring…" for one not read yet (at most 180 px); a size read after the page is drawn that is wider widens the column, in the header and every row; on Backups, Taken, Why and Copy of fit their rows. Text past a cap ends in "…"; a folder name cut that way shows in full when hovered. The last column (Details, or Size on Backups) takes what is left, and the buttons are sized first, so they stay in view down to the window's 800 px minimum. Checked on Windows at 1000 and 800 px. The widest state word was renamed from "Folder setting is wrong" to "Device file error" to narrow the State column.
+
+*Column names, as built (2026-11-24, owner):* the Apps rows (Folder, State, Size, Details), Backups (Taken, Why, Copy of, Size) and Add app's page 1 (App, Last played, Notes; while searching App, Notes, On this device) have their column names in a row at the top of the list's frame, outside what scrolls, so they stay in view. The row is shown only while the list has rows. "Sync folders ignored by this device" has none: its columns differ and it sits in its own expander.
+
+*Row other devices have, as built (2026-11-21, owner):* the sentence only says how many devices have a link ("1 device has a link.", "12 devices have a link."), for any number, so a row stays one short line. The names are the sentence's hover text, one per line, with no styling to suggest it (the owner's choice; hover does not exist on a touch screen). In the not-here list Add is the right-most button and Delete sits to its left, so the buttons end at the same edge as the rows above. (Twelve devices as a wrapped paragraph, and then as "a, b, c and 9 more" with a Devices button, were tried first.)
+
+*Delete, review fixes (2026-11-21):* the delete never recurses into the shared folder on its own. It deletes each file the verified backup holds that is still what the backup has, and removes folders only when empty; a save that arrived or changed after the backup stays, and so does the record, and the dialog says "Deleted only in part" with what was removed, the backup, and to run Delete again. A shared folder reached through a link (such as an app folder, or the shared data folder itself) is refused. Setting files aside (in a folder beside the sync folder) was tried and removed: it refused sync folders at the root of a drive; instead the confirmation asks the owner to make sure every write to the role's shared folder is complete and the sync folder is up to date on every device that uses it, the condition no code here can check. Files an earlier build set aside are still settled.
+
+*Delete on a mapping no device uses, as built (2026-11-21, owner):* a row in "Sync folders ignored by this device" that says "No device links this role." has a red **Delete** button beside Add. It calls the core's `map delete` (design 5.3, invariant 2's third exception): the confirmation is short, as the owner asked: the title "Delete <app role>, orphaned in the shared folder?" and two sentences, "Any other devices that use the sync folder will see this deletion. Before confirming, make sure all writes to this role's shared folder are complete and the sync folder is up to date on every device that uses it." (A longer text said what stays; the CLI's prompt and the docs say more.) then the shared saves are backed up on this device and the backup verified (Backups lists it as "before deleting"), and only then are the shared folder, the seed markers and the mapping record deleted. It is not offered for a row another device has a folder for, and the core refuses it too (naming the device) if a device file shows one. The red button style is `Danger.Style`, also used for the confirmation's Delete.
+
+*App names, as built (2026-11-20):* an app added from the imported set is shown by its definition's name ("Atelier Umia"), not its id, on Apps and Backups. The imported set is read for this only when an app has no shared or built-in definition.
+
+## 6. First-run setup
+
+Shown instead of the pages when there is no `bootstrap.json`, and reachable later from banner B4. Three steps, each a page with Back and Next; the result is one `Workspace.Init` call at the end, so nothing is written until the last step.
+
+### 6.1 Sync folder
+
+A path field and a "Choose folder" button. The folder picker is the OS dialog. The field accepts a typed path too, for a folder the picker does not show, such as a network share that is not mounted in the file manager.
+
+On Next the app checks the folder and shows one of:
+
+| Found | Shown | Offered |
+|---|---|---|
+| `savetether/.savetether/` exists | "This sync folder is already set up for SaveTether, on: <device names>." | Next |
+| the folder exists but has no SaveTether folder | "This sync folder is not set up for SaveTether yet." and the two cases below | **This is my first device** (create-root), or Back |
+| the folder does not exist | "<path> does not exist. If it is on a drive or a network share, connect it." | Back |
+| on Windows, the folder is on a network drive *(added 2026-11-19)* | "<path> is on a network drive. On Windows, SaveTether links save folders with junctions, which can only point to a local drive, so no save folder could be linked there. Use a folder on a local drive, and keep it in step with the share or the other devices with a sync tool." | Back |
+
+*As built (2026-11-19), the network-drive row:* checked first, from the path and the drive's type alone (`PathRules.IsOnNetworkDrive`), since probing a share that is not reachable can stall for seconds. The core's `Init` refuses the same, so the CLI's `init` does too; before this, a network sync folder was accepted at setup and refused only at the first apply. On Linux a symbolic link into a mounted share works, so nothing is refused there. `docs/sharing.md` describes the ways to share the folder.
+
+*Changed 2026-11-23 (phase 3.7 T4, design 5.16):* a Windows network share is accepted, linked with symlinks. Step 1 stores a mapped drive as its UNC path ("Using `\\server\share` (the drive Z: points to)."), checks that this device can make a symlink there (`Workspace.RequireLinkableShare`), and shows the not-recommended warning (`Workspace.NetworkShareWarning`) without blocking. The network-drive row above now applies only to a share this device cannot link to (Developer Mode off, or policy): its refusal says how to enable it, with Check again. The step's opening sentence (`SetupFlow.SyncFolderIntro`, 2026-11-22) says what the sync folder is for before asking for one.
+
+"This is my first device" asks for confirmation: "Only do this on the first device. If SaveTether is set up on another device, wait until the sync tool has delivered the SaveTether folder here instead; setting it up twice creates two separate setups." This is the GUI form of 5.3 invariant 5's protection against an empty mount point.
+
+### 6.2 This device's name
+
+- Existing device files are listed first, each with "Take over" (used after a wipe, 5.4). Below them, a field for a new name, filled with a suggestion from the machine's host name, lowercased, with characters outside `a-z 0-9 - _` dropped.
+- The name is checked as typed against `Identifiers.IsValidDeviceName`, with the rule under the field.
+- **Take over** needs confirmation (5.6): "Only take over '<name>' if this is that device, set up again. Two machines with one name would apply each other's folders." Buttons: Cancel (focused), Take over.
+
+### 6.3 Backups, and finish
+
+- The backup location: the default, or the one in the device file being taken over, with "Change". A location from the device file that does not exist is shown with the core's note (5.12, `init`): its drive may not be connected.
+- **Set up** runs `Init`. A `StoreException` is shown in place with the step it belongs to, and nothing moves on.
+- After setup the window shows the Apps page. When the device was taken over and has folders set (a restore after a wipe), it also shows: "This device has <n> apps set up. Apply them all now?" with **Apply all** (section 9.4) and Not now.
+- First run only, before step 6.1: the install step of section 11, when the app is not running from the per-user location.
+
+*As built (2026-11-18):* `SetupFlow` in the presentation project, shown by `SetupView`. Three choices were made while building it:
+- **The lock.** Set up takes the operation lock. The app's own files mean the local folder exists before setup, so a CLI could run at the same moment.
+- **The backup location.** It is passed to `Init` only when the owner changed it. Unchanged, the core decides, as the CLI does without `--backup-root`. So a taken-over device's location that is not there is not created, since its drive may only be disconnected; the page shows the core's note beforehand.
+- **Typed paths.** A typed path may start with `~` on Linux.
+
+Not built yet: the install step, the Apply all offer after a take-over (it needs operations, section 9.4), and reaching setup again from banner B4.
+
+Built since: the install step (section 11, "Installing"). The other two were not checked when this section was restored (2026-11-26).
+
+## 7. Operation flow, common to every action
+
+Apply, Revert, Restore, Recover, Add app, Stop using here, the Flatpak grant and its revoke, Take over and changing the backup location are operations. Each:
+
+1. Takes the operation lock (9.1). If another process holds it: "Another SaveTether operation is running (<command>). Try again when it has finished." Nothing else happens.
+2. Plans (where the core plans): `PlanApply`, `PlanRevert`, `PlanRestore`, `PlanAppAdd`.
+3. On a refusal, shows it (section 9) and releases the lock.
+4. On a plan, shows the confirmation for that action, with the plan's steps in plain words under "Show steps". The lock is held while the dialog is open, so the plan cannot go stale behind it; a dialog left open for 10 minutes is cancelled and the lock released (decision 5).
+5. Runs the plan with progress (9.3), then shows the result (9.3), releases the lock, and runs a health check.
+
+*As built (2026-11-18), for Apply, Revert and Recover.* `OperationSession` (presentation project) holds the lock from the first plan to the result; `ActionFlow` (the app) shows the dialogs. While an operation runs, the app runs no health check, since its own lock is held and a folder may be renamed aside for a moment, and Quit is refused with section 2's sentence.
+
+Choices made while building:
+- **Arriving saves.** The choice dialog cannot know beforehand that the shared copy may still be arriving: the core says so only once add-missing or replace-shared is chosen (`RefusalKind.NotArrived` with `AssumeSyncedWouldHelp`). So that choice is followed by a dialog with section 9.2's sentence and "The shared saves really were deleted". Disabling the two choices in advance is not done.
+- **Which button has the focus.** In refusal dialogs Cancel has the focus, not Check again: it is the choice that changes nothing.
+- **Recovery's result** is worded as recovery succeeding: "Recovered: the unfinished apply was undone." The plain run's "failed and was undone" read as a new failure (found on the Deck).
+
+Built since: the other row actions except Backups, and Apply all (section 5's notes); Add app (section 8's notes), which takes the lock only for Add.
+
+Built since: Backups and Restore (section 9.7's notes).
+
+Built since: "Stop using here" is **Remove**, Delete on a mapping no device uses, and Back up now (section 5's notes); every step run off the UI thread goes through `Overlay.WorkAsync` (9.4's notes).
+
 ## 8. Add app
 
 A guided `app add` (5.2, "Adding an app"; plan P2.5). Two pages and a confirmation.
@@ -152,7 +302,7 @@ Not built yet:
 - **Entry depth is under "Advanced", closed,** at 1, with the reason in words, tied to Apply's "add games only this device has": when a folder that already holds files is linked and the shared folder has files too, Apply can add the folders the shared copy lacks, and the depth says how deep to look for them (Cemu's save folder as the example of 2; wording from the owner). The section opens by itself when the depth has a problem or is not 1. It stays rather than a plain "copy whatever is missing", because copying file by file would mix two devices' files inside one game (design 5.13). Join mode shows the mapping's depth only when it is not 1.
 - **Checking and Add.** Checking reads only. Add takes the operation lock, checks again, and runs the core's `map add`; problems are shown beside their fields, and a refusal from the core (a folder inside another mapping's, the lock held) as a dialog with nothing written. Afterwards "Apply it now?" as for an app.
 - **Focus.** The folder field is focused once the page is laid out: focused at once, it did not take the focus when the form was opened from a row, and Return then pressed Add with the old folder (found on the Deck).
-- **The app's name is not kept.** A mapping has no field for a display name, so the Apps page groups a hand-added folder under its ID (`super-mario-galaxy` for "Super Mario Galaxy"), not the name typed.
+- **The app's name is kept** (changed 2026-11-26, found by the owner: an app named "Lantern Harbor" was shown as `lantern-harbor`). The name typed is stored on the new mapping (`name`, mapping format 3), and the Apps, Backups and Remove device pages show it when the app has no definition; the ID still names the shared folder and the mapping. A name longer than 100 characters, or with a tab or line break, is refused under the App name field. A name that is only the ID's app part ("dolphin") is not stored. A mapping made from a definition, or one that joins an existing mapping, stores no name, so it stays in the format older versions read. Before, a mapping had no field for a name and the app was shown under its ID.
 
 *As built (2026-11-24): Choose folder on every Add app page.* Asked for by the owner, after xemu on Windows and ScummVM outside its default folders showed "No install of <app> was found." with nothing to give: the location field appears only for an install whose paths use `{install_dir}`, and those definitions have none (a definition's folder must be a named subfolder of its base, so a folder of any name, like xemu's hard disk image folder, cannot be written as one). Every page of Add app for a definition, built-in, shared or imported (choose install, location, plan and refusals), now ends with "Another folder" and a **Choose folder** button. It opens the hand form with the app fixed (`ManualAddFlow.StartForApp`): no app name field, the mapping takes the definition's ID, and the owner names the folder, so a folder named "Hard disk" for xemu is shared as `xemu/Hard disk`, mapping `xemu.hard-disk`. Back returns to the Add app page it came from. On the plan page it sits under the folders to share, above "Worth knowing" (moved there by the owner). A name that gives a role the definition has ("hdd") makes the same mapping the definition would, so another device adding the app by its definition shares the same copy.
 
@@ -261,33 +411,9 @@ This differs from the CLI's `apply --all`, which stops at the first mapping need
 
 *Apply all, first-device answer (2026-11-21, owner):* a mapping whose folder on this device has saves while the shared location is empty used to be left for its own Apply, so a first setup was never done by Apply all. Those mappings now share one question before the confirmation: "Share this data", "Start empty" (one answer for all of them) or "Leave them" (they stay on the page, in the summary). The confirmation then lists each with its answer, and the first-seed warning is in the question. Mappings where both this device and the shared location have saves are still never batched: each needs its own choice.
 
-*Apps page rows, as built (2026-11-21, owner):* a row's sentence names what its folder is, since the state word beside it already says Linked or Ready to link: **Symlink** or **Junction** for a linked folder, **Original** for one not yet linked (it said "Saves here are the shared copy." and "Not linked yet."). In "Sync folders ignored by this device" the name column takes the room of the dropped state column and keeps a gap before the sentence. The "Sync folders ignored by this device" section drops the state column, since its name already says it, and a row's folder line is left out when it has none, so the sentence is centred on the row. **Stop using here** is renamed **Remove** in More (a ready row only), with the same confirmation and effect: the folder is forgotten, nothing is deleted, and the row moves to "Sync folders ignored by this device". The page has a title, "Manage links", above its buttons, as the other pages have. On Add app the scan is one button, **Scan for saves** (it was Scan for saves, with System files and Save states boxes in a frame). The boxes are removed: no shipped definition has a system or state folder (every imported role and Cemu's is a save folder), so they changed no result, and the scan looks for save folders only.
-
-A row of an app from the imported set, in "Sync folders ignored by this device" or with its folder missing, now opens Add app's page 2 for that app (its folders as checkboxes) like a built-in one; before, only built-in and shared definitions did, and an imported app got the form for a folder by hand. A mapping made by hand under an imported app's name, with a role the definition lacks, still gets the form.
-
 *Add app, page 2 (the plan), as built (2026-11-21, owner):* the title, the line saying where the app was found, and the controls (Back and Add, side by side) sit above the scrolling area; the role notes, the unverified and cloud notes and the folders to share scroll under them, so Add stays in reach however many roles an app has.
 
 *Add app and apps already added, as built (2026-11-21, owner):* Add only ever adds: it writes the folders ticked and never removes one (Remove on the Apps page does). An app in "Already added" is clickable only while it has a folder for this OS that this device has not added (its row says "Added, more folders to add"); with none left it is listed but not clickable. (Changed 2026-11-24, owner: every added app is clickable, since Add another folder can still add a folder of the owner's own; with every listed folder added, the plan shows no amber "Tick a folder to add.") On its plan page the folders already added show ticked and locked, with "Added already. Remove it from the Apps page to take it away.", and Add is off until a folder that is not added yet is ticked. A folder that has moved (the plan finds it somewhere else than the device has) is not "already added": adding it again records the new place, as "Find the app again" does.
-
-*Not-here list, as built (2026-11-21, owner):* the section that was "Not on this device (n)" is headed **Sync folders ignored by this device (n)**. The button columns of every row share one width (a shared size scope), so a row with an extra button, such as Delete, does not move the sentence of the rows without one.
-
-*State word, as built (2026-11-25, owner):* a mapping this device has no save folder for (Not applied, no save folder) reads **Not set up here**, not "Not on this device": its shared copy may well be on this device, in the sync folder. It stays grey and apart from the amber **Not linked**. The Decky plugin uses the same word.
-
-*Choose the folder myself, as built (2026-11-23, owner):* a row of a definition's app, in "Sync folders ignored by this device" or Folder gone, has **Choose the folder myself** under More. It opens the form for a folder by hand for that mapping, so the folder is given directly. Before, Add and Find the app again were the only ways in, and both ended at "No install of <app> was found" when the app was not where the definition looks: on Linux every time for a portable copy, since no built-in definition has a Linux install that asks for an install folder (found on Mint with PPSSPP). In the not-here list Add is the right-most button, with Delete and More to its left. *As built (2026-11-24, owner):* Delete and More sit at the right of their shared column, so on a row without Delete, More is next to Add.
-
-*Sizes, as built (2026-11-24, owner):* each Apps row has a Size column between State and Details, in Add app's words ("12 files, 3.4 MiB", "not there yet"): this device's folder, read through its link so a linked one shows the shared copy, or the shared copy when the device has no folder for it. The header's sync folder line ends with the whole sync folder's size the same way. Each is read off the UI thread at every check; until the first read ends it says "measuring…" (at least the busy minimum, as Add app), and after that the last size stays shown while it is read again. One folder is never read twice at once. Nothing is read while the sync folder is unavailable, or for a row whose shared folder is out of reach (Broken): on a network share each read could wait out the network timeout. Add app reads its unticked folders the same way (`FolderSizes`). The sync folder line wraps, so a long path does not push the size out of view.
-
-*Column widths, as built (2026-11-24, owner):* on the Apps page and Backups each column but the last fits its content, measured in the window's font (`Navigation.FitWidth`): the widest text it shows, or its name if wider, plus a 24 px gap. On Apps, Folder fits the role names on the page (at most 220 px), State the state words on the page, and Size the sizes last read, or "measuring…" for one not read yet (at most 180 px); a size read after the page is drawn that is wider widens the column, in the header and every row; on Backups, Taken, Why and Copy of fit their rows. Text past a cap ends in "…"; a folder name cut that way shows in full when hovered. The last column (Details, or Size on Backups) takes what is left, and the buttons are sized first, so they stay in view down to the window's 800 px minimum. Checked on Windows at 1000 and 800 px. The widest state word was renamed from "Folder setting is wrong" to "Device file error" to narrow the State column.
-
-*Column names, as built (2026-11-24, owner):* the Apps rows (Folder, State, Size, Details), Backups (Taken, Why, Copy of, Size) and Add app's page 1 (App, Last played, Notes; while searching App, Notes, On this device) have their column names in a row at the top of the list's frame, outside what scrolls, so they stay in view. The row is shown only while the list has rows. "Sync folders ignored by this device" has none: its columns differ and it sits in its own expander.
-
-*Row other devices have, as built (2026-11-21, owner):* the sentence only says how many devices have a link ("1 device has a link.", "12 devices have a link."), for any number, so a row stays one short line. The names are the sentence's hover text, one per line, with no styling to suggest it (the owner's choice; hover does not exist on a touch screen). In the not-here list Add is the right-most button and Delete sits to its left, so the buttons end at the same edge as the rows above. (Twelve devices as a wrapped paragraph, and then as "a, b, c and 9 more" with a Devices button, were tried first.)
-
-*Delete, review fixes (2026-11-21):* the delete never recurses into the shared folder on its own. It deletes each file the verified backup holds that is still what the backup has, and removes folders only when empty; a save that arrived or changed after the backup stays, and so does the record, and the dialog says "Deleted only in part" with what was removed, the backup, and to run Delete again. A shared folder reached through a link (such as an app folder, or the shared data folder itself) is refused. Setting files aside (in a folder beside the sync folder) was tried and removed: it refused sync folders at the root of a drive; instead the confirmation asks the owner to make sure every write to the role's shared folder is complete and the sync folder is up to date on every device that uses it, the condition no code here can check. Files an earlier build set aside are still settled.
-
-*Delete on a mapping no device uses, as built (2026-11-21, owner):* a row in "Sync folders ignored by this device" that says "No device links this role." has a red **Delete** button beside Add. It calls the core's `map delete` (design 5.3, invariant 2's third exception): the confirmation is short, as the owner asked: the title "Delete <app role>, orphaned in the shared folder?" and two sentences, "Any other devices that use the sync folder will see this deletion. Before confirming, make sure all writes to this role's shared folder are complete and the sync folder is up to date on every device that uses it." (A longer text said what stays; the CLI's prompt and the docs say more.) then the shared saves are backed up on this device and the backup verified (Backups lists it as "before deleting"), and only then are the shared folder, the seed markers and the mapping record deleted. It is not offered for a row another device has a folder for, and the core refuses it too (naming the device) if a device file shows one. The red button style is `Danger.Style`, also used for the confirmation's Delete.
-
-*App names, as built (2026-11-20):* an app added from the imported set is shown by its definition's name ("Atelier Umia"), not its id, on Apps and Backups. The imported set is read for this only when an app has no shared or built-in definition.
 
 *Screen headers, as built (2026-11-20):* on Backups and Settings the title (and on Backups its description) sits above the way back, outside the scrolling area; Backups' app filter shares a row with Back to apps. An app's name above its rows, on Apps and Backups, is a tinted band with a line under it.
 
@@ -344,10 +470,14 @@ The screen behind the **Maintenance** button (after Settings), and the dialogs i
 **Settings page.**
 
 - **Start with the session**: a switch. On writes the entry, off removes it. Linux: `~/.config/autostart/savetether.desktop` (`$XDG_CONFIG_HOME` honoured), `Exec=<path> --minimized`. Windows: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `SaveTether`, `"<path>" --minimized`. With the switch on, the app rewrites the entry with its current path at every start (5.14, "Distribution").
-- **Desktop notifications**: a switch, on by default. Off, SaveTether shows no notifications (3.1); the tray icon still shows the state. Kept in the local folder (`notifications.txt`). The switch also governs the Decky plugin's toasts on the same device (phase 4.1, planned), and `savetether notifications [on|off]` reads and sets it.
+- **Desktop notifications**: a switch, on by default. Off, SaveTether shows no notifications (3.1); the tray icon still shows the state. Kept in the local folder (`notifications.txt`; `settings.json` since 2026-11-26, see below). The switch also governs the Decky plugin's toasts on the same device (phase 4.1, planned), and `savetether notifications [on|off]` reads and sets it.
 - **Backups**: the location, with **Change**, which runs `Init` again with the new backup root after a confirmation that existing backups stay where they are and are no longer listed. Moving them is not offered, since the core has no operation for it (decision 8).
+- **Backups before actions and how many to keep** (2026-11-26, owner): see "Backup settings, as built" below.
+- **Detect sync conflicts** (2026-11-26, owner; phase 3.8): a switch under its own "Sync conflicts" heading, after Backups, off by default. On, each check lists the files of every linked shared folder (names only: nothing is opened or written, so the sync tool sees no change) and looks for the conflict copies a sync tool leaves. A folder with one shows the amber word **File conflict**, the row says "Conflict copy from the sync tool: <file>." (or "<file> and <n> more."), and its main action is Open shared folder; the owner keeps the right copy and deletes the other by hand, and the next check shows Linked. A new File conflict is notified like any other amber state (3.1). Turning the switch on or off runs a check. Kept in `settings.json` as `detect_sync_conflicts`; `savetether sync-conflicts [on|off]` and the Decky plugin's toggle read and set it.
 - **This device**: name and sync folder, read only. Changing either is "Set up again", which shows the setup pages with the current values filled in. A new sync folder is refused while any mapping is applied here, as `map remove` is (decision 9): those links point into the old sync folder. The core's `Init` checks this (section 13, item 7); the refusal's next steps are one Revert per mapping, shown as a Revert button for each.
 - **About**: version, the local folder (with Open), the licence.
+
+*Backup settings, as built (2026-11-26, owner):* a **Backups** section after Desktop notifications. **Back up before actions** is a switch, labelled so under the heading, on by default. Off is unsafe mode: no action takes a backup (the core passes the setting to the planners, which leave the backup steps out, need no free space for them, and mark the plan `NoBackups`, which lets the executor clear shared data that was not backed up; and `map delete` deletes every file instead of only the backed-up ones); "Back up now" still works. Turning it off asks for the typed phrase UNSAFE in a red dialog; turning it on asks nothing. While it is off, a red line under the switch says what it risks, and every dialog that asks for a choice (two buttons or more) starts with "Unsafe mode enabled" in red (`Overlay.UnsafeMode`); no text promises a backup then: the core's notes and refusals, the app's replace, restore, delete and choice texts, the step list ("Remove the folder moved aside", without "it is in the backup") and the CLI's map delete prompt each say "No backup is taken" or that this device's data is deleted, and "This device's data is backed up first, whichever you choose." is left out of the choice dialog. **Max backups per folder** is a number box, 0 to 20, default 5 (the old fixed count): older backups beyond it are deleted after an action and after Back up now, always keeping the first; 0 keeps all. All of the device's settings, notifications included, are now in one `settings.json` in the local folder (`DeviceSettings`); an older `notifications.txt` is read until the next change moves it in. A missing or unreadable file gives the defaults, which are the safe ones. The CLI's `backup auto` and `backup keep` read and set the same values.
 
 **Installing.** The release archive is unpacked anywhere. On first run, when the app is not in the per-user location (`~/.local/bin` on Linux, `%LOCALAPPDATA%\Programs\SaveTether` on Windows), the setup starts with: "Install SaveTether for this user?" It copies both binaries (and the app's native libraries) there, starts the copy and quits; the unpacked files are left for the person to delete. Not now carries on from where it is. On Windows, an option "Make the `savetether` command available in terminals" adds the folder to the user's `PATH` (decision 10): a persistent change to the user's environment, so it is opt-in and unticked.
 
@@ -387,7 +517,6 @@ Not built yet: the backup location's Change, and This device's Set up again.
 ## 12. Keyboard and focus
 
 The app works with the keyboard alone, for accessibility and for the Deck in Desktop Mode, where a controller's Steam Input desktop layout usually stands in for a mouse.
-
 
 - Everything is reachable with Tab, Shift+Tab, the arrow keys, Enter and Escape, and focus is always visible (a 2 px outline in the accent colour).
 - Lists move with the arrow keys; Enter opens a row's main action, and the Menu key or Shift+F10 opens its other actions as a list, never a hover menu.

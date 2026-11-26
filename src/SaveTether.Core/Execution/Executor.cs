@@ -133,13 +133,14 @@ public sealed partial class Executor
 
     /// <summary>
     /// After an operation has completed: deletes old backups of each mapping it backed up, keeping
-    /// the first one ever taken and the newest <see cref="BackupStore.DefaultKeep"/> (design 5.12,
+    /// the first one ever taken and the newest "Max backups per folder" (<see cref="DeviceSettings"/>; 0 keeps all) (design 5.12,
     /// "Backup store"). Runs after the journal is closed, so it is not part of the operation, and a
     /// problem here is reported without failing the operation that already succeeded.
     /// </summary>
     private void PruneBackups(Transaction tx)
     {
-        if (_backups is null)
+        var keep = new DeviceSettings(_local.Folder).MaxBackupsPerFolder;
+        if (_backups is null || keep == 0)
         {
             return;
         }
@@ -148,10 +149,10 @@ public sealed partial class Executor
         {
             try
             {
-                var removed = _backups.Prune(mappingId);
+                var removed = _backups.Prune(mappingId, keep);
                 if (removed.Count > 0)
                 {
-                    tx.Messages.Add($"Removed {removed.Count} older backup(s) of {mappingId}, keeping its first backup and the newest {BackupStore.DefaultKeep}: {string.Join(", ", removed)}");
+                    tx.Messages.Add($"Removed {removed.Count} older backup(s) of {mappingId}, keeping its first backup and the newest {keep}: {string.Join(", ", removed)}");
                 }
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or BackupException or SafeFsException)
@@ -346,7 +347,7 @@ public sealed partial class Executor
             .Any(x => x.Step.Kind == StepKind.BackUpTarget
                 && PathRules.AreSame(x.Step.Path, step.Path)
                 && x.Record is { Status: StepStatus.Done, BackupId: not null });
-        if (HasData(step.Path) && !backedUp)
+        if (HasData(step.Path) && !backedUp && !plan.NoBackups)
         {
             throw new ExecutionException($"Refusing to clear '{step.Path}': it holds saves that were not backed up in this run.");
         }

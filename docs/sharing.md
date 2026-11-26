@@ -53,8 +53,20 @@ flowchart LR
 A folder managed by a cloud storage client (OneDrive, Dropbox, Nextcloud, Google Drive for desktop) is also a local copy kept in step, so it works the same way. It has not been tested.
 
 - **Keep the files on the device.** Clients that keep files "online only" until opened (OneDrive's Files On-Demand, Dropbox's online-only files, Google Drive's streaming mode) would make a game wait for a download on every save, and make SaveTether's backups and comparisons download everything. Mark the sync root to be kept on the device: in OneDrive, "Always keep on this device".
-- When two machines change a file before syncing, these clients keep both as a renamed "conflicted copy". SaveTether does not merge those; pick one by hand.
+- When two machines change a file before syncing, these clients keep both as a renamed "conflicted copy". SaveTether does not merge those; pick one by hand (see [below](#when-two-machines-changed-the-same-save)).
 - On Linux, and the Steam Deck in particular, not every service has an official client.
+
+## When two machines changed the same save
+
+A sync tool that gets two versions of one file keeps both and renames one. SaveTether never merges them, but with **Detect sync conflicts** on (the app's Settings, or `savetether sync-conflicts on`) each check looks for these copies in the linked shared folders and shows the folder as **File conflict**, with a notification. Keep the right copy, delete the other, and the next check shows Linked again. It reads file names only, so the sync tool sees no change. Recognised:
+
+| Tool | A conflict copy is named like |
+|---|---|
+| Syncthing | `save.sync-conflict-20261126-101500-ABCDEFG.dat` |
+| Dropbox, Nextcloud | `save (conflicted copy 2026-11-26 101500).dat` |
+| ownCloud, older Nextcloud clients | `save_conflict-20261126-101500.dat` |
+
+Not recognised: OneDrive (`save-PCNAME.dat`) and Google Drive (`save (1).dat`), whose names games make themselves, so watching for them would raise false alarms. With those, look in the shared folder after playing on two machines without syncing between.
 
 ## A network share
 

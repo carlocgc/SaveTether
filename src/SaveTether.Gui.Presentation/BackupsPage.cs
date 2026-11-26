@@ -33,12 +33,13 @@ public static class BackupsPage
     {
         var workspace = Core.Operations.Workspace.Open(local, NoProcesses.Instance);
         var catalog = workspace.Definitions;
+        var stored = AppNames.Stored(workspace);
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         string AppName(string id)
         {
             if (!names.TryGetValue(id, out var name))
             {
-                name = AppNames.Resolve(catalog, id).Name;
+                name = AppNames.Resolve(catalog, id, storedName: stored.GetValueOrDefault(id)).Name;
                 names[id] = name;
             }
 
@@ -150,6 +151,9 @@ public static class BackupsPage
     public static string RestoreSharedTitle(string role) => $"Restore the shared copy of {role}?";
 
     public const string RestoreSharedText = "The shared copy is backed up on this device, then replaced with this backup.";
+
+    /// <summary><see cref="RestoreSharedText"/> in unsafe mode.</summary>
+    public const string RestoreSharedUnbackedText = "The shared copy is replaced with this backup. No backup of it is taken.";
 
     /// <summary>Typed to confirm restoring the shared copy, as for every other deletion of saves.</summary>
     public const string RestoreSharedPhrase = "restore shared data";

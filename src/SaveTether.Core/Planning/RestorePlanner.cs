@@ -95,7 +95,7 @@ public static class RestorePlanner
                     info.MappingId, RefusalKind.ConfirmationNeeded, Classification.NotClassified,
                     new Note(
                         $"This backup is of the shared folder '{destination}'. Restoring it replaces what is there, and any other devices that use the sync folder will see that. " +
-                        "The current content is backed up on this device first.",
+                        (request.NoBackups ? "No backup is taken." : "The current content is backed up on this device first."),
                         new NextStep(NextStepKind.ConfirmReplace, info.MappingId, backupId)),
                     [], [], AssumeSyncedWouldHelp: false, Comparison: null, PlanOperation.Restore));
             }
@@ -159,7 +159,7 @@ public static class RestorePlanner
         }
 
         var currentBytes = current.Sum(e => e.Length);
-        if (hasData && SnapshotReader.FreeBytesAt(backups.Root) is { } backupFree && currentBytes > backupFree)
+        if (hasData && !request.NoBackups && SnapshotReader.FreeBytesAt(backups.Root) is { } backupFree && currentBytes > backupFree)
         {
             failures.Add(Planner.NotEnoughSpace("Backing up what is there now", backups.Root, currentBytes, backupFree));
         }
@@ -185,11 +185,12 @@ public static class RestorePlanner
                 string.Join(", ", links.Select(l => $"{l.Path} -> {l.Target}")) + ".");
         }
 
-        return new PlanOutcome(
+        var outcome = new PlanOutcome(
             new Plan(
                 info.MappingId, Classification.NotClassified, null, data, destination, steps, notes,
                 NeedsFirstSeedConfirmation: false, PlanOperation.Restore),
             null);
+        return request.NoBackups ? Planner.WithoutBackups(outcome) : outcome;
     }
 
     private static PlanOutcome Refuse(string mappingId, PrecheckKind kind, Note message) => new(null, new Refusal(

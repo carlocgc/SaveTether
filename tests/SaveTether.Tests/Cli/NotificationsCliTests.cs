@@ -21,7 +21,7 @@ public class NotificationsCliTests
 
         Assert.False(On(pc.Ok("notifications", "off", "--json")));
         Assert.False(On(pc.Ok("notifications", "--json")));
-        Assert.Equal("off", File.ReadAllText(Path.Combine(pc.LocalFolder, NotificationSetting.FileName)).Trim());
+        Assert.Contains("\"notifications\": false", File.ReadAllText(Path.Combine(pc.LocalFolder, DeviceSettings.FileName)), StringComparison.Ordinal);
 
         Assert.True(On(pc.Ok("notifications", "on", "--json")));
         Assert.Contains("Desktop notifications: on", pc.Ok("notifications").Out, StringComparison.Ordinal);

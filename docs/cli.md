@@ -6,7 +6,7 @@ For scripts, every command also has a JSON form, described in [cli-json.md](cli-
 
 - [Concepts](#concepts)
 - [Options every command takes](#options-every-command-takes)
-- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [notifications](#notifications) · [device list](#device-list) · [device rename](#device-rename) · [device remove](#device-remove) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
+- Commands: [init](#init) · [map add](#map-add) · [map remove](#map-remove) · [map delete](#map-delete) · [app add](#app-add) · [app list](#app-list) · [status](#status) · [notifications](#notifications) · [sync-conflicts](#sync-conflicts) · [device list](#device-list) · [device rename](#device-rename) · [device remove](#device-remove) · [apply](#apply) · [revert](#revert) · [backup list](#backup-list) · [backup restore](#backup-restore) · [backup delete](#backup-delete) · [recover](#recover) · [uninstall](#uninstall)
 - [Workflows](#workflows)
 - [Files and environment](#files-and-environment)
 - [Exit codes](#exit-codes)
@@ -69,7 +69,7 @@ savetether init --sync-root ~/Sync --device deck --take-over
 ## map add
 
 ```
-savetether map add <id> --source <path> [--target <app>/<folder>] [--process <name>]... [--entry-depth <n>]
+savetether map add <id> --source <path> [--target <app>/<folder>] [--process <name>]... [--entry-depth <n>] [--name <app name>]
 ```
 
 Adds a mapping, or sets this device's save folder for a mapping another device added. It writes records only; `apply` makes the link.
@@ -81,6 +81,7 @@ Adds a mapping, or sets this device's save folder for a mapping another device a
 | `--target <app>/<folder>` | Where the shared copy lives under `<sync root>/savetether/`. Needed only when the mapping is new. |
 | `--process <name>` | The app's process name, repeatable. `apply`, `revert` and `backup restore` refuse while it runs. |
 | `--entry-depth <n>` | How many folder levels down one game's saves sit (default 1). It is the unit `--add-missing` copies in, so it is never mixing two games' files. Give it again later to change it. |
+| `--name <app name>` | The app's name as people read it, for an app with no definition, for example `"Lantern Harbor"` for `lantern-harbor.saves`. The desktop app shows the app under it. Kept only when the mapping is new, and not kept when it is the ID's app part (`dolphin` for `dolphin.gc`). A mapping with a name is written in format 3, which SaveTether before 2026-11-26 cannot read, so update every device first. |
 
 ```bash
 savetether map add ppsspp.savedata --target ppsspp/SAVEDATA \
@@ -176,6 +177,7 @@ Shows each mapping's state on this device, or one mapping's. It only reads. It s
 | `Retargeted` | The link points somewhere other than the shared folder. | Remove that link by hand, then `apply`. |
 | `Double seed` | More than one device made its own saves the shared copy. | Choose which to keep: `apply <id> --replace-shared --confirm-replace` on that device. |
 | `Foreign link` | The folder is a link SaveTether did not make. | Remove it by hand, then `apply`. |
+| `File conflict` | Linked, but the shared folder holds conflict copies a sync tool left; they are listed under the row. Only shown with `sync-conflicts on`. | Keep the right copy and delete the other, in the shared folder. |
 
 ```bash
 savetether status
@@ -189,11 +191,24 @@ savetether status --sizes
 savetether notifications [on|off]
 ```
 
-Shows this device's "Desktop notifications" switch, or sets it. It is the same switch as in the desktop app's Settings (`notifications.txt` in the local folder), and the Decky plugin is to follow it too. Off silences notifications only: `status` and the tray icon still show problems. It works on a device that is not set up, and while another operation runs.
+Shows this device's "Desktop notifications" switch, or sets it. It is the same switch as in the desktop app's Settings (`settings.json` in the local folder; an older `notifications.txt` is read until the next change moves it there), and the Decky plugin is to follow it too. Off silences notifications only: `status` and the tray icon still show problems. It works on a device that is not set up, and while another operation runs.
 
 ```bash
 savetether notifications
 savetether notifications off
+```
+
+## sync-conflicts
+
+```
+savetether sync-conflicts [on|off]
+```
+
+Shows this device's "Detect sync conflicts" switch, or sets it. Off by default. On, `status` looks in each linked shared folder for the conflict copies a sync tool leaves when two devices changed the same file (Syncthing's `save.sync-conflict-…`, the "conflicted copy" files of Dropbox and Nextcloud, ownCloud's `_conflict-…`), and shows such a folder as `File conflict`, with the copies listed. It reads file names only. It is the same switch as in the desktop app's Settings and the Decky plugin, works on a device that is not set up, and works while another operation runs.
+
+```bash
+savetether sync-conflicts on
+savetether status
 ```
 
 ## device list
@@ -339,6 +354,31 @@ The second form clears many at once, for one mapping (`--mapping`) or all: `--al
 
 ```bash
 savetether backup delete --keep-last --mapping cemu.save
+```
+
+## backup auto
+
+```
+savetether backup auto [on|off] [--confirm-unsafe]
+```
+
+Shows whether actions back up first, or sets it. On (the default), apply, revert, restore and `map delete` back up what they change first. Off is unsafe mode: no action takes a backup, so replacing the shared copy, restoring or deleting can lose saves for good, and a plan says so in its notes. Off needs `--confirm-unsafe`. The desktop app's Settings has the same switch, and every dialog that asks for a choice says "Unsafe mode enabled" while it is off. It works on a device that is not set up, and while another operation runs.
+
+```bash
+savetether backup auto off --confirm-unsafe
+savetether backup auto on
+```
+
+## backup keep
+
+```
+savetether backup keep [<0-20>]
+```
+
+Shows, or sets, how many backups of each folder are kept besides its first (default 5). Older ones are deleted after each action that backed the folder up, and after "Back up now" in the app. 0 keeps every backup. The first backup of each folder is always kept: it is usually the only copy of the folder from before SaveTether changed it.
+
+```bash
+savetether backup keep 2
 ```
 
 ## recover

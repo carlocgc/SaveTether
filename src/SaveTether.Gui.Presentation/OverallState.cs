@@ -133,10 +133,11 @@ public static class StatusCheck
             var workspace = Workspace.Open(local, NoProcesses.Instance);
             var report = workspace.Status();
             var others = report.SyncRootAvailable ? OtherDevicesPaths(workspace) : [];
+            var stored = report.SyncRootAvailable ? AppNames.Stored(workspace) : new Dictionary<string, string>();
             var mappings = report.Mappings
                 .Select(m =>
                 {
-                    var (name, defined) = AppOf(workspace, m.MappingId);
+                    var (name, defined) = AppOf(workspace, m.MappingId, stored);
                     return new MappingState(m.MappingId, name, RoleOf(m.MappingId), StateWords.For(m.State, m.Reason), m)
                     {
                         HasDefinition = defined,
@@ -176,11 +177,12 @@ public static class StatusCheck
         }
     }
 
-    /// <summary>The app's name from its definition, and whether there is a usable one; the ID and false otherwise.</summary>
-    private static (string Name, bool Defined) AppOf(Workspace workspace, string mappingId)
+    /// <summary>The app's name from its definition, and whether there is a usable one; the name typed for it, or the ID, and false otherwise.</summary>
+    private static (string Name, bool Defined) AppOf(Workspace workspace, string mappingId, IReadOnlyDictionary<string, string> stored)
     {
         var parts = mappingId.Split('.', 2);
-        return AppNames.Resolve(workspace.Definitions, parts[0], parts.Length == 2 ? parts[1] : null, () => workspace.Shared.TryReadMapping(mappingId)?.Target);
+        return AppNames.Resolve(
+            workspace.Definitions, parts[0], parts.Length == 2 ? parts[1] : null, () => workspace.Shared.TryReadMapping(mappingId)?.Target, stored.GetValueOrDefault(parts[0]));
     }
 
     private static string? LinkKindOf(string folder) => SafeFs.Probe(folder) switch

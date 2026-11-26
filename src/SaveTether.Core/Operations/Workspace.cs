@@ -343,8 +343,9 @@ public sealed partial class Workspace
 
     /// <summary>"map add": the shared mapping, if it is new, and this device's save folder for it.</summary>
     /// <param name="entryDepth">How many levels down one game's saves sit (design 5.13), or null to leave it as it is.</param>
+    /// <param name="name">The app's name as typed, kept only when the mapping is new; an existing one keeps its own.</param>
     public MapResult MapAdd(
-        string mappingId, string? target, string source, IReadOnlyList<string> processNames, int? entryDepth = null)
+        string mappingId, string? target, string source, IReadOnlyList<string> processNames, int? entryDepth = null, string? name = null)
     {
         ArgumentNullException.ThrowIfNull(processNames);
         var device = ReadOwnDevice();
@@ -395,6 +396,8 @@ public sealed partial class Workspace
             mapping = new MappingFile
             {
                 Schema = MappingFile.CurrentSchema, Id = mappingId, Target = target, Mechanism = Mechanism.Link, EntryDepth = entryDepth,
+                // A name that only repeats the ID's app part adds nothing, and would need format 3 on every device.
+                Name = name?.Trim() == mappingId.Split('.', 2)[0] ? null : name,
             }.Normalized();
             Shared.WriteMapping(mapping);
         }
@@ -522,10 +525,12 @@ public sealed partial class Workspace
         }
         var state = Local.ReadState();
         var mappings = mappingId is null ? Shared.ListMappings() : [ReadMapping(mappingId)];
+        var detectConflicts = new DeviceSettings(Local.Folder).DetectSyncConflicts;
         return new StatusReport(
             DeviceName, Shared.SyncRoot, !DeviceIdentity.Matches(Bootstrap, device), Journal.IsOpen,
             mappings
-                .Select(m => HealthCheck.Check(Shared, m, device.Paths.GetValueOrDefault(m.Id), state.Mappings.GetValueOrDefault(m.Id)))
+                .Select(m => HealthCheck.Check(
+                    Shared, m, device.Paths.GetValueOrDefault(m.Id), state.Mappings.GetValueOrDefault(m.Id), detectConflicts))
                 .ToList())
         {
             Removal = own is null ? null : RemovalOf(own), RemovedBy = own?.RemovedBy, ReturnedDevices = returned,
@@ -538,7 +543,7 @@ public sealed partial class Workspace
     /// <summary>The mappings this device has a save folder for, in order: what "apply --all" runs.</summary>
     public IReadOnlyList<string> MappingsWithPaths() => ReadOwnDevice().Paths.Keys.Order(StringComparer.Ordinal).ToList();
 
-    public PlanOutcome PlanApply(string mappingId, ApplyRequest request) => Planner.Plan(WithSandbox(ReadSnapshot(mappingId)), request);
+    public PlanOutcome PlanApply(string mappingId, ApplyRequest request) => Planner.Plan(WithSandbox(ReadSnapshot(mappingId)), request with { NoBackups = NoBackups });
 
     /// <summary>Adds the Flatpak precheck: only apply makes a link the app must follow.</summary>
     private Snapshot WithSandbox(Snapshot s) =>
@@ -578,15 +583,18 @@ public sealed partial class Workspace
     /// <summary>Takes back SaveTether's grant to a Flatpak app. Call it only once the owner has agreed. True when it succeeded.</summary>
     public bool RevokeSandbox(SandboxGrant grant) => _flatpak?.Revoke(grant) ?? false;
 
-    public PlanOutcome PlanRevert(string mappingId, bool assumeClosed) => Planner.PlanRevert(ReadSnapshot(mappingId), assumeClosed);
+    public PlanOutcome PlanRevert(string mappingId, bool assumeClosed) => Planner.PlanRevert(ReadSnapshot(mappingId), assumeClosed, NoBackups);
 
     public PlanOutcome PlanRestore(string backupId, RestoreRequest request)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(backupId);
         var device = ReadOwnDevice();
         var processNames = device.Paths.GetValueOrDefault(backupId.Split('/')[0])?.ProcessNames ?? [];
-        return RestorePlanner.Plan(OpenBackups(device), Shared, backupId, request, processNames, _processes, Journal.IsOpen);
+        return RestorePlanner.Plan(OpenBackups(device), Shared, backupId, request with { NoBackups = NoBackups }, processNames, _processes, Journal.IsOpen);
     }
+
+    /// <summary>Unsafe mode: "Back up before actions" is off in this device's settings, so plans take no backup.</summary>
+    private bool NoBackups => !new DeviceSettings(Local.Folder).BackupBeforeActions;
 
     /// <summary>Runs a plan made by one of the Plan methods.</summary>
     /// <param name="progress">Told as each step starts and finishes; see <see cref="Executor.Run"/>.</param>
@@ -638,6 +646,31 @@ public sealed partial class Workspace
         }
 
         return OpenBackups(ReadOwnDevice()).RemoveMany(mappingId, mode);
+    }
+
+    /// <summary>
+    /// A backup taken by hand of a mapping's shared copy, which is what a linked save folder holds. Copies only; the backup is
+    /// verified, and discarded if it does not match. Then older backups of it beyond "Max backups per folder" go, as after an
+    /// action; a problem there does not undo the backup. Call it under the operation lock.
+    /// </summary>
+    public BackupInfo BackUpNow(string mappingId)
+    {
+        var backups = OpenBackups(ReadOwnDevice());
+        var backup = backups.Create(mappingId, Shared.TargetPathOf(ReadMapping(mappingId)), BackupReason.Snapshot);
+        var keep = new DeviceSettings(Local.Folder).MaxBackupsPerFolder;
+        try
+        {
+            if (keep > 0)
+            {
+                backups.Prune(mappingId, keep);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or BackupException or SafeFsException)
+        {
+            // shortcut: a failed cleanup is silent here; the next action's cleanup reports it.
+        }
+
+        return backup;
     }
 
     private Executor NewExecutor(DeviceFile? device)

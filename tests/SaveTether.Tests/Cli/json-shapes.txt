@@ -161,6 +161,7 @@ $.operations[].outcome: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.notes[]: string
 $.operations[].plan.operation: string
@@ -190,6 +191,7 @@ $.operations[].plan.choice: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.operation: string
 $.operations[].plan.source: string
@@ -217,6 +219,7 @@ $.operations[].plan.choice: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.operation: string
 $.operations[].plan.source: string
@@ -367,6 +370,15 @@ $.exit_code: number
 $.schema: number
 $: object
 
+## backup-keep
+$.backup_settings.before_actions: boolean
+$.backup_settings.max_per_folder: number
+$.backup_settings: object
+$.command: string
+$.exit_code: number
+$.schema: number
+$: object
+
 ## backup-list
 $.backups: array
 $.backups[].created_utc: string
@@ -396,6 +408,7 @@ $.operations[].outcome: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.operation: string
 $.operations[].plan.source: string
@@ -645,6 +658,7 @@ $.operations[].outcome: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.notes[]: string
 $.operations[].plan.operation: string
@@ -670,6 +684,7 @@ $.status.journal_open: boolean
 $.status.mappings: array
 $.status.mappings[].detail: string
 $.status.mappings[].mapping_id: string
+$.status.mappings[].name: string
 $.status.mappings[].reason: string
 $.status.mappings[].source: string
 $.status.mappings[].state: string
@@ -693,6 +708,31 @@ $.status.journal_open: boolean
 $.status.mappings: array
 $.status.mappings[].detail: string
 $.status.mappings[].mapping_id: string
+$.status.mappings[].name: string
+$.status.mappings[].source: string
+$.status.mappings[].state: string
+$.status.mappings[].target: string
+$.status.mappings[]: object
+$.status.operation_running: boolean
+$.status.returned_devices: array
+$.status.sync_root: string
+$.status.sync_root_available: boolean
+$.status: object
+$: object
+
+## status-file-conflict
+$.command: string
+$.exit_code: number
+$.schema: number
+$.status.device_file_mismatch: boolean
+$.status.device_name: string
+$.status.journal_open: boolean
+$.status.mappings: array
+$.status.mappings[].conflicts: array
+$.status.mappings[].conflicts[]: string
+$.status.mappings[].detail: string
+$.status.mappings[].mapping_id: string
+$.status.mappings[].name: string
 $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
@@ -716,6 +756,7 @@ $.status.mappings[].bytes: number
 $.status.mappings[].detail: string
 $.status.mappings[].files: number
 $.status.mappings[].mapping_id: string
+$.status.mappings[].name: string
 $.status.mappings[].source: string
 $.status.mappings[].state: string
 $.status.mappings[].target: string
@@ -748,6 +789,14 @@ $.status.sync_root: string
 $.status.sync_root_available: boolean
 $.status.sync_root_problem: string
 $.status: object
+$: object
+
+## sync-conflicts
+$.command: string
+$.exit_code: number
+$.schema: number
+$.sync_conflicts.on: boolean
+$.sync_conflicts: object
 $: object
 
 ## uninstall

@@ -100,6 +100,11 @@ public class ManualAddFlowTests
         var reserved = flow.Check(new ManualAddInput(sandbox.Dir("saves"), "Game", "CON", null, 1));
         Assert.Contains(reserved.Problems, p => p.Field == ManualField.FolderName && p.Problem.StartsWith("The name cannot be used", StringComparison.Ordinal));
 
+        // The name is stored as typed, so one the store would refuse is refused under its field.
+        var longName = flow.Check(new ManualAddInput(sandbox.Dir("saves"), new string('a', 101), "saves", null, 1));
+        Assert.Contains(longName.Problems, p => p.Field == ManualField.AppName && p.Problem.StartsWith("Keep the name", StringComparison.Ordinal));
+        Assert.Contains(flow.Check(new ManualAddInput(sandbox.Dir("saves"), "a	b", "saves", null, 1)).Problems, p => p.Field == ManualField.AppName);
+
         // Add checks again under the lock and writes nothing while a problem remains.
         var result = flow.Add(new ManualAddInput("relative", "Game", "saves", null, 1), joinAccepted: false);
         Assert.False(result.Succeeded);
@@ -227,7 +232,7 @@ public class ManualAddFlowTests
         Assert.Equal(["pc"], join.SetUpOn);
         Assert.Equal(3, join.Input.EntryDepth);
         Assert.Null(join.Input.SaveFolder);
-        Assert.Equal("some-game", join.Input.AppName);
+        Assert.Equal("Some Game", join.Input.AppName);
         var folder = sandbox.Dir("deck", "home", "Saves");
         var joined = deckFlow.Add(join.Input with { SaveFolder = folder, EntryDepth = 1 }, joinAccepted: false);
         Assert.True(joined.Succeeded, joined.Refused);
@@ -252,5 +257,34 @@ public class ManualAddFlowTests
         laptopFlow.StartNew();
         var other = laptopFlow.Check(new ManualAddInput(sandbox.Dir("deck", "home", "Other"), "Some Game", "saves", null, 1));
         Assert.Contains(other.Problems, p => p.Field == ManualField.FolderName && p.Problem.Contains("already exists", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_app_name_typed_is_kept_and_shown_while_the_id_names_the_folder()
+    {
+        using var sandbox = new Sandbox();
+        var (deck, flow) = NewDevice(sandbox, "deck", createRoot: true);
+        flow.StartNew();
+        var added = flow.Add(new ManualAddInput(sandbox.Dir("deck", "home", "Saves"), " Lantern Harbor ", "Saves", null, 1), joinAccepted: false);
+        Assert.True(added.Succeeded, added.Refused);
+        Assert.Equal("lantern-harbor.saves", added.Added);
+        var mapping = MappingFile(deck, "lantern-harbor.saves");
+        Assert.Contains("\"name\": \"Lantern Harbor\"", mapping, StringComparison.Ordinal);
+        Assert.Contains("\"lantern-harbor/Saves\"", mapping, StringComparison.Ordinal);
+
+        var shown = Assert.Single(StatusCheck.Run(new LocalStore(deck.LocalFolder)).Mappings);
+        Assert.Equal(("lantern-harbor.saves", "Lantern Harbor", false), (shown.MappingId, shown.AppName, shown.HasDefinition));
+
+        // Another folder of the same app is shown under the same name.
+        flow.StartNew();
+        Assert.True(flow.Add(new ManualAddInput(sandbox.Dir("deck", "home", "Config"), "Lantern Harbor", "Config", null, 1), joinAccepted: false).Succeeded);
+        Assert.All(StatusCheck.Run(new LocalStore(deck.LocalFolder)).Mappings, m => Assert.Equal("Lantern Harbor", m.AppName));
+
+        // A name that only repeats the ID is not stored, so the mapping stays in the format older versions read.
+        flow.StartNew();
+        Assert.True(flow.Add(new ManualAddInput(sandbox.Dir("deck", "home", "Plain"), "plain", "Saves", null, 1), joinAccepted: false).Succeeded);
+        var plain = MappingFile(deck, "plain.saves");
+        Assert.Contains("\"schema\": 1", plain, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"name\"", plain, StringComparison.Ordinal);
     }
 }

@@ -113,6 +113,9 @@ public sealed class OperationSession : IDisposable
     /// <summary>"map delete": the shared folder, markers and record, after a verified backup on this device. Under the operation lock.</summary>
     public MappingDeletion DeleteMapping(string mappingId) => Workspace.DeleteMapping(mappingId);
 
+    /// <summary>"Back up now": a verified backup of the shared copy.</summary>
+    public Core.Backup.BackupInfo BackUpNow(string mappingId) => Workspace.BackUpNow(mappingId);
+
     /// <summary>
     /// Apply all's first half (section 9.4): each mapping planned with no choice, in the order given. Those
     /// that plan can all be run after one confirmation; the others need the owner, each with why.

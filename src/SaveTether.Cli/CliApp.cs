@@ -98,7 +98,7 @@ internal static class CliApp
               device waits for the sync tool to deliver the savetether folder.
               --take-over claims an existing device name, after a reinstall.
 
-          savetether map add <id> --source <path> [--target <app>/<save folder>] [--process <name>]... [--entry-depth <n>]
+          savetether map add <id> --source <path> [--target <app>/<save folder>] [--process <name>]... [--entry-depth <n>] [--name <app name>]
               Add a mapping, or set this device's save folder for an existing one.
               <id> is app.role, for example ppsspp.savedata. --target is needed for a new mapping.
               --process names the app's process, so apply can refuse while it runs.
@@ -109,7 +109,7 @@ internal static class CliApp
           savetether map delete <id> [--confirm-delete]
               Delete a mapping no device uses from the sync folder: its shared copy, its record and its seed
               markers. Other devices may use that folder. Each device's own save folders and backups are not
-              touched. The shared copy is backed up on this device first. It cannot be undone from the share,
+              touched. The shared copy is backed up on this device first (not in unsafe mode). It cannot be undone from the share,
               so it asks first, or needs --confirm-delete, which says that every write to the role's shared
               folder is complete and the sync folder is up to date on every device that uses it. Refused while any
               device has a folder set for it.
@@ -136,6 +136,7 @@ internal static class CliApp
               Link the save folder to the shared folder. When this device has saves, choose:
                 --copy            they become the shared copy (only when the shared folder is empty)
                 --no-copy         use the shared saves; this device's are kept in the backup only
+                                  (deleted in unsafe mode, see backup auto)
                 --add-missing     also add what the shared copy lacks; nothing is overwritten
                 --replace-shared  they replace the shared copy in the sync folder (needs --confirm-replace)
               --assume-synced  go ahead although the shared copy may not have fully arrived
@@ -150,6 +151,11 @@ internal static class CliApp
           savetether notifications [on|off]
               Show, or set, this device's "Desktop notifications" switch, which the desktop app
               follows. Off silences notifications only; status still shows problems.
+
+          savetether sync-conflicts [on|off]
+              Show, or set, this device's "Detect sync conflicts" switch (off by default). On, status
+              shows "File conflict" for a linked folder whose shared copy holds conflict copies
+              that a sync tool left.
 
           savetether device list
               The devices in the sync folder, the mappings, and this device's backups.
@@ -178,6 +184,12 @@ internal static class CliApp
               Delete one backup. It cannot be undone, so it asks first, or needs --confirm-delete.
           savetether backup delete (--all | --keep-first | --keep-last) [--mapping <id>] [--confirm-delete]
               Delete many: all, all but the first ever taken, or all but the newest, for one mapping or all.
+          savetether backup auto [on|off] [--confirm-unsafe]
+              Show, or set, whether actions back up first (on by default). Off is unsafe mode: no action
+              takes a backup, so data can be lost for good. Off needs --confirm-unsafe.
+          savetether backup keep [<0-20>]
+              Show, or set, how many backups of each folder are kept besides its first (default 5);
+              0 keeps them all.
               --all asks first, or needs --confirm-delete; without either it only lists what it would delete.
               The first backup of a folder is usually the only copy from before SaveTether changed it.
 
@@ -222,6 +234,7 @@ internal static class CliApp
 
                 // While an operation is unfinished, only looking and recovering are allowed.
                 var readOnly = command.Name is "status" or "backup list" or "recover" or "app list" or "device list" or "notifications"
+                    or "sync-conflicts" or "backup auto" or "backup keep"
                     || (command.Name == "app add" && command.Has(ArgParser.DryRun));
                 if (!readOnly && Journal.For(_local).IsOpen)
                 {
@@ -238,6 +251,8 @@ internal static class CliApp
                     "app list" => AppList(),
                     "status" => Status(),
                     "notifications" => Notifications(),
+                    "sync-conflicts" => SyncConflicts(),
+                    "backup auto" or "backup keep" => BackupSettings(),
                     "device list" => new CliOutput
                     {
                         Command = command.Name, ExitCode = ExitSuccess, Devices = Maintenance.Overview(Open()),
@@ -279,7 +294,7 @@ internal static class CliApp
         /// guarded against.
         /// </remarks>
         private bool Writes =>
-            command.Name is not ("status" or "backup list" or "app list" or "device list" or "notifications" or "uninstall")
+            command.Name is not ("status" or "backup list" or "app list" or "device list" or "notifications" or "sync-conflicts" or "backup auto" or "backup keep" or "uninstall")
             && !command.Has(ArgParser.DryRun)
             && (command.Name != "init" || Directory.Exists(_local.Folder));
 
@@ -344,7 +359,7 @@ internal static class CliApp
                 entryDepth = depth;
             }
 
-            var result = Open().MapAdd(id, command.Value("--target"), source, command.Values("--process"), entryDepth);
+            var result = Open().MapAdd(id, command.Value("--target"), source, command.Values("--process"), entryDepth, command.Value("--name"));
             return new CliOutput
             {
                 Command = command.Name, ExitCode = ExitSuccess,
@@ -391,7 +406,9 @@ internal static class CliApp
                 var question =
                     $"Delete '{id}' from the shared folder? This removes {what}, and the deletion reaches every device that uses the sync folder. Each device's own save folders and backups are not touched." +
                     "\nBefore confirming, make sure all writes to this role's shared folder are complete and the sync folder is up to date on every device that uses it." +
-                    "\nThe shared copy is backed up on this device first.";
+                    (new DeviceSettings(_local.Folder).BackupBeforeActions
+                        ? "\nThe shared copy is backed up on this device first."
+                        : "\nUnsafe mode: no backup of the shared copy is taken.");
                 if (!Confirm(question))
                 {
                     return Failed(ExitRefused, "Cancelled. Nothing was deleted.");
@@ -518,22 +535,69 @@ internal static class CliApp
         /// </summary>
         private CliOutput Notifications()
         {
-            var setting = new NotificationSetting(_local.Folder);
+            var setting = new DeviceSettings(_local.Folder);
+            return OnOff(setting.SetNotifications, out var problem) is var asked && problem is not null
+                ? Failed(ExitRefused, problem)
+                : new CliOutput
+                {
+                    Command = command.Name, ExitCode = ExitSuccess, Notifications = new NotificationsOutput(asked ?? setting.Notifications),
+                };
+        }
+
+        /// <summary>"Detect sync conflicts", shared with the app and the Decky plugin. Like "notifications": no setup, no lock.</summary>
+        private CliOutput SyncConflicts()
+        {
+            var setting = new DeviceSettings(_local.Folder);
+            return OnOff(setting.SetDetectSyncConflicts, out var problem) is var asked && problem is not null
+                ? Failed(ExitRefused, problem)
+                : new CliOutput
+                {
+                    Command = command.Name, ExitCode = ExitSuccess, SyncConflicts = new SyncConflictsOutput(asked ?? setting.DetectSyncConflicts),
+                };
+        }
+
+        /// <summary>An on/off command's argument, saved with set when given: the value asked for, or null when only shown.</summary>
+        private bool? OnOff(Func<bool, string?> set, out string? problem)
+        {
             bool? asked = command.FirstPositional switch
             {
                 null => null,
                 "on" => true,
                 "off" => false,
-                var other => throw new UsageException($"'notifications' takes 'on' or 'off', not '{other}'"),
+                var other => throw new UsageException($"'{command.Name}' takes 'on' or 'off', not '{other}'"),
             };
-            if (asked is { } on && setting.Set(on) is { } problem)
+            problem = asked is { } on ? set(on) : null;
+            return asked;
+        }
+
+        /// <summary>
+        /// "backup auto" and "backup keep": this device's backup settings, shared with the app. Like "notifications", they need
+        /// no setup and no operation lock; an action reads them when it plans and when it cleans up.
+        /// </summary>
+        private CliOutput BackupSettings()
+        {
+            var settings = new DeviceSettings(_local.Folder);
+            var problem = (command.Name, command.FirstPositional) switch
+            {
+                (_, null) => null,
+                ("backup auto", "on") => settings.SetBackupBeforeActions(true),
+                ("backup auto", "off") when !command.Has("--confirm-unsafe") => throw new UsageException(
+                    "turning backups off is unsafe mode: no action takes a backup, so data can be lost for good. Add --confirm-unsafe"),
+                ("backup auto", "off") => settings.SetBackupBeforeActions(false),
+                ("backup auto", var other) => throw new UsageException($"'backup auto' takes 'on' or 'off', not '{other}'"),
+                (_, var count) when int.TryParse(count, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n <= DeviceSettings.MaxBackupsLimit =>
+                    settings.SetMaxBackupsPerFolder(n),
+                (_, var other) => throw new UsageException($"'backup keep' takes a number from 0 to {DeviceSettings.MaxBackupsLimit}, not '{other}'"),
+            };
+            if (problem is not null)
             {
                 return Failed(ExitRefused, problem);
             }
 
             return new CliOutput
             {
-                Command = command.Name, ExitCode = ExitSuccess, Notifications = new NotificationsOutput(asked ?? setting.IsOn),
+                Command = command.Name, ExitCode = ExitSuccess,
+                BackupSettings = new BackupSettingsOutput(settings.BackupBeforeActions, settings.MaxBackupsPerFolder),
             };
         }
 
