@@ -56,7 +56,7 @@ internal static class Hints
             NextStepKind.ChooseLocation => "Give the one to use with --sd-card or --wine-prefix.",
             NextStepKind.GiveNewLocation => "Give the new location with --install-dir, --sd-card or --wine-prefix.",
             NextStepKind.FindAppAgain => $"Run 'savetether app add' with its new location, or 'savetether apply {id}'.",
-            NextStepKind.ChooseSetup => ChooseSetup(step.Choices ?? []),
+            NextStepKind.ChooseSetup => ChooseSetup(step.Choices ?? [], step.NoBackups),
             NextStepKind.UseAllowedChoice => $"Use {OneOf(step.Choices ?? [])}.",
             NextStepKind.ApplyWithoutChoice => "Run apply without a choice to just link.",
             NextStepKind.ConfirmReplace => "Add --confirm-replace to go ahead.",
@@ -78,15 +78,16 @@ internal static class Hints
         _ => "--replace-shared --confirm-replace",
     };
 
-    private static string ChooseSetup(IReadOnlyList<SetupChoice> choices) =>
+    /// <param name="noBackups">Unsafe mode: --no-copy deletes this device's saves, with no backup.</param>
+    private static string ChooseSetup(IReadOnlyList<SetupChoice> choices, bool noBackups) =>
         choices.Contains(SetupChoice.Copy)
-            ? "Choose whether they become the shared copy (--copy) or are not used (--no-copy)."
-            : "Choose: " + OneOf(choices, c => $"{FlagFor(c)} ({Explain(c)})") + ".";
+            ? $"Choose whether they become the shared copy (--copy) or {(noBackups ? "are deleted" : "stay only in the backup")} (--no-copy)."
+            : "Choose: " + OneOf(choices, c => $"{FlagFor(c)} ({Explain(c, noBackups)})") + ".";
 
-    private static string Explain(SetupChoice choice) => choice switch
+    private static string Explain(SetupChoice choice, bool noBackups) => choice switch
     {
         SetupChoice.Copy => "this device's saves become the shared copy",
-        SetupChoice.NoCopy => "use the shared saves instead of this device's",
+        SetupChoice.NoCopy => noBackups ? "use the shared saves; this device's are deleted" : "use the shared saves; this device's stay in the backup",
         SetupChoice.AddMissing => "also add what the shared copy lacks; nothing is overwritten",
         _ => "this device's saves replace the shared copy in the sync folder",
     };

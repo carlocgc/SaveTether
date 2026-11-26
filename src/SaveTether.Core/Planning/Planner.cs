@@ -450,7 +450,7 @@ public static class Planner
                     s, RefusalKind.ChoiceNeeded, Classification.FirstDevice,
                     new Note(
                         "This device has saves in that folder and the shared location is empty.",
-                        new NextStep(NextStepKind.ChooseSetup, s.MappingId, Choices: FirstDeviceChoices)),
+                        new NextStep(NextStepKind.ChooseSetup, s.MappingId, Choices: FirstDeviceChoices, NoBackups: request.NoBackups)),
                     allowed: FirstDeviceChoices, comparison: Compare(s));
 
             case SetupChoice.Copy:
@@ -500,7 +500,7 @@ public static class Planner
                     s, RefusalKind.ChoiceNeeded, Classification.Guard,
                     new Note(
                         "The shared location already holds saves, and so does this device.",
-                        new NextStep(NextStepKind.ChooseSetup, s.MappingId, Choices: GuardChoices)),
+                        new NextStep(NextStepKind.ChooseSetup, s.MappingId, Choices: GuardChoices, NoBackups: request.NoBackups)),
                     allowed: GuardChoices, comparison: comparison);
 
             case SetupChoice.Copy:
