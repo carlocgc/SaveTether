@@ -57,6 +57,26 @@ public class HealthMonitorTests
     }
 
     [Fact]
+    public void A_file_conflict_on_a_linked_folder_is_notified_once_and_again_only_after_it_was_resolved()
+    {
+        var next = Green;
+        var monitor = new HealthMonitor(() => next, () => null);
+        Assert.Null(monitor.Run()!.Notification);
+
+        next = Attention(("ppsspp.savedata", "PPSSPP", HealthState.FileConflict, null));
+        var flagged = monitor.Run()!;
+        Assert.Equal("1 app needs attention.", flagged.Notification);
+        Assert.True(flagged.Icon.IsAmber);
+        Assert.Null(monitor.Run()!.Notification);
+
+        // The owner deletes the copies: Linked, and a later conflict is notified again.
+        next = Green;
+        Assert.Null(monitor.Run()!.Notification);
+        next = Attention(("ppsspp.savedata", "PPSSPP", HealthState.FileConflict, null));
+        Assert.Equal("1 app needs attention.", monitor.Run()!.Notification);
+    }
+
+    [Fact]
     public void An_amber_state_at_start_is_notified_and_a_device_wide_condition_is_one_problem()
     {
         var unplugged = new OverallStatus(
@@ -141,7 +161,7 @@ public class HealthMonitorTests
         Assert.NotNull(monitor.Run());
     }
 
-    private static OverallStatus Attention(params (string Id, string App, HealthState State, HealthReason Reason)[] rows) =>
+    private static OverallStatus Attention(params (string Id, string App, HealthState State, HealthReason? Reason)[] rows) =>
         new(
             OverallCondition.NeedsAttention, null,
             rows.Select(r => new MappingState(
