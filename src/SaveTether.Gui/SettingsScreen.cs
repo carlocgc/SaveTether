@@ -157,6 +157,7 @@ internal sealed class SettingsScreen : UserControl, IScreen
         page.Children.Add(Note(SettingsTexts.MaxBackupsNote));
 
         page.Children.Add(Heading(SettingsTexts.SyncConflicts));
+        page.Children.Add(new TextBlock { Text = SettingsTexts.DetectSyncConflicts, FontWeight = FontWeight.SemiBold });
         page.Children.Add(Switch(
             SettingsTexts.DetectSyncConflicts,
             () => settings.DetectSyncConflicts,

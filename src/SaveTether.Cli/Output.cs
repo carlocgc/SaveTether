@@ -481,10 +481,10 @@ internal static class OutputWriter
         foreach (var mapping in status.Mappings)
         {
             var size = mapping.Bytes is { } bytes ? $" ({mapping.Files} file(s), {FormatBytes(bytes)})" : "";
-            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-12}  {Hints.Compose(mapping.Detail)}{size}");
+            stdout.WriteLine($"  {mapping.MappingId.PadRight(width)}  {Describe(mapping.State),-13}  {Hints.Compose(mapping.Detail)}{size}");
             foreach (var conflict in mapping.Conflicts ?? [])
             {
-                stdout.WriteLine($"  {"".PadRight(width)}  {"",-12}  {conflict}");
+                stdout.WriteLine($"  {"".PadRight(width)}  {"",-13}  {conflict}");
             }
         }
 
