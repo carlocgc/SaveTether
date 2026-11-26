@@ -567,7 +567,7 @@ Planned 2026-11-26. Goal: an opt-in device setting (off by default) that finds s
 
 Everything else is in [phase-3.8-sync-conflicts.md](phase-3.8-sync-conflicts.md): decisions, design, tasks T1 to T5 (T5 in the plugin's repo), the exit test, and progress.
 
-Progress: T1 done (the state, the scan and the setting in the core); T2 next.
+Progress: T1 to T4 done (the core, the app's Settings switch, `savetether sync-conflicts`, the docs); the exit test on the Mint box and T5 (the plugin) next.
 
 ## 6. Phase 4: Decky plugin
 

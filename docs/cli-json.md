@@ -212,6 +212,16 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 
 Since 2026-11-26 the switch is kept in the local folder's `settings.json`, with the backup settings; an older `notifications.txt` is read until the next change moves it there.
 
+### `sync-conflicts`
+
+`sync-conflicts [on|off]`: the device's "Detect sync conflicts" switch, shared by the desktop app and the Decky plugin, kept in `settings.json` as `detect_sync_conflicts`. On, `status` reports a linked mapping whose shared folder holds a sync tool's conflict copies as `file-conflict`, with the copies in `conflicts`. With no value it reports; with one it sets, then reports. Like `notifications`, it needs no set-up device and takes no operation lock; a setting that cannot be saved is refused (exit 1); any other value is a usage error (exit 64). A CLI older than this has no command and exits 64. Added 2026-11-26.
+
+`sync_conflicts` object:
+
+| Field | Type | |
+|---|---|---|
+| `on` | boolean | False unless turned on. |
+
 ### `backup auto`, `backup keep`
 
 `backup auto [on|off] [--confirm-unsafe]` and `backup keep [<0-20>]`: the device's backup settings, shared with the desktop app. With no value they report; with one they set, then report. `backup auto off` (unsafe mode: no action takes a backup) needs `--confirm-unsafe`. Like `notifications`, they need no set-up device and take no operation lock. A setting that cannot be saved is refused (exit 1); a missing confirmation or any other value is a usage error (exit 64). Added 2026-11-26.

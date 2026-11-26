@@ -682,6 +682,7 @@ A step that fails during a normal run (as opposed to a crash) is handled the sam
 | Double seed | more than one active seed marker exists for the mapping (5.3) |
 | Device file mismatch | this device's shared config file carries another install's ID: two machines may be using one device name (5.6) |
 | Foreign link | S is a link the tool did not create, for example one left by the old scripts. Apply refuses; the owner removes it by hand |
+| File conflict | OK otherwise, but the shared folder holds conflict copies a sync tool left (Syncthing's `.sync-conflict-`, "conflicted copy", `_conflict-`). Looked for only when the device's opt-in "Detect sync conflicts" setting is on; the owner keeps the right copy by hand. Added 2026-11-26, phase 3.8 |
 
 Cost is one `lstat` and one read-link per mapping, plus a directory walk of small save folders for conflicts: milliseconds. So no daemon. Run it on tool start, on demand, and optionally at login (Task Scheduler on Windows; a systemd *user* timer on SteamOS, which needs no root and lives in `/home`). A later option is a launch guard, `savetether guard <app> -- %command%`, that checks one mapping before the game starts.
 
