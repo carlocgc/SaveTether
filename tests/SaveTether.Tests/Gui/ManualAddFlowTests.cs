@@ -265,20 +265,20 @@ public class ManualAddFlowTests
         using var sandbox = new Sandbox();
         var (deck, flow) = NewDevice(sandbox, "deck", createRoot: true);
         flow.StartNew();
-        var added = flow.Add(new ManualAddInput(sandbox.Dir("deck", "home", "Saves"), " Dohna Dohna ", "Saves", null, 1), joinAccepted: false);
+        var added = flow.Add(new ManualAddInput(sandbox.Dir("deck", "home", "Saves"), " Lantern Harbor ", "Saves", null, 1), joinAccepted: false);
         Assert.True(added.Succeeded, added.Refused);
-        Assert.Equal("dohna-dohna.saves", added.Added);
-        var mapping = MappingFile(deck, "dohna-dohna.saves");
-        Assert.Contains("\"name\": \"Dohna Dohna\"", mapping, StringComparison.Ordinal);
-        Assert.Contains("\"dohna-dohna/Saves\"", mapping, StringComparison.Ordinal);
+        Assert.Equal("lantern-harbor.saves", added.Added);
+        var mapping = MappingFile(deck, "lantern-harbor.saves");
+        Assert.Contains("\"name\": \"Lantern Harbor\"", mapping, StringComparison.Ordinal);
+        Assert.Contains("\"lantern-harbor/Saves\"", mapping, StringComparison.Ordinal);
 
         var shown = Assert.Single(StatusCheck.Run(new LocalStore(deck.LocalFolder)).Mappings);
-        Assert.Equal(("dohna-dohna.saves", "Dohna Dohna", false), (shown.MappingId, shown.AppName, shown.HasDefinition));
+        Assert.Equal(("lantern-harbor.saves", "Lantern Harbor", false), (shown.MappingId, shown.AppName, shown.HasDefinition));
 
         // Another folder of the same app is shown under the same name.
         flow.StartNew();
-        Assert.True(flow.Add(new ManualAddInput(sandbox.Dir("deck", "home", "Config"), "Dohna Dohna", "Config", null, 1), joinAccepted: false).Succeeded);
-        Assert.All(StatusCheck.Run(new LocalStore(deck.LocalFolder)).Mappings, m => Assert.Equal("Dohna Dohna", m.AppName));
+        Assert.True(flow.Add(new ManualAddInput(sandbox.Dir("deck", "home", "Config"), "Lantern Harbor", "Config", null, 1), joinAccepted: false).Succeeded);
+        Assert.All(StatusCheck.Run(new LocalStore(deck.LocalFolder)).Mappings, m => Assert.Equal("Lantern Harbor", m.AppName));
 
         // A name that only repeats the ID is not stored, so the mapping stays in the format older versions read.
         flow.StartNew();

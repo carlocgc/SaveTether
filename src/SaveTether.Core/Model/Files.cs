@@ -66,8 +66,8 @@ public sealed record MappingFile
     public int? EntryDepth { get; init; }
 
     /// <summary>
-    /// The app's name as the owner typed it, for a mapping added by hand ("Dohna Dohna" for
-    /// "dohna-dohna.saves"). Absent for a mapping from a definition, whose name the definition gives.
+    /// The app's name as the owner typed it, for a mapping added by hand ("Lantern Harbor" for
+    /// "lantern-harbor.saves"). Absent for a mapping from a definition, whose name the definition gives.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; init; }

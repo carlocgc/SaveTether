@@ -131,13 +131,13 @@ public class SharedStoreTests
         var store = NewStore(sandbox);
         store.WriteMapping(Mapping("plain.saves", "plain/saves") with { Name = "  " });
         store.WriteMapping(Mapping("deep.saves", "deep/saves") with { EntryDepth = 2 });
-        store.WriteMapping(Mapping("dohna-dohna.saves", "dohna-dohna/saves") with { Name = " Dohna Dohna ", EntryDepth = 1 });
+        store.WriteMapping(Mapping("lantern-harbor.saves", "lantern-harbor/saves") with { Name = " Lantern Harbor ", EntryDepth = 1 });
 
         Assert.Equal((1, null), (store.ReadMapping("plain.saves").Schema, store.ReadMapping("plain.saves").Name));
         Assert.Equal(2, store.ReadMapping("deep.saves").Schema);
-        var named = store.ReadMapping("dohna-dohna.saves");
-        Assert.Equal((3, "Dohna Dohna", 1), (named.Schema, named.Name, named.Depth));
-        Assert.DoesNotContain("entry_depth", File.ReadAllText(Path.Combine(store.MetaRoot, "mappings", "dohna-dohna.saves.json")), StringComparison.Ordinal);
+        var named = store.ReadMapping("lantern-harbor.saves");
+        Assert.Equal((3, "Lantern Harbor", 1), (named.Schema, named.Name, named.Depth));
+        Assert.DoesNotContain("entry_depth", File.ReadAllText(Path.Combine(store.MetaRoot, "mappings", "lantern-harbor.saves.json")), StringComparison.Ordinal);
     }
 
     [Fact]
