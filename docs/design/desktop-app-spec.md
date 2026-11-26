@@ -103,7 +103,7 @@ Page actions: **Add app** (section 8), **Apply all** (section 9.4, shown when at
 
 ### 5.1 States
 
-The core's `HealthState` has seven values. Not applied, Replaced and Broken each cover situations that need different words and actions, so the core says which with a `HealthReason` (section 13, item 2), shown below in the Situation column.
+The core's `HealthState` has eight values (File conflict since 2026-11-26). Not applied, Replaced and Broken each cover situations that need different words and actions, so the core says which with a `HealthReason` (section 13, item 2), shown below in the Situation column.
 
 *Restored 2026-11-26:* sections 5 to 7 were dropped by mistake in #77 (2026-11-20), together with the old 4.2 it meant to replace, and are back as they were then. The table below was brought up to the build of 2026-11-26 (`StateWords`, `AppsPage.Row`) when it was restored; the dated notes after it say what changed and why. The notes the Apps page gathered while this section was missing (they had landed after Apply all, 9.4) are moved here unchanged.
 
@@ -122,6 +122,7 @@ The core's `HealthState` has seven values. Not applied, Replaced and Broken each
 | Retargeted | | Linked elsewhere | amber | "The folder now links to <path> instead of the shared folder. Remove that link by hand, then apply." | Open folder | Details |
 | Double seed | | Two shared copies | amber | "More than one device made its saves the shared copy." | **Use this device's copy** (section 9.2, Double seed) | Backups, Details |
 | Foreign link | | Not SaveTether's link | amber | "The folder is a link SaveTether did not make, to <path>. Remove it by hand, then apply." | Open folder | Details |
+| File conflict | the shared folder holds a sync tool's conflict copies; only with "Detect sync conflicts" on (section 11, phase 3.8) | File conflict | amber | "Conflict copy from the sync tool: <file>." or "Conflict copies from the sync tool: <file> and <n> more." | Open shared folder | Backups, Details |
 
 "Not applied, no folder set" counts as grey but is listed after everything else, under a collapsed heading, so a device that uses three of ten shared apps is not cluttered. The heading was "Not on this device (*n*)"; it is **Sync folders ignored by this device (*n*)** since 2026-11-21 (see the notes below).
 
