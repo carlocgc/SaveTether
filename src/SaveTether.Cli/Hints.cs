@@ -80,13 +80,13 @@ internal static class Hints
 
     private static string ChooseSetup(IReadOnlyList<SetupChoice> choices) =>
         choices.Contains(SetupChoice.Copy)
-            ? "Choose whether they become the shared copy (--copy) or stay only in the backup (--no-copy)."
+            ? "Choose whether they become the shared copy (--copy) or are not used (--no-copy)."
             : "Choose: " + OneOf(choices, c => $"{FlagFor(c)} ({Explain(c)})") + ".";
 
     private static string Explain(SetupChoice choice) => choice switch
     {
         SetupChoice.Copy => "this device's saves become the shared copy",
-        SetupChoice.NoCopy => "use the shared saves; this device's stay in the backup",
+        SetupChoice.NoCopy => "use the shared saves instead of this device's",
         SetupChoice.AddMissing => "also add what the shared copy lacks; nothing is overwritten",
         _ => "this device's saves replace the shared copy in the sync folder",
     };

@@ -218,9 +218,10 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     /// Delete's confirmation: the title says what. With other devices registered, the owner confirms the condition nothing
     /// here can check: none of them is still writing to the role's shared folder. The result says where the backup is.
     /// </summary>
-    public static string DeleteText(bool others) => others
-        ? "Its shared copy is backed up on this device first. Other devices that use the sync folder lose it too: make sure none is still writing to it."
-        : "Its shared copy is backed up on this device first.";
+    /// <param name="noBackups">Unsafe mode: no backup is taken, so none is promised.</param>
+    public static string DeleteText(bool others, bool noBackups = false) =>
+        (noBackups ? "No backup of its shared copy is taken." : "Its shared copy is backed up on this device first.") +
+        (others ? " Other devices that use the sync folder lose it too: make sure none is still writing to it." : string.Empty);
 
     public static string DeletedText(string role, bool hadBackup) =>
         $"{role} was deleted from the sync folder." + (hadBackup ? " Its shared copy is in Backups." : string.Empty);
@@ -256,10 +257,10 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
 
     /// <summary>One question for every mapping with saves only on this device (apply all, section 9.4, as built 2026-11-21).</summary>
     /// <param name="others">Another device is registered: only then can one of these already be set up elsewhere.</param>
-    public static string FirstDeviceText(IReadOnlyList<string> roles, bool others) =>
+    public static string FirstDeviceText(IReadOnlyList<string> roles, bool others, bool noBackups = false) =>
         $"{string.Join("\n", roles)}\n\nNo shared copy yet. One answer for {(roles.Count == 1 ? "it" : "all of them")}:\n" +
         $"{FirstDeviceShare}: this device's data becomes the shared copy.\n" +
-        $"{FirstDeviceStartEmpty}: this device's data is kept only in the backup." +
+        $"{FirstDeviceStartEmpty}: this device's data is {(noBackups ? "deleted" : "kept only in the backup")}." +
         (others ? $"\n\nIf any of these is set up on another device, choose {FirstDeviceLeave} until its data has arrived here." : string.Empty);
 
     /// <summary>Apply all's summary (section 9.4).</summary>

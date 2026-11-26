@@ -38,7 +38,8 @@ internal static class PlanRenderer
     }
 
     /// <summary>One sentence saying what a step does.</summary>
-    public static string Describe(PlanStep step)
+    /// <param name="noBackups">The plan is unsafe mode's (<see cref="Plan.NoBackups"/>): nothing is in a backup.</param>
+    public static string Describe(PlanStep step, bool noBackups = false)
     {
         ArgumentNullException.ThrowIfNull(step);
         return step.Kind switch
@@ -56,7 +57,7 @@ internal static class PlanRenderer
             StepKind.WriteSeedMarker => "Record that this device's saves became the shared copy",
             StepKind.SupersedeMarkers => "Mark other devices' earlier records for this mapping as superseded",
             StepKind.WriteState => "Record the result on this device",
-            StepKind.DeleteAside => $"Delete '{step.Path}' (its content is in the backup)",
+            StepKind.DeleteAside => noBackups ? $"Delete '{step.Path}'" : $"Delete '{step.Path}' (its content is in the backup)",
             StepKind.CopyToStaging => $"Copy '{step.Path}' to '{step.OtherPath}' and verify the copy",
             StepKind.RemoveLink => $"Remove the link '{step.Path}' (the shared folder is not touched)",
             StepKind.RenameIntoPlace => $"Rename '{step.Path}' to '{step.OtherPath}'",
@@ -92,7 +93,7 @@ internal static class PlanRenderer
 
         for (var i = 0; i < plan.Steps.Count; i++)
         {
-            text.AppendLine(CultureInfo.InvariantCulture, $"  {i + 1}. {Describe(plan.Steps[i])}");
+            text.AppendLine(CultureInfo.InvariantCulture, $"  {i + 1}. {Describe(plan.Steps[i], plan.NoBackups)}");
         }
 
         foreach (var note in plan.Notes)

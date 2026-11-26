@@ -217,6 +217,31 @@ public class PrecheckTests
         Assert.True(Planner.Plan(Snap.WithLocalSaves() with { FreeBytesAtBackupRoot = null, FreeBytesAtTarget = null }, Copy).IsPlanned);
     }
 
+    [Fact]
+    public void In_unsafe_mode_a_plan_has_no_backup_steps_needs_no_room_for_one_and_promises_none()
+    {
+        // No room at all for a backup: refused normally, planned in unsafe mode.
+        var full = Snap.WithLocalSaves() with { FreeBytesAtBackupRoot = 0, FreeBytesAtTarget = 300 };
+        Assert.Equal([PrecheckKind.NotEnoughSpace], Failures(full));
+        var plan = Planner.Plan(full, Copy with { NoBackups = true }).Plan!;
+        Assert.True(plan.NoBackups);
+        Assert.DoesNotContain(plan.Steps, s => s.Kind is StepKind.BackUpSource or StepKind.BackUpTarget);
+        Assert.Contains(Planner.UnsafeModeNote, plan.Notes.Select(n => n.Text));
+
+        // Replacing the shared copy says no backup is taken, in its confirmation and in its plan.
+        var guarded = Snap.Guarded();
+        var unconfirmed = Planner.Plan(guarded, new ApplyRequest(SetupChoice.ReplaceShared, NoBackups: true)).Refusal!;
+        Assert.Contains("No backup is taken.", unconfirmed.Message.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("backed up", unconfirmed.Message.Text, StringComparison.Ordinal);
+        var replace = Planner.Plan(guarded, new ApplyRequest(SetupChoice.ReplaceShared, ConfirmReplace: true, AssumeSynced: true, NoBackups: true)).Plan!;
+        Assert.Contains(Planner.ReplaceSharedUnbackedNote, replace.Notes.Select(n => n.Text));
+        Assert.DoesNotContain(Planner.ReplaceSharedNote, replace.Notes.Select(n => n.Text));
+        Assert.DoesNotContain(replace.Notes, n => n.Text.Contains("in the backup", StringComparison.Ordinal));
+
+        // With backups on, nothing changes.
+        Assert.False(Planner.Plan(guarded, new ApplyRequest(SetupChoice.ReplaceShared, ConfirmReplace: true, AssumeSynced: true)).Plan!.NoBackups);
+    }
+
     private static PrecheckKind[] Failures(Snapshot snapshot, ApplyRequest? request = null)
     {
         var outcome = Planner.Plan(snapshot, request ?? Copy);

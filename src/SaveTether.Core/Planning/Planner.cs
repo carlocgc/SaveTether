@@ -19,6 +19,12 @@ public static class Planner
 
     public const string ReplaceSharedNote = "The shared saves in the sync folder will be replaced. They are backed up on this device first.";
 
+    /// <summary><see cref="ReplaceSharedNote"/> in unsafe mode.</summary>
+    public const string ReplaceSharedUnbackedNote = "The shared saves in the sync folder will be replaced.";
+
+    /// <summary>Added to every plan made in unsafe mode ("Back up before actions" off).</summary>
+    public const string UnsafeModeNote = "Unsafe mode: no backup is taken. This cannot be undone.";
+
     public const string AsideSuffix = ".savetether-old";
     public const string StagingSuffix = ".savetether-new";
 
@@ -60,6 +66,12 @@ public static class Planner
             _ => PlanGuard(snapshot, request),
         };
 
+        // Before the space check, so no room is needed for backups not taken.
+        if (request.NoBackups)
+        {
+            outcome = WithoutBackups(outcome);
+        }
+
         return outcome.Plan is { } plan && SpaceFailures(snapshot, plan) is { Count: > 0 } spaceFailures
             ? Refuse(snapshot, RefusalKind.Precondition, classification, spaceFailures[0].Message, failures: spaceFailures)
             : outcome;
@@ -69,7 +81,7 @@ public static class Planner
     /// Plans the revert flow of design 5.3: back up T (it is the live save), copy it to a new
     /// folder beside S, remove the link, and rename the copy to S. T is left for the other devices.
     /// </summary>
-    public static PlanOutcome PlanRevert(Snapshot snapshot, bool assumeClosed = false)
+    public static PlanOutcome PlanRevert(Snapshot snapshot, bool assumeClosed = false, bool noBackups = false)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var s = snapshot;
@@ -145,6 +157,11 @@ public static class Planner
         var plan = new Plan(
             s.MappingId, Classification.AlreadyApplied, null, s.Source, s.Target, steps, notes,
             NeedsFirstSeedConfirmation: false, PlanOperation.Revert);
+        if (noBackups)
+        {
+            plan = WithoutBackups(new PlanOutcome(plan, null)).Plan!;
+        }
+
         return SpaceFailures(s, plan) is { Count: > 0 } spaceFailures
             ? Refuse(
                 s, RefusalKind.Precondition, Classification.NotClassified, spaceFailures[0].Message,
@@ -456,7 +473,9 @@ public static class Planner
                 AddSwitchSteps(s, steps);
                 return Planned(
                     s, Classification.FirstDevice, SetupChoice.NoCopy, steps,
-                    ["The shared location is empty, so the app will see no data after this. This device's data will be in the backup only."]);
+                    [request.NoBackups
+                        ? "The shared location is empty, so the app will see no data after this. This device's data will be deleted."
+                        : "The shared location is empty, so the app will see no data after this. This device's data will be in the backup only."]);
             }
 
             default:
@@ -518,7 +537,9 @@ public static class Planner
                 };
                 if (kept.Count > 0)
                 {
-                    notes.Add($"Present on both sides and different; the shared version is kept, this device's is in the backup: {string.Join(", ", kept)}.");
+                    notes.Add(request.NoBackups
+                        ? $"Present on both sides and different; the shared version is kept, this device's is deleted: {string.Join(", ", kept)}."
+                        : $"Present on both sides and different; the shared version is kept, this device's is in the backup: {string.Join(", ", kept)}.");
                 }
 
                 var steps = new List<PlanStep> { new(StepKind.BackUpSource, s.Source) };
@@ -539,7 +560,7 @@ public static class Planner
                         s, RefusalKind.ConfirmationNeeded, Classification.Guard,
                         new Note(
                             "Replacing the shared saves deletes them from the sync folder, which other devices may use. " +
-                            "The shared copy is backed up on this device first.",
+                            (request.NoBackups ? "No backup is taken." : "The shared copy is backed up on this device first."),
                             new NextStep(NextStepKind.ConfirmReplace, s.MappingId)),
                         allowed: GuardChoices, comparison: comparison);
                 }
@@ -559,7 +580,7 @@ public static class Planner
                 AddSwitchSteps(s, steps, StepKind.WriteSeedMarker, StepKind.SupersedeMarkers);
                 return Planned(
                     s, Classification.Guard, SetupChoice.ReplaceShared, steps,
-                    [ReplaceSharedNote]);
+                    [request.NoBackups ? ReplaceSharedUnbackedNote : ReplaceSharedNote]);
             }
         }
     }
@@ -660,6 +681,20 @@ public static class Planner
         return new PlanOutcome(
             new Plan(s.MappingId, classification, choice, s.Source, s.Target, steps, allNotes, needsFirstSeedConfirmation), null);
     }
+
+    /// <summary>Unsafe mode: the plan without its backup steps, marked so, with <see cref="UnsafeModeNote"/>. A refusal is returned as it is.</summary>
+    internal static PlanOutcome WithoutBackups(PlanOutcome outcome) =>
+        outcome.Plan is not { } plan
+            ? outcome
+            : outcome with
+            {
+                Plan = plan with
+                {
+                    Steps = plan.Steps.Where(s => s.Kind is not (StepKind.BackUpSource or StepKind.BackUpTarget)).ToList(),
+                    Notes = [.. plan.Notes, UnsafeModeNote],
+                    NoBackups = true,
+                },
+            };
 
     private static PlanOutcome Refuse(
         Snapshot s, RefusalKind kind, Classification classification, Note message,

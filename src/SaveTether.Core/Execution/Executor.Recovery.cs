@@ -219,7 +219,7 @@ public sealed partial class Executor
             var partly = $"The shared folder '{cleared.Step.Path}' may have been partly replaced. ";
             tx.Messages.Add(
                 backup is null
-                    ? partly + "It held no saves before."
+                    ? partly + (plan.NoBackups ? "No backup was taken (unsafe mode)." : "It held no saves before.")
                     : new Note(
                         partly + $"What it held before is in backup '{backup}'.",
                         new NextStep(NextStepKind.RestoreSharedBackup, tx.Plan.MappingId, backup)));

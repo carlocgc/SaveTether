@@ -90,6 +90,7 @@ public class ActionTests
         Assert.Equal(guard.AllowedChoices, guardOffered.Select(c => c.Choice));
         Assert.DoesNotContain(guardOffered, c => c.Choice == SetupChoice.Copy);
         Assert.Equal("Use the shared copy", guardOffered.Single(c => c.Choice == SetupChoice.NoCopy).Label);
+        Assert.EndsWith("This device's data is deleted.", ActionTexts.Choices(guard, "PPSSPP", others: false, noBackups: true).Single(c => c.Choice == SetupChoice.NoCopy).Sentence, StringComparison.Ordinal);
 
         // Other devices are named only when there are some; the backup is said once, under the choices.
         Assert.All(guardOffered, c => Assert.DoesNotContain("other device", c.Sentence, StringComparison.OrdinalIgnoreCase));
@@ -168,7 +169,7 @@ public class ActionTests
 
             // The finished dialog keeps the plan's steps above the result; a run with no plan has none.
             var finished = ActionTexts.FinishedView(plan, result, Role);
-            Assert.Equal(plan.Steps.Select(ActionTexts.Step), finished.Steps);
+            Assert.Equal(plan.Steps.Select(s => ActionTexts.Step(s)), finished.Steps);
             Assert.Equal($"{Role} is linked.", finished.Title);
             Assert.Contains(result.BackupIds.Select(id => $"Backup taken: {id}").First(), finished.Sentences);
             Assert.Empty(ActionTexts.FinishedView(null, result, Role, recovery: true).Steps);

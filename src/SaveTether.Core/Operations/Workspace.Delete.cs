@@ -105,7 +105,9 @@ public sealed partial class Workspace
             {
                 // The files are listed now, not from the description: a sync tool may have delivered some since.
                 DeletionSeam?.Invoke("before-backup");
-                if (SafeFs.EnumerateTree(described.TargetFolder).Any(e => e.Kind == EntryKind.File))
+                // Unsafe mode ("Back up before actions" off): no backup, and every file is deleted, as it is now.
+                var unsafeMode = !new DeviceSettings(Local.Folder).BackupBeforeActions;
+                if (!unsafeMode && SafeFs.EnumerateTree(described.TargetFolder).Any(e => e.Kind == EntryKind.File))
                 {
                     backup = OpenBackups(ReadOwnDevice()).Create(mappingId, described.TargetFolder, BackupReason.PreDelete);
                 }
@@ -118,7 +120,17 @@ public sealed partial class Workspace
                 }
 
                 started = true;
-                var left = RemoveBackedUp(described.TargetFolder, manifest, below);
+                var left = RemoveBackedUp(described.TargetFolder, manifest, below, everyFile: unsafeMode);
+                if (left > 0 && unsafeMode)
+                {
+                    // No backup was taken, so what is left is not "changed after the backup": every plain file went, these are not plain files.
+                    throw new MappingDeletionIncompleteException(
+                        $"'{mappingId}' was deleted only in part: {left} entr{(left == 1 ? "y" : "ies")} in its shared folder that "
+                        + $"{(left == 1 ? "is" : "are")} not a plain file (a link, say) {(left == 1 ? "was" : "were")} left, and so was its record. "
+                        + $"Remove {(left == 1 ? "it" : "them")} by hand, then run 'map delete {mappingId}' again.",
+                        null, left);
+                }
+
                 if (left > 0)
                 {
                     throw new MappingDeletionIncompleteException(
@@ -157,9 +169,18 @@ public sealed partial class Workspace
     /// <summary>
     /// Deletes the files a backup holds from the shared folder, each only while it is still what the backup has (same size and hash),
     /// then every folder that is empty by then, deepest first, never recursively. Answers how many files (or links) are still there.
+    /// With <paramref name="everyFile"/> (unsafe mode, no backup), every file in the folder is deleted instead.
     /// </summary>
-    private static int RemoveBackedUp(string target, BackupManifest? manifest, string below)
+    private static int RemoveBackedUp(string target, BackupManifest? manifest, string below, bool everyFile = false)
     {
+        if (everyFile)
+        {
+            foreach (var file in SafeFs.EnumerateTree(target).Where(e => e.Kind == EntryKind.File).ToList())
+            {
+                SafeFs.RemoveSharedFile(below, Path.Combine([target, .. file.RelativePath.Split('/')]));
+            }
+        }
+
         foreach (var file in manifest?.Files ?? [])
         {
             var path = Path.Combine([target, .. file.Path.Split('/')]);

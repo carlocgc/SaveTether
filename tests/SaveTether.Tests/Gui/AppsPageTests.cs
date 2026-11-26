@@ -323,11 +323,30 @@ public class AppsPageTests
     }
 
     [Fact]
+    public void In_unsafe_mode_no_confirmation_or_step_promises_a_backup()
+    {
+        var replace = new Plan(
+            "ppsspp.savedata", Classification.Guard, SetupChoice.ReplaceShared, "s", "t",
+            [new PlanStep(StepKind.ClearTarget, "t"), new PlanStep(StepKind.DeleteAside, "a")], [Planner.ReplaceSharedUnbackedNote, Planner.UnsafeModeNote],
+            NeedsFirstSeedConfirmation: false) { NoBackups = true };
+        var view = ActionTexts.Confirmation(replace, "PPSSPP savedata", others: true, assumedSynced: true);
+        Assert.DoesNotContain(view.Sentences, s => s.Contains("backed up", StringComparison.Ordinal) || s.Contains("in the backup", StringComparison.Ordinal));
+        Assert.Contains(view.Sentences, s => s.StartsWith(ActionTexts.ReplaceUnbackedText, StringComparison.Ordinal));
+        Assert.Contains(Planner.UnsafeModeNote, view.Sentences);
+        Assert.Equal("Remove the folder moved aside", ActionTexts.Step(replace.Steps[1], replace.NoBackups));
+
+        var restore = replace with { Operation = PlanOperation.Restore };
+        Assert.Contains(BackupsPage.RestoreSharedUnbackedText, ActionTexts.Confirmation(restore, "PPSSPP savedata", others: false).Sentences);
+    }
+
+    [Fact]
     public void The_Delete_confirmation_asks_about_other_devices_only_when_there_are_some()
     {
         Assert.Equal("Delete PPSSPP savedata from the sync folder?", AppsPage.DeleteTitle("PPSSPP savedata"));
         Assert.Equal("Its shared copy is backed up on this device first.", AppsPage.DeleteText(others: false));
         Assert.Contains("make sure none is still writing to it", AppsPage.DeleteText(others: true), StringComparison.Ordinal);
+        Assert.Equal("No backup of its shared copy is taken.", AppsPage.DeleteText(others: false, noBackups: true));
+        Assert.DoesNotContain("in the backup", AppsPage.FirstDeviceText(["PPSSPP savedata"], others: false, noBackups: true), StringComparison.Ordinal);
         Assert.Equal("PPSSPP savedata was deleted from the sync folder. Its shared copy is in Backups.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: true));
         Assert.Equal("PPSSPP savedata was deleted from the sync folder.", AppsPage.DeletedText("PPSSPP savedata", hadBackup: false));
         Assert.Equal("before deleting", BackupsPage.Reason(Core.Backup.BackupReason.PreDelete));

@@ -161,6 +161,7 @@ $.operations[].outcome: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.notes[]: string
 $.operations[].plan.operation: string
@@ -190,6 +191,7 @@ $.operations[].plan.choice: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.operation: string
 $.operations[].plan.source: string
@@ -217,6 +219,7 @@ $.operations[].plan.choice: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.operation: string
 $.operations[].plan.source: string
@@ -367,6 +370,15 @@ $.exit_code: number
 $.schema: number
 $: object
 
+## backup-keep
+$.backup_settings.before_actions: boolean
+$.backup_settings.max_per_folder: number
+$.backup_settings: object
+$.command: string
+$.exit_code: number
+$.schema: number
+$: object
+
 ## backup-list
 $.backups: array
 $.backups[].created_utc: string
@@ -396,6 +408,7 @@ $.operations[].outcome: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.operation: string
 $.operations[].plan.source: string
@@ -645,6 +658,7 @@ $.operations[].outcome: string
 $.operations[].plan.classification: string
 $.operations[].plan.mapping_id: string
 $.operations[].plan.needs_first_seed_confirmation: boolean
+$.operations[].plan.no_backups: boolean
 $.operations[].plan.notes: array
 $.operations[].plan.notes[]: string
 $.operations[].plan.operation: string
