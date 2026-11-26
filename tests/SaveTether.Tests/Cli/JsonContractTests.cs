@@ -120,7 +120,7 @@ public class JsonContractTests
         void Record(string name, int exit, params string[] args) => RecordOn(pc, name, exit, args);
 
         Record("init", 0, "init", "--sync-root", pc.SyncRoot, "--device", "pc", "--create-root");
-        Record("map-add", 0, "map", "add", Id, "--target", "ppsspp/SAVEDATA", "--source", pc.Source, "--process", "PPSSPPSDL");
+        Record("map-add", 0, "map", "add", Id, "--target", "ppsspp/SAVEDATA", "--source", pc.Source, "--process", "PPSSPPSDL", "--name", "PPSSPP");
         Record("map-add-conflict", 1, "map", "add", "other.saves", "--target", "other/saves", "--source", pc.Source);
         pc.Save("GAME1/save.bin", "mine");
         pc.Save("GAME2/save.bin", "only-here");

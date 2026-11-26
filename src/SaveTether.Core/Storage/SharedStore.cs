@@ -458,6 +458,20 @@ public sealed class SharedStore
                 $"Mapping '{mapping.Id}' is not valid: it has an entry depth, which needs \"schema\": 2.");
         }
 
+        if (mapping.Name is not null && mapping.Schema < 3)
+        {
+            throw new StoreException(
+                StoreProblem.Invalid,
+                $"Mapping '{mapping.Id}' is not valid: it has a name, which needs \"schema\": 3.");
+        }
+
+        if (mapping.Name is { } name && (string.IsNullOrWhiteSpace(name) || name.Length > MappingFile.MaxNameLength || name.Any(char.IsControl)))
+        {
+            throw new StoreException(
+                StoreProblem.Invalid,
+                $"Mapping '{mapping.Id}' is not valid: its name must be 1 to {MappingFile.MaxNameLength} characters, with no control characters.");
+        }
+
         return mapping;
     }
 

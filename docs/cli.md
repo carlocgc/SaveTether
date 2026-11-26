@@ -69,7 +69,7 @@ savetether init --sync-root ~/Sync --device deck --take-over
 ## map add
 
 ```
-savetether map add <id> --source <path> [--target <app>/<folder>] [--process <name>]... [--entry-depth <n>]
+savetether map add <id> --source <path> [--target <app>/<folder>] [--process <name>]... [--entry-depth <n>] [--name <app name>]
 ```
 
 Adds a mapping, or sets this device's save folder for a mapping another device added. It writes records only; `apply` makes the link.
@@ -81,6 +81,7 @@ Adds a mapping, or sets this device's save folder for a mapping another device a
 | `--target <app>/<folder>` | Where the shared copy lives under `<sync root>/savetether/`. Needed only when the mapping is new. |
 | `--process <name>` | The app's process name, repeatable. `apply`, `revert` and `backup restore` refuse while it runs. |
 | `--entry-depth <n>` | How many folder levels down one game's saves sit (default 1). It is the unit `--add-missing` copies in, so it is never mixing two games' files. Give it again later to change it. |
+| `--name <app name>` | The app's name as people read it, for an app with no definition, for example `"Lantern Harbor"` for `lantern-harbor.saves`. The desktop app shows the app under it. Kept only when the mapping is new, and not kept when it is the ID's app part (`dolphin` for `dolphin.gc`). A mapping with a name is written in format 3, which SaveTether before 2026-11-26 cannot read, so update every device first. |
 
 ```bash
 savetether map add ppsspp.savedata --target ppsspp/SAVEDATA \

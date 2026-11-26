@@ -108,8 +108,9 @@ public sealed class ManualAddFlow(LocalStore local)
         }
 
         var slash = mapping.Target.IndexOf('/', StringComparison.Ordinal);
-        // The app's name as the Apps page shows it, for the dialogs after Add: a definition's own ("DuckStation"), else the ID's app part.
-        var name = AppNames.Resolve(workspace.Definitions, mappingId.Split('.', 2)[0]).Name;
+        // The app's name as the Apps page shows it, for the dialogs after Add: a definition's own ("DuckStation"), else the name typed, else the ID's app part.
+        var appId = mappingId.Split('.', 2)[0];
+        var name = AppNames.Resolve(workspace.Definitions, appId, storedName: AppNames.Stored(workspace).GetValueOrDefault(appId)).Name;
         return new ManualAddStart(
             $"Folder for {mappingId}",
             sentences,
@@ -211,7 +212,8 @@ public sealed class ManualAddFlow(LocalStore local)
                     join ? null : check.Target,
                     ExpandHome(input.SaveFolder!.Trim()),
                     SplitProcessNames(input.ProcessNames),
-                    join ? null : input.EntryDepth);
+                    join ? null : input.EntryDepth,
+                    _appId is null ? input.AppName : null);
                 return new ManualAddResult(check.MappingId, null, null);
             }
             catch (StoreException e)
@@ -263,6 +265,12 @@ public sealed class ManualAddFlow(LocalStore local)
             if (_appId is null && Slug(input.AppName, MaxAppIdLength) is null)
             {
                 problems.Add((ManualField.AppName, "Give the app a name with at least one letter from a to z, or a digit."));
+            }
+            else if (_appId is null && input.AppName!.Trim() is var typed
+                && (typed.Length > MappingFile.MaxNameLength || typed.Any(char.IsControl)))
+            {
+                // The name is stored as typed (MappingFile.Name), which the store would refuse on Add.
+                problems.Add((ManualField.AppName, $"Keep the name to {MappingFile.MaxNameLength} characters or fewer, on one line."));
             }
 
             if (string.IsNullOrWhiteSpace(input.FolderName))

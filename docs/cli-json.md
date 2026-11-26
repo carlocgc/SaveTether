@@ -76,7 +76,7 @@ A sync folder on a Windows network share that cannot be linked to is refused wit
 
 ### `map add` and `map remove`
 
-`map add <id>` flags: `--source <path>` (required), `--target <app>/<save folder>` (required for a new mapping), `--process <name>` (repeatable), `--entry-depth <n>` (1 to 8). `map remove <id>` takes no flags.
+`map add <id>` flags: `--source <path>` (required), `--target <app>/<save folder>` (required for a new mapping), `--process <name>` (repeatable), `--entry-depth <n>` (1 to 8), `--name <app name>` (added 2026-11-26; no field in the answer). `map remove <id>` takes no flags.
 
 `mapping` object:
 
@@ -198,7 +198,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `operation_running` | boolean | Another SaveTether process holds the operation lock, or took it while the report was read, so links may be part way through a change: do not alert on this report. `status` does not take the lock. Added 2026-11-25. |
 | `autostart_missing` | string | Present only when the desktop app is set to start with the session and the program the entry names is missing: that program's path. `status` only reports it; it does not change the entry. Added 2026-11-18. |
 
-`mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner). With `--sizes` only: `bytes` (number, the shared copy's total size) and `files` (number, its file count), both absent when the shared copy is not there. Added 2026-11-25.
+`mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner), `name` (the app's name as typed when the mapping was added by hand, absent otherwise and when the sync folder cannot be read; added 2026-11-26). With `--sizes` only: `bytes` (number, the shared copy's total size) and `files` (number, its file count), both absent when the shared copy is not there. Added 2026-11-25.
 
 ### `notifications`
 

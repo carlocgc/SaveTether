@@ -343,8 +343,9 @@ public sealed partial class Workspace
 
     /// <summary>"map add": the shared mapping, if it is new, and this device's save folder for it.</summary>
     /// <param name="entryDepth">How many levels down one game's saves sit (design 5.13), or null to leave it as it is.</param>
+    /// <param name="name">The app's name as typed, kept only when the mapping is new; an existing one keeps its own.</param>
     public MapResult MapAdd(
-        string mappingId, string? target, string source, IReadOnlyList<string> processNames, int? entryDepth = null)
+        string mappingId, string? target, string source, IReadOnlyList<string> processNames, int? entryDepth = null, string? name = null)
     {
         ArgumentNullException.ThrowIfNull(processNames);
         var device = ReadOwnDevice();
@@ -395,6 +396,8 @@ public sealed partial class Workspace
             mapping = new MappingFile
             {
                 Schema = MappingFile.CurrentSchema, Id = mappingId, Target = target, Mechanism = Mechanism.Link, EntryDepth = entryDepth,
+                // A name that only repeats the ID's app part adds nothing, and would need format 3 on every device.
+                Name = name?.Trim() == mappingId.Split('.', 2)[0] ? null : name,
             }.Normalized();
             Shared.WriteMapping(mapping);
         }
