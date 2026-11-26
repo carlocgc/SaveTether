@@ -2,7 +2,7 @@
 
 Section 5d of the [implementation plan](implementation-plan.md) points here. This file holds the whole phase: the goal, the owner's decisions, the design, the tasks (T1 to T5), the exit test, and each task's progress. A delegated task needs only this file and the files it names.
 
-Planned 2026-11-26 by the owner and the agent. Nothing built yet.
+Planned 2026-11-26 by the owner and the agent. T1 done; T2 next.
 
 **Goal.** When a sync tool cannot merge two edits, it keeps both and renames one. Syncthing writes `save.sync-conflict-20261126-101500-ABCDEFG.dat`; Dropbox and Nextcloud write `save (conflicted copy 2026-11-26 101500).dat`; ownCloud and older Nextcloud clients write `save_conflict-20261126-101500.dat`. A conflict copy in a shared folder means one device's save lost to another's, and today SaveTether still shows that folder as green "Linked". With an opt-in device setting (off by default), SaveTether looks for conflict copies in each linked shared folder. If it finds any, the row shows a new amber state, **"File conflict"**, and the usual toast follows, in the desktop app and in the Decky plugin.
 
@@ -12,7 +12,7 @@ Planned 2026-11-26 by the owner and the agent. Nothing built yet.
 |---|---|
 | D1 | **Opt-in, off by default.** A device setting, `detect_sync_conflicts`, like the notifications switch. Set in the app's Settings, with `savetether sync-conflicts on\|off`, and with a toggle in the Decky plugin (owner, 2026-11-26) |
 | D2 | **Only flagged when the mapping is otherwise Linked** (owner, 2026-11-26). The other amber states already need the owner first and keep their own word |
-| D3 | **Patterns** (owner, 2026-11-26): a file name containing `.sync-conflict-` (Syncthing), `conflicted copy` (Dropbox and current Nextcloud clients) or `_conflict-` (ownCloud and older Nextcloud clients, e.g. `save_conflict-20261126-101500.dat`), ignoring case. Confirm the ownCloud form against its current client in T1. OneDrive's `name-PCNAME.ext` and Google Drive's `name (1).ext` are not matched, because games make such names themselves |
+| D3 | **Patterns** (owner, 2026-11-26): a file name containing `.sync-conflict-` (Syncthing), `conflicted copy` (Dropbox and current Nextcloud clients) or `_conflict-` (ownCloud and older Nextcloud clients, e.g. `save_conflict-20261126-101500.dat`), ignoring case. Checked in T1: ownCloud's current docs (desktop 5.3 and 6.0, "Manage Synchronisation Conflicts") name the copy with "conflicted copy" as well, which the second pattern covers. `_conflict-` could not be confirmed from a source; it stays for older clients, since nothing else is likely to use that name. OneDrive's `name-PCNAME.ext` and Google Drive's `name (1).ext` are not matched, because games make such names themselves |
 | D4 | **Resolved by hand.** The row names the file and opens the shared folder. SaveTether deletes nothing. Once the copies are gone, the next check shows Linked |
 | D5 | **Toasts come from the existing rules.** A new amber word is a new problem key in `HealthMonitor` (and the plugin's `monitor.ts`), so it is notified once, and the notifications switch mutes it |
 
@@ -99,4 +99,5 @@ Verification before each PR: `dotnet build -warnaserror` and `dotnet test`; for 
 
 ## Progress
 
-Not started.
+- **T1 done** (2026-11-26). `HealthState.FileConflict` (`file-conflict`), `MappingHealth.Conflicts`, `HealthCheck.IsConflictCopy` and the name-only scan in the `Ok` branch. `DeviceSettings.DetectSyncConflicts` (`detect_sync_conflicts`, off by default), read once in `Workspace.Status`. Tests: `tests/SaveTether.Tests/Health/ConflictCopyTests.cs` (the patterns; off, on, one copy, two, deleted again) and `DeviceSettingsTests`. Build with `-warnaserror` and all 1065 tests pass. Not yet run on the Mint box or the Deck.
+- Pulled forward from T2 and T3, because the tests that walk every `HealthState` (`ActionTests`, `StatusCheckTests`, `JsonContractTests`) require them: the word in `StateWords`, the row in `AppsPage` (`ConflictSentence`, main action `OpenSharedFolder`), the CLI label in `Output.Describe`, and the state and `conflicts` field in `docs/cli-json.md`. T2 still has the Settings switch and the `HealthMonitor` test; T3 has the `sync-conflicts` command and the conflict paths in the human `status`.

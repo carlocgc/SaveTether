@@ -32,8 +32,13 @@ public sealed class DeviceSettings(string localFolder)
     /// <summary>How many backups of each folder are kept, besides its first; 0 keeps them all.</summary>
     public int MaxBackupsPerFolder => Read().MaxBackupsPerFolder is int n && n is >= 0 and <= MaxBackupsLimit ? n : BackupStore.DefaultKeep;
 
+    /// <summary>"Detect sync conflicts": look for a sync tool's conflict copies in each linked shared folder. Off by default.</summary>
+    public bool DetectSyncConflicts => Read().DetectSyncConflicts ?? false;
+
     /// <summary>Each setter answers why the setting could not be saved, or null.</summary>
     public string? SetNotifications(bool on) => Write(s => s with { Notifications = on });
+
+    public string? SetDetectSyncConflicts(bool on) => Write(s => s with { DetectSyncConflicts = on });
 
     public string? SetBackupBeforeActions(bool on) => Write(s => s with { BackupBeforeActions = on });
 
@@ -95,6 +100,8 @@ internal sealed record SettingsFile
     public bool? BackupBeforeActions { get; init; }
 
     public int? MaxBackupsPerFolder { get; init; }
+
+    public bool? DetectSyncConflicts { get; init; }
 }
 
 // Unknown names are ignored, not refused: a newer SaveTether may add settings this one does not know.

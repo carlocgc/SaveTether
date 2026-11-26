@@ -567,7 +567,7 @@ Planned 2026-11-26. Goal: an opt-in device setting (off by default) that finds s
 
 Everything else is in [phase-3.8-sync-conflicts.md](phase-3.8-sync-conflicts.md): decisions, design, tasks T1 to T5 (T5 in the plugin's repo), the exit test, and progress.
 
-Progress: not started.
+Progress: T1 done (the state, the scan and the setting in the core); T2 next.
 
 ## 6. Phase 4: Decky plugin
 

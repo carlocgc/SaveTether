@@ -198,7 +198,7 @@ A refusal has `problem` `conflict` with a `conflict` object, or `invalid` or `no
 | `operation_running` | boolean | Another SaveTether process holds the operation lock, or took it while the report was read, so links may be part way through a change: do not alert on this report. `status` does not take the lock. Added 2026-11-25. |
 | `autostart_missing` | string | Present only when the desktop app is set to start with the session and the program the entry names is missing: that program's path. `status` only reports it; it does not change the entry. Added 2026-11-18. |
 
-`mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner), `name` (the app's name as typed when the mapping was added by hand, absent otherwise and when the sync folder cannot be read; added 2026-11-26). With `--sizes` only: `bytes` (number, the shared copy's total size) and `files` (number, its file count), both absent when the shared copy is not there. Added 2026-11-25.
+`mappings[]`: `mapping_id`, `state` (a health state below), `reason` (for `not-applied`, `replaced` and `broken` only: a health reason below), `source` (absent when this device has no save folder set), `target` (the full path of the shared folder), `detail` (a sentence for the owner), `name` (the app's name as typed when the mapping was added by hand, absent otherwise and when the sync folder cannot be read; added 2026-11-26), `conflicts` (for `file-conflict` only: array of string, the conflict copies relative to the shared folder, `/`-separated and sorted; added 2026-11-26). With `--sizes` only: `bytes` (number, the shared copy's total size) and `files` (number, its file count), both absent when the shared copy is not there. Added 2026-11-25.
 
 ### `notifications`
 
@@ -354,7 +354,7 @@ Every value `--json` can print, by field. A test checks that each value in the c
 
 **Removal** (`status.removal`): `removed-by-another`, `unfinished`.
 
-**Health state** (`status.mappings[].state`, design 5.5): `ok`, `not-applied`, `replaced`, `broken`, `retargeted`, `double-seed`, `foreign-link`.
+**Health state** (`status.mappings[].state`, design 5.5): `ok`, `not-applied`, `replaced`, `broken`, `retargeted`, `double-seed`, `foreign-link`, `file-conflict` (linked, but the shared folder holds conflict copies a sync tool left; only reported when the device's "Detect sync conflicts" setting is on; added 2026-11-26).
 
 **Health reason** (`status.mappings[].reason`): for `not-applied`, `no-save-folder`, `save-folder-not-absolute`, `not-linked-yet`; for `replaced`, `folder-holds-files`, `folder-empty`, `folder-missing`, `not-a-folder`; for `broken`, `shared-folder-missing`, `sync-root-unavailable`.
 

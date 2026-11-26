@@ -683,6 +683,7 @@ internal static class OutputWriter
         HealthState.Broken => "Broken",
         HealthState.Retargeted => "Retargeted",
         HealthState.DoubleSeed => "Double seed",
+        HealthState.FileConflict => "File conflict",
         _ => "Foreign link",
     };
 
