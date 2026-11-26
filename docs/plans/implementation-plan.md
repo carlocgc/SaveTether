@@ -561,6 +561,14 @@ Everything else is in [phase-3.7-network-share.md](phase-3.7-network-share.md): 
 
 Progress: T1 done (design 5.16 and the "no admin" lines); T2 done (detection); T3 done (symlink to a share, `SymlinkCapability`, `symlink-not-allowed`; checked on the PC with Developer Mode off and on); T4 and T5 next.
 
+## 5d. Phase 3.8: sync-tool conflict copies
+
+Planned 2026-11-26. Goal: an opt-in device setting (off by default) that finds sync-tool conflict copies (Syncthing's `.sync-conflict-`, and the "conflicted copy" files of Nextcloud, ownCloud and Dropbox) in each linked shared folder. Such a folder shows a new amber state, "File conflict", with the usual toast, in the app and in the Decky plugin.
+
+Everything else is in [phase-3.8-sync-conflicts.md](phase-3.8-sync-conflicts.md): decisions, design, tasks T1 to T5 (T5 in the plugin's repo), the exit test, and progress.
+
+Progress: not started.
+
 ## 6. Phase 4: Decky plugin
 
 Planned 2026-11-25: everything is in [phase-4-decky-plugin.md](phase-4-decky-plugin.md): the owner's decisions (read-only first version, a separate `SaveTether-Decky` repo, GitHub releases instead of the Decky store), the mockup, tasks T1 to T9 with the model for each, and the Game Mode test harness over the CEF debugger. The table below is the earlier outline; Recover and Apply move to after the first version.
