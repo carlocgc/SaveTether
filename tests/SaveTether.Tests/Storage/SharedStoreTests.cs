@@ -103,7 +103,11 @@ public class SharedStoreTests
     [InlineData("{ \"schema\": 1, \"id\": \"ppsspp.savedata\", \"targett\": \"x\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\" }", StoreProblem.Invalid)]
     [InlineData("{ \"schema\": 1, \"id\": \"eden.save\", \"target\": \"eden/save\", \"mechanism\": \"link\" }", StoreProblem.Invalid)]
     [InlineData("{ \"schema\": 1, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/../x\", \"mechanism\": \"link\" }", StoreProblem.Invalid)]
-    [InlineData("{ \"schema\": 3, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"new_field\": true }", StoreProblem.SchemaTooNew)]
+    [InlineData("{ \"schema\": 4, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"new_field\": true }", StoreProblem.SchemaTooNew)]
+    [InlineData("{ \"schema\": 3, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"new_field\": true }", StoreProblem.Invalid)]
+    [InlineData("{ \"schema\": 2, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"name\": \"PPSSPP\" }", StoreProblem.Invalid)]
+    [InlineData("{ \"schema\": 3, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"name\": \" \" }", StoreProblem.Invalid)]
+    [InlineData("{ \"schema\": 3, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"name\": \"a\nb\" }", StoreProblem.Invalid)]
     [InlineData("{ \"schema\": 2, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"new_field\": true }", StoreProblem.Invalid)]
     [InlineData("{ \"schema\": 1, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"entry_depth\": 2 }", StoreProblem.Invalid)]
     [InlineData("{ \"schema\": 2, \"id\": \"ppsspp.savedata\", \"target\": \"ppsspp/SAVEDATA\", \"mechanism\": \"link\", \"entry_depth\": 0 }", StoreProblem.Invalid)]
@@ -118,6 +122,22 @@ public class SharedStoreTests
         var error = AssertProblem(expected, () => store.ReadMapping("ppsspp.savedata"));
         Assert.Contains("ppsspp.savedata", error.Message, StringComparison.Ordinal);
         AssertProblem(expected, () => store.ListMappings());
+    }
+
+    [Fact]
+    public void A_mapping_is_written_in_the_oldest_format_that_holds_it()
+    {
+        using var sandbox = new Sandbox();
+        var store = NewStore(sandbox);
+        store.WriteMapping(Mapping("plain.saves", "plain/saves") with { Name = "  " });
+        store.WriteMapping(Mapping("deep.saves", "deep/saves") with { EntryDepth = 2 });
+        store.WriteMapping(Mapping("dohna-dohna.saves", "dohna-dohna/saves") with { Name = " Dohna Dohna ", EntryDepth = 1 });
+
+        Assert.Equal((1, null), (store.ReadMapping("plain.saves").Schema, store.ReadMapping("plain.saves").Name));
+        Assert.Equal(2, store.ReadMapping("deep.saves").Schema);
+        var named = store.ReadMapping("dohna-dohna.saves");
+        Assert.Equal((3, "Dohna Dohna", 1), (named.Schema, named.Name, named.Depth));
+        Assert.DoesNotContain("entry_depth", File.ReadAllText(Path.Combine(store.MetaRoot, "mappings", "dohna-dohna.saves.json")), StringComparison.Ordinal);
     }
 
     [Fact]

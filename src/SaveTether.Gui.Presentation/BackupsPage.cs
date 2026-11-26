@@ -33,12 +33,13 @@ public static class BackupsPage
     {
         var workspace = Core.Operations.Workspace.Open(local, NoProcesses.Instance);
         var catalog = workspace.Definitions;
+        var stored = AppNames.Stored(workspace);
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         string AppName(string id)
         {
             if (!names.TryGetValue(id, out var name))
             {
-                name = AppNames.Resolve(catalog, id).Name;
+                name = AppNames.Resolve(catalog, id, storedName: stored.GetValueOrDefault(id)).Name;
                 names[id] = name;
             }
 

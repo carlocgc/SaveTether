@@ -71,7 +71,7 @@ public static class RemoveDeviceFlow
     {
         ArgumentNullException.ThrowIfNull(workspace);
         var dot = mappingId.IndexOf('.', StringComparison.Ordinal);
-        return dot < 0 ? (mappingId, mappingId) : (mappingId[(dot + 1)..], AppNames.Resolve(workspace.Definitions, mappingId[..dot]).Name);
+        return dot < 0 ? (mappingId, mappingId) : (mappingId[(dot + 1)..], AppNames.Resolve(workspace.Definitions, mappingId[..dot], storedName: AppNames.Stored(workspace).GetValueOrDefault(mappingId[..dot])).Name);
     }
 
     public static string RemovedByBanner(string by) => $"This device was removed from the sync folder by {by}.";

@@ -98,7 +98,7 @@ internal static class CliApp
               device waits for the sync tool to deliver the savetether folder.
               --take-over claims an existing device name, after a reinstall.
 
-          savetether map add <id> --source <path> [--target <app>/<save folder>] [--process <name>]... [--entry-depth <n>]
+          savetether map add <id> --source <path> [--target <app>/<save folder>] [--process <name>]... [--entry-depth <n>] [--name <app name>]
               Add a mapping, or set this device's save folder for an existing one.
               <id> is app.role, for example ppsspp.savedata. --target is needed for a new mapping.
               --process names the app's process, so apply can refuse while it runs.
@@ -344,7 +344,7 @@ internal static class CliApp
                 entryDepth = depth;
             }
 
-            var result = Open().MapAdd(id, command.Value("--target"), source, command.Values("--process"), entryDepth);
+            var result = Open().MapAdd(id, command.Value("--target"), source, command.Values("--process"), entryDepth, command.Value("--name"));
             return new CliOutput
             {
                 Command = command.Name, ExitCode = ExitSuccess,

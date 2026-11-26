@@ -41,8 +41,10 @@ public enum SetupChoice
 /// </summary>
 public sealed record MappingFile
 {
-    /// <summary>The newest format this version reads. Format 2 added <see cref="EntryDepth"/>.</summary>
-    public const int CurrentSchema = 2;
+    /// <summary>The newest format this version reads. Format 2 added <see cref="EntryDepth"/>, format 3 <see cref="Name"/>.</summary>
+    public const int CurrentSchema = 3;
+
+    public const int MaxNameLength = 100;
 
     public const int MaxEntryDepth = 8;
 
@@ -63,21 +65,38 @@ public sealed record MappingFile
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? EntryDepth { get; init; }
 
+    /// <summary>
+    /// The app's name as the owner typed it, for a mapping added by hand ("Dohna Dohna" for
+    /// "dohna-dohna.saves"). Absent for a mapping from a definition, whose name the definition gives.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; init; }
+
     /// <summary><see cref="EntryDepth"/> with its default filled in.</summary>
     [JsonIgnore]
     public int Depth => EntryDepth ?? 1;
 
     /// <summary>
-    /// The form that is written to disk. A mapping at depth 1 is written exactly as format 1
-    /// was, so a device still running an older SaveTether keeps reading it; only a mapping that
-    /// really uses the new field needs every device updated.
+    /// The form that is written to disk: the oldest format that holds it. A mapping at depth 1
+    /// with no name is written exactly as format 1 was, so a device still running an older
+    /// SaveTether keeps reading it; only a mapping that really uses a newer field needs every
+    /// device updated.
     /// </summary>
-    public MappingFile Normalized() => Depth switch
+    public MappingFile Normalized()
     {
-        > 1 => this with { Schema = CurrentSchema },
-        1 => this with { Schema = 1, EntryDepth = null },
-        _ => this, // Not a valid depth. Left as it is, for validation to refuse.
-    };
+        if (Depth is < 1 or > MaxEntryDepth)
+        {
+            return this; // Not a valid depth. Left as it is, for validation to refuse.
+        }
+
+        var trimmed = string.IsNullOrWhiteSpace(Name) ? null : Name.Trim();
+        return this with
+        {
+            Name = trimmed,
+            EntryDepth = Depth > 1 ? EntryDepth : null,
+            Schema = trimmed is not null ? 3 : Depth > 1 ? 2 : 1,
+        };
+    }
 }
 
 /// <summary>One mapping's settings on one device.</summary>
