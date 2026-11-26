@@ -28,6 +28,6 @@ public static class SettingsTexts
     public const string DetectSyncConflicts = "Detect sync conflicts";
 
     public const string DetectSyncConflictsNote =
-        "On, each check looks in your linked shared folders for the conflict copies a sync tool such as Syncthing leaves " +
-        "when two devices changed the same file, and shows \"File conflict\" when it finds one.";
+        "On, each check looks in your linked shared folders for the conflict copies Syncthing, Dropbox, Nextcloud and ownCloud leave " +
+        "when two devices changed the same file, and shows \"File conflict\" when it finds one. OneDrive's and Google Drive's are not recognised.";
 }
