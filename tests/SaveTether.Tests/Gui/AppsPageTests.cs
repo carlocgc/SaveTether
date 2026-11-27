@@ -26,9 +26,8 @@ public class AppsPageTests
         Assert.Null(ok.Main);
         Assert.Equal([RowAction.OpenFolder, RowAction.OpenSharedFolder, RowAction.BackUpNow, RowAction.Backups, RowAction.Revert], ok.Others);
 
-        // Backups, where section 5.1 lists it: Linked, Not linked, Two shared copies.
+        // Backups, where section 5.1 lists it: Linked, Not linked.
         Assert.Contains(RowAction.Backups, For(HealthState.Replaced, HealthReason.FolderHoldsFiles).Others);
-        Assert.Contains(RowAction.Backups, For(HealthState.DoubleSeed).Others);
 
         var ready = For(HealthState.NotApplied, HealthReason.NotLinkedYet);
         Assert.Equal("Original", ready.Sentence);
@@ -50,7 +49,6 @@ public class AppsPageTests
         Assert.Equal([RowAction.Apply], For(HealthState.Replaced, HealthReason.FolderMissing).Others);
         Assert.Equal((RowAction?)RowAction.OpenFolderParent, For(HealthState.Replaced, HealthReason.NotAFolder).Main);
         Assert.Equal((RowAction?)RowAction.CheckAgain, For(HealthState.Broken, HealthReason.SharedFolderMissing).Main);
-        Assert.Equal((RowAction?)RowAction.UseThisCopy, For(HealthState.DoubleSeed).Main);
         Assert.Equal((RowAction?)RowAction.OpenFolder, For(HealthState.ForeignLink).Main);
 
         // A folder added by hand has no definition: its rows open the hand form instead of Add app (section 8).

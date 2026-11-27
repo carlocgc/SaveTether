@@ -604,7 +604,7 @@ Whole top-level entries are the unit for `--add-missing` because most emulators 
 | 5 | has data | empty, no active seed marker | first device: `--copy` or `--no-copy` |
 | 6 | has data | has data | **guard**: "the shared location already holds saves". Shows the comparison (5.4). `--copy` is refused; `--no-copy`, `--add-missing` or `--replace-shared`. If T is missing files an active seed marker lists, `--add-missing` and `--replace-shared` also need `--assume-synced` |
 
-**Seed marker.** `savetether/.savetether/seed/<mapping>/<device>.json` records which device seeded, when, and the seed's file list (relative path and size). Each device writes its own file, named after itself, so two devices never write the same marker file whatever sync tool is in use.
+**Seed marker.** `savetether/.savetether/seed/<mapping>/<device>.json` records which device seeded, when, and the seed's file list (relative path and size). It tells a later apply that a shared copy was made and what it held, so SaveTether does not write into a copy that is still arriving. Each device writes its own file, named after itself, so two devices never write the same marker file whatever sync tool is in use.
 
 A marker is a snapshot of the moment of seeding. Emulators later rename and delete save files, so "T is missing files the marker lists" can mean either "not delivered yet" or "changed since". That is why it never blocks a plain link or `--no-copy` (the sync tool keeps filling T either way), and only blocks the two choices that write into T on the strength of a comparison. Only an empty T with an active marker stops every choice (row 3): that is almost never a legitimate later state, and `--assume-synced` is the way past it when it is.
 
@@ -614,7 +614,7 @@ A marker is a snapshot of the moment of seeding. Emulators later rename and dele
 
 A marker is **active** unless it has been superseded. `--replace-shared` supersedes all other devices' markers for that mapping by rewriting them with a `superseded_by` field (it does not delete them).
 
-**The one race the tool cannot fully prevent.** If both devices run `--copy` before either has received the other's data, each sees an empty target and no marker. The tool does not talk to the sync tool, so nothing on one device can see the other. Mitigation: when no marker exists, `--copy` prints "if this mapping was already set up on another device, wait until it has synced" and asks for confirmation. If it still happens, nothing is lost: both devices hold backups, and both seed markers arrive, because they are separate files. `status` reports a mapping with more than one active seed marker as **Double seed**, and the owner resolves it with `apply --replace-shared` from the device that should win, which supersedes the other marker (or restores from a backup). On that device S is already a link, so classification row 1 applies and there is nothing to copy or delete: `--replace-shared` there renews this device's marker, supersedes the others, and leaves the shared folder as it stands. If the sync tool kept the other device's files and this device's should win, the route is `revert`, `backup restore` of this device's pre-apply backup, then `apply --replace-shared --confirm-replace`, which is then an ordinary replace. What the sync tool did with same-named files meanwhile (kept one, or made a conflict copy) depends on the sync tool.
+**The one race the tool cannot fully prevent.** If both devices run `--copy` before either has received the other's data, each sees an empty target and no marker. The tool does not talk to the sync tool, so nothing on one device can see the other. Mitigation: when no marker exists, `--copy` prints "if this mapping was already set up on another device, wait until it has synced" and asks for confirmation. If it still happens, nothing is lost: both devices hold backups. Which same-named files win is the sync tool's call (it keeps one, or makes a conflict copy, which shows as File conflict when that setting is on). If this device's saves should have won, the route is `revert`, `backup restore` of this device's pre-apply backup, then `apply --replace-shared --confirm-replace`. *Changed 2026-11-27:* SaveTether no longer reports this race as its own state (it was **Double seed**). Settling sync clashes is the sync tool's job. Both markers stay active; the "may still be arriving" check uses only the newest, since it best describes what the shared copy holds. Old markers are never cleaned up early, because one device would have to delete another's file. They go when their device is removed or renamed, or their mapping is deleted.
 
 **State machine (link mechanism).**
 
@@ -679,7 +679,6 @@ A step that fails during a normal run (as opposed to a crash) is handled the sam
 | Replaced | S is a real folder again. If it holds files, saves are stranded locally; offer to re-run `apply`, which stops at the guard |
 | Broken | link is intact, target is missing (sync root not mounted, or target deleted) |
 | Retargeted | link or config points somewhere unexpected |
-| Double seed | more than one active seed marker exists for the mapping (5.3) |
 | Device file mismatch | this device's shared config file carries another install's ID: two machines may be using one device name (5.6) |
 | Foreign link | S is a link the tool did not create, for example one left by the old scripts. Apply refuses; the owner removes it by hand |
 | File conflict | OK otherwise, but the shared folder holds conflict copies a sync tool left (Syncthing's `.sync-conflict-`, "conflicted copy", `_conflict-`). Looked for only when the device's opt-in "Detect sync conflicts" setting is on; the owner keeps the right copy by hand. Added 2026-11-26, phase 3.8 |
@@ -757,7 +756,7 @@ Revised by the owner on 2026-11-17: **status first.** Typing in Game Mode is fid
 
 The Quick Access panel is a narrow column, so it shows only what fits a list:
 
-- One row per mapping: app name, role, a status word (OK, Replaced, Broken, Double seed, Not applied). Rows needing attention sort to the top.
+- One row per mapping: app name, role, a status word (OK, Replaced, Broken, Not applied). Rows needing attention sort to the top.
 - Selecting a row opens its actions: apply, revert, check now, list backups.
 - A header line with the overall state and a "check all" button.
 
@@ -886,7 +885,7 @@ Status: direction agreed with the owner on 2026-11-17, toolkit (Avalonia) approv
 
 **One app.** `savetether-gui` is a window and a tray icon in one process:
 
-- **Tray icon.** Green when every mapping on this device is OK or not applied here; amber for anything else: Broken, Replaced, Retargeted, Foreign link, Double seed, a device file that belongs to another install, or an unfinished operation. These are the states of 5.5. The icon's menu has the overall state, "Open SaveTether" and Quit. The app re-checks health every few minutes, when the window or menu opens, and after each operation; a check is milliseconds (5.5). A desktop notification is shown when the state turns amber, not on every check.
+- **Tray icon.** Green when every mapping on this device is OK or not applied here; amber for anything else: Broken, Replaced, Retargeted, Foreign link, a device file that belongs to another install, or an unfinished operation. These are the states of 5.5. The icon's menu has the overall state, "Open SaveTether" and Quit. The app re-checks health every few minutes, when the window or menu opens, and after each operation; a check is milliseconds (5.5). A desktop notification is shown when the state turns amber, not on every check.
 - **Main window.**
   - *First-run setup*: choose the sync folder, name this device, create the shared folder on the first device only (`init`). Probably the biggest ease-of-use gain, since this is where a new user gives up today.
   - *Apps*: each app and its roles with their health, and the fix that fits each state: Apply, Revert, Recover, "check the sync root is there", open the folder, list backups.

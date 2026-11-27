@@ -12,9 +12,6 @@ public enum RowAction
     /// <summary>Plan and run a revert.</summary>
     Revert,
 
-    /// <summary>Apply with replace-shared on a linked folder: the way out of a double seed.</summary>
-    UseThisCopy,
-
     /// <summary>Run a health check now.</summary>
     CheckAgain,
 
@@ -141,7 +138,6 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
             (HealthState.Retargeted, _) => (
                 $"The folder now links to {link} instead of the shared folder. Remove that link by hand, then apply.", RowAction.OpenFolder,
                 new[] { RowAction.Details }),
-            (HealthState.DoubleSeed, _) => ("More than one device made its saves the shared copy.", RowAction.UseThisCopy, new[] { RowAction.Backups, RowAction.Details }),
             (HealthState.FileConflict, _) => (
                 ConflictSentence(mapping.Health.Conflicts ?? []), RowAction.OpenSharedFolder, new[] { RowAction.Backups, RowAction.Details }),
             (HealthState.ForeignLink, _) => (
@@ -208,7 +204,6 @@ public sealed record AppsPage(IReadOnlyList<AppGroup> Groups, IReadOnlyList<AppR
     {
         RowAction.Apply => "Apply",
         RowAction.Revert => "Revert",
-        RowAction.UseThisCopy => "Use this device's copy",
         RowAction.CheckAgain => "Check again",
         RowAction.OpenFolder => "Open folder",
         RowAction.OpenFolderParent => "Open folder's parent",

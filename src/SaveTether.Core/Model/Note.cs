@@ -79,9 +79,6 @@ public enum NextStepKind
     /// <summary>Make this device's saves the shared copy again, with the sync stated finished. <see cref="NextStep.MappingId"/> is set.</summary>
     ReseedFromHere,
 
-    /// <summary>Make this device's copy the one every device keeps. <see cref="NextStep.MappingId"/> is set.</summary>
-    MakeThisCopyWin,
-
     /// <summary>Let SaveTether give a Flatpak app write access to the SaveTether folder in the sync root.</summary>
     GrantSandbox,
 

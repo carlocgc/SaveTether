@@ -227,7 +227,7 @@ public static class ActionTexts
     /// <summary>The core's notes that the confirmation already says in its own words.</summary>
     private static readonly HashSet<string> Restated = new(StringComparer.Ordinal)
     {
-        Planner.RevertLeavesSharedNote, Planner.AlreadyAppliedReplaceNote, Planner.ReplaceSharedNote, Planner.ReplaceSharedUnbackedNote,
+        Planner.RevertLeavesSharedNote, Planner.ReplaceSharedNote, Planner.ReplaceSharedUnbackedNote,
         RestorePlanner.SharedChangesNote,
     };
 
@@ -266,13 +266,6 @@ public static class ActionTexts
                     {
                         sentences.Add(plan.NoBackups ? ReplaceAnywayUnbackedText : ReplaceAnywayText);
                     }
-                }
-                else if (plan.Classification == Classification.AlreadyApplied && plan.Choice == SetupChoice.ReplaceShared)
-                {
-                    // Offered only when other devices also claim the shared copy (a double seed), so they are named.
-                    (title, button) = ("Make this device's copy the shared copy?", "Use this copy");
-                    sentences.Add("No files change: the shared folder as it is becomes the shared copy, and other devices' claims are set aside. " +
-                        "Do this only if it holds the data to keep.");
                 }
                 else
                 {

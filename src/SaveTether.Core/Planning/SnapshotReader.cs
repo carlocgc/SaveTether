@@ -64,7 +64,8 @@ public static class SnapshotReader
             TargetTree = targetTree,
             EntryDepth = mapping.Depth,
             ActiveMarkers = markers,
-            MissingSeedFiles = MissingSeedFiles(markers, targetTree),
+            // Only the latest seed describes the shared copy; an older one left by a seeding race is stale.
+            MissingSeedFiles = MissingSeedFiles(markers.OrderByDescending(m => m.SeededUtc).Take(1).ToList(), targetTree),
             ProcessNamesChecked = devicePath.ProcessNames,
             RunningProcesses = devicePath.ProcessNames.Count == 0
                 ? []
