@@ -206,7 +206,7 @@ Tests (end to end, in-process):
   1. Windows `--copy`, deliver, Deck with data stops at the guard, `--copy` refused, `--no-copy` links.
   2. Same, `--add-missing`: only the missing entries arrive; existing ones are untouched.
   3. Deck runs before delivery of data but after the marker: stop (row 3).
-  4. Both `--copy` before any delivery: both markers arrive, `status` says Double seed, `--replace-shared` clears it.
+  4. Both `--copy` before any delivery: both markers arrive, `status` says Double seed, `--replace-shared` clears it. (Superseded 2026-11-27: the state is gone; both devices are OK, see 5e.)
   5. Wipe: delete the Deck's local config, state and links; `init --device deck --take-over`, `apply --all`; every mapping links with no question.
   6. `--no-copy` into an empty T prints the "app will see no saves" warning.
 
@@ -215,7 +215,7 @@ Done when: tests pass on three targets and the AOT binary runs scenario 1 from a
 As built (differences from the list above, and decisions made while building):
 - The commands' logic is in the core (`Core/Operations/Workspace.cs`, `Core/Health/HealthCheck.cs`); the CLI project holds the parser, the dispatch, the prompts and the output. The JSON object's shape per command is stored in `tests/SaveTether.Tests/Cli/json-shapes.txt`; an intended change is accepted by running the tests once with `SAVETETHER_UPDATE_SHAPES=1`.
 - Usage errors exit 64. The other rules settled here (when the tool asks, what refuses while an operation is unfinished, where local files live) are in design 5.12.
-- Found by scenario 4: `apply --replace-shared` did nothing on a device that was already linked, so it could not clear a double seed. It now does, without touching saves; design 5.3 describes it and the longer route for when the other device's files won. Both are tested.
+- Found by scenario 4: `apply --replace-shared` did nothing on a device that was already linked, so it could not clear a double seed. It now does, without touching saves; design 5.3 describes it and the longer route for when the other device's files won. Both are tested. (Superseded 2026-11-27, see 5e: the already-linked route is gone with the state.)
 - A first `--copy` is confirmed only at a terminal. There is no flag for it in non-interactive use; it goes ahead with the warning.
 - The shell scenario is `tests/e2e/scenario1.sh`, run by CI against the published binary on all three targets.
 - Rollback and recovery exit codes are tested through a fault hook passed in the CLI's test environment, not by provoking real disk errors.
@@ -568,6 +568,10 @@ Planned 2026-11-26. Goal: an opt-in device setting (off by default) that finds s
 Everything else is in [phase-3.8-sync-conflicts.md](phase-3.8-sync-conflicts.md): decisions, design, tasks T1 to T5 (T5 in the plugin's repo), the exit test, and progress.
 
 Progress: T1 to T4 done (the core, the app's Settings switch, `savetether sync-conflicts`, the docs), and T5 (the plugin's word and toggle, SaveTether-Decky #14); the exit test passed on the Mint box and the Deck (2026-11-26). Phase done.
+
+## 5e. Retire the Double seed state
+
+Done 2026-11-27. The "Two shared copies" (`double-seed`) state, its **Use this device's copy** action, `NextStepKind.MakeThisCopyWin` and the already-linked `--replace-shared` route are removed. A seeding race is left to the sync tool, as File conflict already assumes. Seed markers stay: they stop SaveTether from writing into a shared copy that is still arriving (row 3, and Add missing or Replace shared on a partial copy). The "may still be arriving" check now uses only the newest active marker, so an older one left by a race cannot cause stale "may still be arriving" refusals. Follow-up: drop the dead `double-seed` mapping in SaveTether-Decky (`src/states.ts`).
 
 ## 6. Phase 4: Decky plugin
 

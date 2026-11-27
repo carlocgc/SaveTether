@@ -39,7 +39,6 @@ public class StatusCheckTests
         Assert.Equal(new StateWord("Shared folder missing", Shade.Amber), StateWords.For(HealthState.Broken, HealthReason.SharedFolderMissing));
         Assert.Equal(new StateWord("Shared folder missing", Shade.Amber), StateWords.For(HealthState.Broken, HealthReason.SyncRootUnavailable));
         Assert.Equal(new StateWord("Linked elsewhere", Shade.Amber), StateWords.For(HealthState.Retargeted, null));
-        Assert.Equal(new StateWord("Two shared copies", Shade.Amber), StateWords.For(HealthState.DoubleSeed, null));
         Assert.Equal(new StateWord("Not SaveTether's link", Shade.Amber), StateWords.For(HealthState.ForeignLink, null));
     }
 

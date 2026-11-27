@@ -364,7 +364,7 @@ Every value `--json` can print, by field. A test checks that each value in the c
 
 **Removal** (`status.removal`): `removed-by-another`, `unfinished`.
 
-**Health state** (`status.mappings[].state`, design 5.5): `ok`, `not-applied`, `replaced`, `broken`, `retargeted`, `double-seed`, `foreign-link`, `file-conflict` (linked, but the shared folder holds conflict copies a sync tool left; only reported when the device's "Detect sync conflicts" setting is on; added 2026-11-26).
+**Health state** (`status.mappings[].state`, design 5.5): `ok`, `not-applied`, `replaced`, `broken`, `retargeted`, `foreign-link`, `file-conflict` (linked, but the shared folder holds conflict copies a sync tool left; only reported when the device's "Detect sync conflicts" setting is on; added 2026-11-26). `double-seed` was removed on 2026-11-27: seed markers no longer produce a state.
 
 **Health reason** (`status.mappings[].reason`): for `not-applied`, `no-save-folder`, `save-folder-not-absolute`, `not-linked-yet`; for `replaced`, `folder-holds-files`, `folder-empty`, `folder-missing`, `not-a-folder`; for `broken`, `shared-folder-missing`, `sync-root-unavailable`.
 

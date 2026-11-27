@@ -112,7 +112,7 @@ public sealed class TwoDeviceTests : IDisposable
     }
 
     [Fact]
-    public void Scenario_4_two_devices_that_both_seeded_are_a_double_seed_until_one_is_declared_the_winner()
+    public void Scenario_4_two_devices_that_both_seeded_are_both_ok_and_the_sync_tool_decides_the_clash()
     {
         _pc.SetUp(createRoot: true);
         _pc.DeliverTo(_deck);
@@ -127,22 +127,14 @@ public sealed class TwoDeviceTests : IDisposable
         // The sync tool then delivers both ways. Here the PC's file happens to win the name clash.
         _pc.DeliverTo(_deck);
         _deck.DeliverTo(_pc);
-        AssertState("double-seed", _pc);
-        AssertState("double-seed", _deck);
-        Assert.Contains("Double seed", _deck.Ok("status").Out, StringComparison.Ordinal);
+        // SaveTether reports no problem of its own: the clash was the sync tool's to settle.
+        AssertState("ok", _pc);
+        AssertState("ok", _deck);
+        Assert.Equal("pc-1", _deck.LocalFiles()["GAME1/save.bin"]);
 
         // Nothing was lost: the Deck's own saves are in its backup.
         var deckBackup = _deck.Ok("backup", "list", "--json").Json().GetProperty("backups")[0].GetProperty("id").GetString()!;
         Assert.Equal("deck-1", CliDevice.FilesIn(Path.Combine(_deck.BackupRoot, deckBackup, "data"))["GAME1/save.bin"]);
-
-        var resolved = _pc.Ok("apply", Id, "--replace-shared", "--confirm-replace");
-        Assert.Contains("no saves are copied or deleted", resolved.Out, StringComparison.Ordinal);
-        Assert.Equal("pc-1", _pc.SharedFiles()["GAME1/save.bin"]);
-
-        _pc.DeliverTo(_deck);
-        AssertState("ok", _pc);
-        AssertState("ok", _deck);
-        Assert.Equal("pc-1", _deck.LocalFiles()["GAME1/save.bin"]);
     }
 
     [Fact]
@@ -160,7 +152,7 @@ public sealed class TwoDeviceTests : IDisposable
         _deck.DeliverTo(_pc);
         _pc.DeliverTo(_deck);
         Assert.Equal("deck-1", _pc.LocalFiles()["GAME1/save.bin"]);
-        AssertState("double-seed", _pc);
+        AssertState("ok", _pc);
         var pcBackup = _pc.Ok("backup", "list", "--json").Json().GetProperty("backups")[0].GetProperty("id").GetString()!;
 
         _pc.Ok("revert", Id);

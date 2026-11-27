@@ -61,7 +61,6 @@ internal static class Hints
             NextStepKind.ApplyWithoutChoice => "Run apply without a choice to just link.",
             NextStepKind.ConfirmReplace => "Add --confirm-replace to go ahead.",
             NextStepKind.ReseedFromHere => $"Then run 'savetether apply {id} --copy --assume-synced' to make them the shared copy again.",
-            NextStepKind.MakeThisCopyWin => $"On the device that should win, run 'savetether apply {id} --replace-shared', or restore a backup.",
             NextStepKind.GrantSandbox => "Or add --grant-sandbox to let SaveTether allow it (only that folder, for this user).",
             NextStepKind.ListBackups => "Run 'savetether backup list' to see what there is.",
             NextStepKind.RestoreSharedBackup => $"Put it back with 'savetether backup restore {step.Value} --confirm-replace'.",

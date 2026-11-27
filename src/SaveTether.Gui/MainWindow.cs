@@ -581,7 +581,7 @@ internal sealed class MainWindow : Window
 
     /// <summary>Looking needs nothing; an operation needs the device in a state the core accepts.</summary>
     private static bool Allowed(RowAction action, bool actionsAllowed) =>
-        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.UseThisCopy or RowAction.Remove or RowAction.Delete
+        actionsAllowed || action is not (RowAction.Apply or RowAction.Revert or RowAction.Remove or RowAction.Delete
             or RowAction.FindAppAgain or RowAction.ChooseFolderAgain or RowAction.AddHere or RowAction.ChooseFolder or RowAction.BackUpNow);
 
     /// <summary>Banner B5's Fix it (write the entry with this app's path) or Turn it off (remove it); then a check redraws.</summary>
@@ -630,10 +630,7 @@ internal sealed class MainWindow : Window
         switch (action)
         {
             case RowAction.Apply:
-                _ = _operate(flow => flow.ApplyAsync(mapping, useThisCopy: false));
-                break;
-            case RowAction.UseThisCopy:
-                _ = _operate(flow => flow.ApplyAsync(mapping, useThisCopy: true));
+                _ = _operate(flow => flow.ApplyAsync(mapping));
                 break;
             case RowAction.Revert:
                 _ = _operate(flow => flow.RevertAsync(mapping));
