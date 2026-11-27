@@ -175,7 +175,6 @@ Shows each mapping's state on this device, or one mapping's. It only reads. It s
 | `Replaced` | The link has gone: the folder holds files, is empty, is missing, or something else is there. An app or tool may have recreated the folder. | `apply` (it compares and asks), or `app add` again if the app moved. |
 | `Broken` | The link is there, but the shared folder or the whole sync root is missing. | Wait for the sync tool, or connect the drive. |
 | `Retargeted` | The link points somewhere other than the shared folder. | Remove that link by hand, then `apply`. |
-| `Double seed` | More than one device made its own saves the shared copy. | Choose which to keep: `apply <id> --replace-shared --confirm-replace` on that device. |
 | `Foreign link` | The folder is a link SaveTether did not make. | Remove it by hand, then `apply`. |
 | `File conflict` | Linked, but the shared folder holds conflict copies a sync tool left; they are listed under the row. Only shown with `sync-conflicts on`. | Keep the right copy and delete the other, in the shared folder. |
 

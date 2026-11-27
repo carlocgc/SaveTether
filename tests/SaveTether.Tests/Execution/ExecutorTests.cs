@@ -116,6 +116,23 @@ public class ExecutorTests
     }
 
     [Fact]
+    public void Only_the_newest_active_marker_says_what_the_shared_copy_should_hold()
+    {
+        using var world = new ExecWorld();
+        world.LocalSave("GAME2/save.bin", "mine");
+        world.SharedSave("GAME1/save.bin", "theirs");
+
+        // A seeding race left two active markers; the older lists a file the shared copy no longer has.
+        world.Shared.WriteSeedMarker(Marker("desktop", "GAME1/save.bin", "GAME3/save.bin"));
+        world.Shared.WriteSeedMarker(Marker("deck", "GAME1/save.bin") with { SeededUtc = DateTimeOffset.UnixEpoch.AddDays(1) });
+
+        var plan = ExecWorld.Planned(world.PlanApply(new ApplyRequest(SetupChoice.AddMissing)));
+
+        Assert.Equal(SetupChoice.AddMissing, plan.Choice);
+        Assert.DoesNotContain(plan.Notes, n => n.Text.Contains("from the original shared copy", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Applying_twice_changes_nothing_the_second_time()
     {
         using var world = new ExecWorld();

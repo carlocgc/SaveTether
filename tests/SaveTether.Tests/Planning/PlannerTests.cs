@@ -349,16 +349,6 @@ public class ChoiceTests
     }
 
     [Fact]
-    public void Two_active_markers_are_called_out_in_the_plan()
-    {
-        var snapshot = Snap.Guarded() with { ActiveMarkers = [Snap.Marker("deck"), Snap.Marker("desktop")] };
-
-        var outcome = Planner.Plan(snapshot, new ApplyRequest(SetupChoice.NoCopy));
-
-        Assert.Contains(outcome.Plan!.Notes, n => n.Text.Contains("More than one device", StringComparison.Ordinal) && n.Text.Contains("desktop", StringComparison.Ordinal));
-    }
-
-    [Fact]
     public void Across_every_situation_and_choice_the_plans_keep_their_promises()
     {
         var situations = new[]

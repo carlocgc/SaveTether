@@ -28,10 +28,6 @@ public enum HealthState
     [JsonStringEnumMemberName("retargeted")]
     Retargeted,
 
-    /// <summary>More than one device has an active seed marker for the mapping.</summary>
-    [JsonStringEnumMemberName("double-seed")]
-    DoubleSeed,
-
     /// <summary>S is a link SaveTether did not make.</summary>
     [JsonStringEnumMemberName("foreign-link")]
     ForeignLink,
@@ -99,7 +95,7 @@ public sealed record MappingHealth(
     long? Bytes = null, int? Files = null, string? Name = null, IReadOnlyList<string>? Conflicts = null);
 
 /// <summary>
-/// Works out a mapping's state from one look at S, one read of its link, and the seed markers.
+/// Works out a mapping's state from one look at S and one read of its link.
 /// It only reads.
 /// </summary>
 public static class HealthCheck
@@ -152,16 +148,6 @@ public static class HealthCheck
                     HealthState.Broken,
                     "The link is in place, but the shared folder is missing. Check that the sync root is present and has synced.",
                     HealthReason.SharedFolderMissing);
-            }
-
-            var seeders = shared.ReadSeedMarkers(mapping.Id).Where(m => m.IsActive).Select(m => m.DeviceName).ToList();
-            if (seeders.Count > 1)
-            {
-                return Is(
-                    HealthState.DoubleSeed,
-                    new Note(
-                        $"More than one device made its saves the shared copy ({string.Join(", ", seeders)}).",
-                        new NextStep(NextStepKind.MakeThisCopyWin, mapping.Id)));
             }
 
             var conflicts = detectConflicts ? ConflictCopies(PathRules.ResolveAll(target)) : [];

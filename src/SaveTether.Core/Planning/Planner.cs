@@ -13,10 +13,6 @@ public static class Planner
     // Notes the desktop app says in its own words, so it leaves them out of its confirmation (ActionTexts.Confirmation).
     public const string RevertLeavesSharedNote = "The shared folder is left as it is, for the other devices.";
 
-    public const string AlreadyAppliedReplaceNote =
-        "Already linked, so no saves are copied or deleted. The shared folder as it is now becomes the agreed copy, " +
-        "and the other devices' records are marked as superseded.";
-
     public const string ReplaceSharedNote = "The shared saves in the sync folder will be replaced. They are backed up on this device first.";
 
     /// <summary><see cref="ReplaceSharedNote"/> in unsafe mode.</summary>
@@ -48,7 +44,7 @@ public static class Planner
         var classification = Classify(snapshot, request.AssumeSynced);
         var outcome = classification switch
         {
-            Classification.AlreadyApplied => PlanAlreadyApplied(snapshot, request),
+            Classification.AlreadyApplied => PlanAlreadyApplied(snapshot),
             Classification.BrokenLink => Refuse(
                 snapshot, RefusalKind.BrokenLink, classification,
                 $"'{snapshot.Source}' is linked to '{snapshot.Target}', but that folder is missing. " +
@@ -387,28 +383,8 @@ public static class Planner
         return failures;
     }
 
-    private static PlanOutcome PlanAlreadyApplied(Snapshot s, ApplyRequest request)
+    private static PlanOutcome PlanAlreadyApplied(Snapshot s)
     {
-        // The way out of a double seed (design 5.3). This device is already linked, so there is nothing
-        // to copy or delete: the shared folder as it stands is declared the winner, by renewing this
-        // device's marker and superseding the others.
-        if (request.Choice == SetupChoice.ReplaceShared && OthersHaveMarkers(s))
-        {
-            return Planned(
-                s, Classification.AlreadyApplied, SetupChoice.ReplaceShared,
-                [
-                    new PlanStep(StepKind.VerifyLink, s.Source, s.Target),
-                    new PlanStep(StepKind.WriteSeedMarker, s.Target),
-                    new PlanStep(StepKind.SupersedeMarkers, s.Target),
-                    new PlanStep(StepKind.WriteState, s.Source, s.Target),
-                ],
-                [
-                    AlreadyAppliedReplaceNote,
-                    "If the shared folder does not hold the saves you want: revert, restore this device's backup, " +
-                    "then apply again, replacing the shared saves.",
-                ]);
-        }
-
         return Planned(
             s, Classification.AlreadyApplied, choice: null,
             [
@@ -669,13 +645,6 @@ public static class Planner
             allNotes.Add(
                 $"The save folder is inside the Flatpak app {unknown.AppId}, but its permissions could not be read, so SaveTether " +
                 "could not check that the app can reach the shared folder. Check with 'flatpak info --show-permissions " + unknown.AppId + "'.");
-        }
-
-        if (s.ActiveMarkers.Count > 1)
-        {
-            allNotes.Add(
-                "More than one device has made its saves the shared copy for this mapping " +
-                $"({string.Join(", ", s.ActiveMarkers.Select(m => m.DeviceName))}). Check which should win.");
         }
 
         return new PlanOutcome(

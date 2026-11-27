@@ -45,10 +45,10 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
     /// </summary>
     public Func<Task> Refresh { get; set; } = () => Task.CompletedTask;
 
-    public Task ApplyAsync(MappingState mapping, bool useThisCopy)
+    public Task ApplyAsync(MappingState mapping)
     {
         ArgumentNullException.ThrowIfNull(mapping);
-        return ApplyAsync(new Subject(mapping.MappingId, mapping.AppName, mapping.Role), useThisCopy);
+        return ApplyAsync(new Subject(mapping.MappingId, mapping.AppName, mapping.Role));
     }
 
     /// <summary>Apply for each mapping just added (section 8, "Apply it now?"): each its own operation, in turn.</summary>
@@ -57,11 +57,11 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
         ArgumentNullException.ThrowIfNull(mappingIds);
         foreach (var id in mappingIds)
         {
-            await ApplyAsync(new Subject(id, appName, id.Contains('.', StringComparison.Ordinal) ? id[(id.IndexOf('.', StringComparison.Ordinal) + 1)..] : id), useThisCopy: false);
+            await ApplyAsync(new Subject(id, appName, id.Contains('.', StringComparison.Ordinal) ? id[(id.IndexOf('.', StringComparison.Ordinal) + 1)..] : id));
         }
     }
 
-    private async Task ApplyAsync(Subject mapping, bool useThisCopy)
+    private async Task ApplyAsync(Subject mapping)
     {
         var role = mapping.Name;
         var session = await BeginAsync("apply");
@@ -72,7 +72,7 @@ internal sealed class ActionFlow(string localFolder, Overlay overlay, GuiLog log
 
         using (session)
         {
-            var request = useThisCopy ? new ApplyRequest(SetupChoice.ReplaceShared, ConfirmReplace: true) : new ApplyRequest();
+            var request = new ApplyRequest();
             while (true)
             {
                 var outcome = await Work("Checking what applying involves…", () => session.PlanApply(mapping.MappingId, request));

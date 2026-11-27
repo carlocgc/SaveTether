@@ -120,7 +120,6 @@ The core's `HealthState` has eight values (File conflict since 2026-11-26). Not 
 | Broken | the shared folder is missing (`shared-folder-missing`) | Shared folder missing | amber | "The link is in place, but its shared folder is missing. If you use a sync tool, it may not have arrived yet." | Check again | Open folder, Open shared folder's parent |
 | Broken | the sync root cannot be used (`sync-root-unavailable`) | Shared folder missing | amber | Covered by banner B3; the row repeats only "The sync folder is not available." | Check again | Open folder |
 | Retargeted | | Linked elsewhere | amber | "The folder now links to <path> instead of the shared folder. Remove that link by hand, then apply." | Open folder | Details |
-| Double seed | | Two shared copies | amber | "More than one device made its saves the shared copy." | **Use this device's copy** (section 9.2, Double seed) | Backups, Details |
 | Foreign link | | Not SaveTether's link | amber | "The folder is a link SaveTether did not make, to <path>. Remove it by hand, then apply." | Open folder | Details |
 | File conflict | the shared folder holds a sync tool's conflict copies; only with "Detect sync conflicts" on (section 11, phase 3.8) | File conflict | amber | "Conflict copy from the sync tool: <file>." or "Conflict copies from the sync tool: <file> and <n> more." | Open shared folder | Backups, Details |
 
@@ -139,7 +138,7 @@ Changes from the table above:
 
 *As built (2026-11-19), with "Add a folder by hand":* a mapping with no definition now has a main action too, which opens the hand form for that mapping (section 8): **Add** on a Not on this device row, and **Choose the folder again** on a Folder gone row.
 
-*As built (2026-11-18), with the Backups page:* **Backups** is under More on Linked, Not linked and Two shared copies, as the table lists it.
+*As built (2026-11-18), with the Backups page:* **Backups** is under More on Linked and Not linked, as the table lists it (Two shared copies was removed on 2026-11-27).
 
 Not built yet:
 - **Add again** on "Folder setting is wrong".
@@ -377,7 +376,7 @@ When the plan has `NeedsFirstSeedConfirmation`, the confirmation adds: "If <role
 
 **The replace confirmation.** *As built (2026-11-23), asked for by the owner:* it is the last dialog before the run, after the choice and the plan's confirmation ("Link <role> on this device to the shared folder?", with its steps), so every text-guarded action ends the same way. It asks for the typed phrase "replace shared data", like every other deletion of saves, because the shared saves are deleted from the sync folder. Title: "Replace the shared data for <role> in the sync folder?" then: "The shared copy is backed up on this device first. Then it is deleted and replaced with this device's saves. Any other devices that use the sync folder will see the replacement." Buttons: Cancel, **Replace in the sync folder**, disabled until the phrase matches. *As built (2026-11-23, principle 8):* the plan's confirmation and the typed phrase are one dialog: "Replace the shared copy of <role>?", "The shared copy is backed up on this device, then replaced with this device's data.", the two folders, the steps, and the phrase box; button **Replace**. "Other devices that use the sync folder get this change too." is added only when another device is registered. The core's notes that this text restates (`Planner.ReplaceSharedNote` and the like) are left out; any other note is still shown. The choice's sentences no longer repeat the backup, which the line under the choices says once. The dialog is asked for any plan with a step that clears the shared folder (`ClearTarget`), so "Use this device's copy", which deletes nothing, has none. After the owner overrides "the shared copy may still be arriving", the replace dialog adds a paragraph saying files another device shared are not in this device's backup, and the same phrase is typed. Restoring a backup of the shared copy asks for "restore shared data" the same way, after its "Restore the backup into ...?" confirmation, and only when the shared folder holds saves to be emptied.
 
-**Double seed.** "Use this device's copy" runs `PlanApply` with `replace-shared`. On a device where the folder is already the link (classification row 1) the confirmation instead says: "Make this device's copy the shared copy? No files change; the other devices' claims are marked as replaced." *As built (2026-11-23):* the dialog that asked the same question before the lock is gone; the plan's confirmation ("No files change: the shared folder as it is becomes the shared copy, and other devices' claims are set aside. Do this only if it holds the data to keep.", button **Use this copy**) is the only one. Where the other device's files were kept and this device's should win, the route is revert, restore and replace (5.3); the dialog says so and links to Backups.
+**Double seed.** *As built (2026-11-27):* removed. The "Two shared copies" state and its **Use this device's copy** action are gone: settling sync clashes is the sync tool's job (design 5.3).
 
 ### 9.3 Progress and results
 
