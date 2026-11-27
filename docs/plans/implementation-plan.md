@@ -571,7 +571,9 @@ Progress: T1 to T4 done (the core, the app's Settings switch, `savetether sync-c
 
 ## 5e. Retire the Double seed state
 
-Done 2026-11-27. The "Two shared copies" (`double-seed`) state, its **Use this device's copy** action, `NextStepKind.MakeThisCopyWin` and the already-linked `--replace-shared` route are removed. A seeding race is left to the sync tool, as File conflict already assumes. Seed markers stay: they stop SaveTether from writing into a shared copy that is still arriving (row 3, and Add missing or Replace shared on a partial copy). The "may still be arriving" check now uses only the newest active marker, so an older one left by a race cannot cause stale "may still be arriving" refusals. Follow-up: drop the dead `double-seed` mapping in SaveTether-Decky (`src/states.ts`).
+Done 2026-11-27. The "Two shared copies" (`double-seed`) state, its **Use this device's copy** action, `NextStepKind.MakeThisCopyWin` and the already-linked `--replace-shared` route are removed. A seeding race is left to the sync tool, as File conflict already assumes. Seed markers stay: they stop SaveTether from writing into a shared copy that is still arriving (row 3, and Add missing or Replace shared on a partial copy). The "may still be arriving" check now uses only the newest active marker, so an older one left by a race cannot cause stale "may still be arriving" refusals. Follow-up: drop the dead `double-seed` mapping in SaveTether-Decky (`src/states.ts`), SaveTether-Decky #17.
+
+Tested on the Mint box (2026-11-27): `dotnet test` (1067 passed), `tests/e2e/scenario1.sh` against the native CLI, and a seeding race with the native CLI: two devices both `--copy` into an empty shared folder, then a two-way copy stands in for the sync tool. Both devices are OK with two active markers, the losing device's saves are in its backup, and `apply --replace-shared --confirm-replace` on the linked folder only verifies and records, leaving both markers as they were. Not yet tried in the app on the PC with the real sync folder.
 
 ## 6. Phase 4: Decky plugin
 
