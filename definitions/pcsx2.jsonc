@@ -1,5 +1,6 @@
 // PCSX2 (PlayStation 2 emulator). Shipped with SaveTether; replaces the Ludusavi entry, which lists only memory cards and states.
-// The folders come from PCSX2's source (Pcsx2Config.cpp, EmuFolders::SetDataDirectory and LoadConfig), read 2026-11-22. The EmuDeck
+// The folders come from PCSX2's source (Pcsx2Config.cpp, EmuFolders::SetDataDirectory and LoadConfig), read 2026-11-22.
+// win-portable-ini: EmuFolders::ShouldUsePortableMode accepts portable.ini as well as portable.txt (read 2026-11-28). The EmuDeck
 // folders come from EmuDeck's PCSX2 script, read on the owner's Steam Deck, where they are real folders. Not yet tried with `app add`.
 // Design 5.2 explains the format.
 {
@@ -13,6 +14,12 @@
       "id": "win-portable",
       "os": "windows",
       "detect": { "file": "{install_dir}/portable.txt" },
+      "base": "{install_dir}"
+    },
+    {
+      "id": "win-portable-ini",
+      "os": "windows",
+      "detect": { "file": "{install_dir}/portable.ini" },
       "base": "{install_dir}"
     },
     {
@@ -45,7 +52,7 @@
       "id": "memcards",
       "class": "save",
       "default": true,
-      "path": { "win-portable": "memcards", "win-documents": "memcards", "linux-flatpak": "memcards", "linux-native": "memcards", "emudeck": "saves" },
+      "path": { "win-portable": "memcards", "win-portable-ini": "memcards", "win-documents": "memcards", "linux-flatpak": "memcards", "linux-native": "memcards", "emudeck": "saves" },
       "target": "memcards",
       "notes": "Memory cards: .ps2 card images, or folder cards."
     },
@@ -53,7 +60,7 @@
       "id": "sstates",
       "class": "state",
       "default": false,
-      "path": { "win-portable": "sstates", "win-documents": "sstates", "linux-flatpak": "sstates", "linux-native": "sstates", "emudeck": "states" },
+      "path": { "win-portable": "sstates", "win-portable-ini": "sstates", "win-documents": "sstates", "linux-flatpak": "sstates", "linux-native": "sstates", "emudeck": "states" },
       "target": "sstates",
       "notes": "Save states: large, and a newer PCSX2 may not load an older one."
     },
@@ -61,7 +68,7 @@
       "id": "bios",
       "class": "system",
       "default": false,
-      "path": { "win-portable": "bios", "win-documents": "bios", "linux-flatpak": "bios", "linux-native": "bios" },
+      "path": { "win-portable": "bios", "win-portable-ini": "bios", "win-documents": "bios", "linux-flatpak": "bios", "linux-native": "bios" },
       "target": "bios",
       "notes": "PlayStation 2 BIOS images. Not for EmuDeck: it keeps them in the shared Emulation/bios folder."
     },
@@ -69,7 +76,7 @@
       "id": "cheats",
       "class": "mod",
       "default": false,
-      "path": { "win-portable": "cheats", "win-documents": "cheats", "linux-flatpak": "cheats", "linux-native": "cheats" },
+      "path": { "win-portable": "cheats", "win-portable-ini": "cheats", "win-documents": "cheats", "linux-flatpak": "cheats", "linux-native": "cheats" },
       "target": "cheats",
       "notes": "Cheat files (.pnach). Not for EmuDeck, whose PCSX2 folder is not under its saves folder."
     },
@@ -77,7 +84,7 @@
       "id": "patches",
       "class": "mod",
       "default": false,
-      "path": { "win-portable": "patches", "win-documents": "patches", "linux-flatpak": "patches", "linux-native": "patches" },
+      "path": { "win-portable": "patches", "win-portable-ini": "patches", "win-documents": "patches", "linux-flatpak": "patches", "linux-native": "patches" },
       "target": "patches",
       "notes": "Game patches (.pnach), such as widescreen and frame rate fixes. Not for EmuDeck."
     },
@@ -85,7 +92,7 @@
       "id": "textures",
       "class": "mod",
       "default": false,
-      "path": { "win-portable": "textures", "win-documents": "textures", "linux-flatpak": "textures", "linux-native": "textures" },
+      "path": { "win-portable": "textures", "win-portable-ini": "textures", "win-documents": "textures", "linux-flatpak": "textures", "linux-native": "textures" },
       "target": "textures",
       "notes": "Texture replacements: can be large. Not for EmuDeck."
     },
@@ -93,7 +100,7 @@
       "id": "covers",
       "class": "media",
       "default": false,
-      "path": { "win-portable": "covers", "win-documents": "covers", "linux-flatpak": "covers", "linux-native": "covers" },
+      "path": { "win-portable": "covers", "win-portable-ini": "covers", "win-documents": "covers", "linux-flatpak": "covers", "linux-native": "covers" },
       "target": "covers",
       "notes": "Cover art for the game grid. Not for EmuDeck."
     },
@@ -101,7 +108,7 @@
       "id": "snaps",
       "class": "media",
       "default": false,
-      "path": { "win-portable": "snaps", "win-documents": "snaps", "linux-flatpak": "snaps", "linux-native": "snaps" },
+      "path": { "win-portable": "snaps", "win-portable-ini": "snaps", "win-documents": "snaps", "linux-flatpak": "snaps", "linux-native": "snaps" },
       "target": "snaps",
       "notes": "Screenshots. Not for EmuDeck."
     },
@@ -109,7 +116,7 @@
       "id": "videos",
       "class": "media",
       "default": false,
-      "path": { "win-portable": "videos", "win-documents": "videos", "linux-flatpak": "videos", "linux-native": "videos" },
+      "path": { "win-portable": "videos", "win-portable-ini": "videos", "win-documents": "videos", "linux-flatpak": "videos", "linux-native": "videos" },
       "target": "videos",
       "notes": "Recorded videos. Not for EmuDeck."
     }
